@@ -148,6 +148,9 @@ class Dispatcher(object):
     消息中转
     """
     def __init__(self, **kw):
+        
+        self._handlers = {}
+        
         # 收件箱
         self._inbox = Queue()
         # 发件箱
@@ -161,8 +164,9 @@ class Dispatcher(object):
         启动送件(至服务端)线程，处理请求
         启动派件(至客户端)线程，分发响应
         """
-        threading.Thread(self.process_inbox).start()
-        threading.Thread(self.process_outbox).start()
+        self._running = True
+        threading.Thread(target=self.process_inbox).start()
+        threading.Thread(target=self.process_outbox).start()
         
     def process_inbox(self):
         
@@ -176,24 +180,30 @@ class Dispatcher(object):
             mail = self._outbox.get()
             self.dispatch(mail)
     
-    def register_handler(self, handler):
-        pass        
+    def bind(self, handler_id, handler):
+        self._handlers[handler_id] = handler
         
     def handle(self, mail):
         pass
     
     def put(self, mail):
-        self._inbox.put(mail)
+        handler_id = mail['handler_id']
+        if handler_id.endswith('_req'):
+            self._inbox.put(mail)
+        elif handler_id.endswith('_resp'):
+            self._outbox.put(mail)
+        else:
+            print('Invalid message: {}'.format(mail))
     
     def dispatch(self, mail):
-        self._handlers[mail['receiver']](mail)
+        self._handlers[mail['handler_id']](mail)
     
 class DTP(object):
     
     
-    def __init__(self, outbox=None):
+    def __init__(self, dispatcher=None):
         
-        self._outbox = outbox or Queue()
+        self.dispatcher = dispatcher or Queue()
         
         self._token = ''
         
@@ -233,7 +243,7 @@ class DTP(object):
         body.password = mail['password']
         
         payload = Payload(header, body)
-        payload.header.api_id = mail['api_request_id']
+        payload.header.api_id = mail['api_id']
         
         self._handle_sync_request(payload)
         
@@ -333,7 +343,7 @@ class DTP(object):
                 continue
             
             print(header, body)
-            self._outbox.put(Payload(header, body))
+            self.dispatcher.put(Payload(header, body))
 
     
 
@@ -361,7 +371,7 @@ class DTP(object):
             self._token = payload.body.token
         
         # 派发登录响应
-        # self._outbox.put(response_payload)
+        # self.dispatcher.put(response_payload)
         print(payload.header, payload.body)
         
     def _handle_async_request(self, payload):
@@ -382,24 +392,35 @@ class Trader(object):
 
     def start(self):
         
-        self._postbox = dispatcher = Dispatcher()
-        self.broker = DTP(outbox=self._postbox._outbox)
+        self.dispatcher = dispatcher = Dispatcher()
+        self.broker = broker = DTP(dispatcher)
         
-        dispatcher.register(self._on_order)
-        dispatcher.register(self._on_trade)
-        dispatcher.register(self._on_account)
+        dispatcher.bind('order_insertion_resp', self._on_order)
+        dispatcher.bind('trade_resp', self._on_trade)
+        dispatcher.bind('account_resp', self._on_account)
         
-        dispatcher.register(self.broker.handle_login_request)
-        dispatcher.register(self.broker.handle_logout_request)
-        dispatcher.register(self.broker.handle_send_order_request)
+        dispatcher.bind('login_req', broker.handle_login_request)
+        dispatcher.bind('logout_req', broker.handle_logout_request)
+        dispatcher.bind('order_insertion_req', broker.handle_send_order_request)
+
+    
+    def _on_order(self, mail):
+        print('order:\n', mail)
+    
+    def _on_trade(self, mail):
+        print('trade:\n', mail)
         
-    def login(self, account, password):
+    def _on_account(self, mail):
+        print('account:\n', mail)
+        
+    def login(self, account, password, **kw):
         mail = dict(
-            requst_id=LOGIN_ACCOUNT_REQUEST,
+            handler_id='login_req',
+            api_id=LOGIN_ACCOUNT_REQUEST,
             account=account,
             password=password
         )
-        self._postbox.put(mail)
+        self.dispatcher.put(mail)
     
     def send_order(self, order):
         """
@@ -481,7 +502,10 @@ def run():
 if __name__ == '__main__':
     # login()
     login_mail = {
-       'api_request_id':  LOGIN_ACCOUNT_REQUEST,
+       'api_id':  LOGIN_ACCOUNT_REQUEST,
        'account': config['account'],
        'password': config['password']
     }
+    trader = Trader()
+    trader.start()
+    trader.login(**login_mail)
