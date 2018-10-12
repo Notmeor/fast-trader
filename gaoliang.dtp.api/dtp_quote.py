@@ -79,7 +79,7 @@ class MarketFeed(object):
     
     def on_data(self, data):
 
-        print(data)
+        print(data, '\n')
 
 
 class OrderFeed(MarketFeed):
@@ -137,6 +137,6 @@ class IndexFeed(MarketFeed):
         super().__init__(*args, **kw)
 
 if __name__ == '__main__':
-    tf = TickFeed()
-    tf.subscribe('snapshot(002230.SZ)')
+    tf = TradeFeed()
+    tf.subscribe('002065')
     tf.start()

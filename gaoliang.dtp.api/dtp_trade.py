@@ -54,78 +54,6 @@ class Payload(object):
     def __init__(self, header, body):
         self.header = header
         self.body = body
-        
-class DtpSyncChannel(object):
-    def __init__(self):
-        self.context = zmq.Context()
-        self.socket_req = self.context.socket(zmq.REQ)
-
-    def connect(self):
-        print("connecting dtp sync channel...")
-        print(SYNC_CHANNEL_PORT)
-        self.socket_req.connect(SYNC_CHANNEL_PORT)
-
-    def disconnect(self):
-        print("disconnecting dtp sync channel...")
-        self.socket_req.disconnect(SYNC_CHANNEL_PORT)
-
-    def login_account(self, payload):
-        return self._process_invoke(payload, dtp_api_id.LOGIN_ACCOUNT_REQUEST, dtp_api_id.LOGIN_ACCOUNT_RESPONSE)
-
-    def logout_account(self, payload):
-        return self._process_invoke(payload, dtp_api_id.LOGOUT_ACCOUNT_REQUEST, dtp_api_id.LOGOUT_ACCOUNT_RESPONSE)
-
-    def query_orders(self, payload):
-        return self._process_invoke(payload, dtp_api_id.QUERY_ORDERS_REQUEST, dtp_api_id.QUERY_ORDERS_RESPONSE)
-
-    def query_fills(self, payload):
-        return self._process_invoke(payload, dtp_api_id.QUERY_FILLS_REQUEST, dtp_api_id.QUERY_FILLS_RESPONSE)
-
-    def query_capital(self, payload):
-        return self._process_invoke(payload, dtp_api_id.QUERY_CAPITAL_REQUEST, dtp_api_id.QUERY_CAPITAL_RESPONSE)
-
-    def query_position(self, payload):
-        return self._process_invoke(payload, dtp_api_id.QUERY_POSITION_REQUEST, dtp_api_id.QUERY_POSITION_RESPONSE)
-
-    def query_ration(self, payload):
-        return self._process_invoke(payload, dtp_api_id.QUERY_RATION_REQUEST, dtp_api_id.QUERY_RATION_RESPONSE)
-
-    def _process_invoke(self, payload, request_api_id, response_api_id):
-        payload.header.api_id = request_api_id
-        print(payload.header, payload.body)
-        print(payload.header.SerializeToString(), payload.body.SerializeToString())
-#        import pdb
-#        pdb.set_trace()
-        self.socket_req.send(payload.header.SerializeToString(), zmq.SNDMORE)
-        self.socket_req.send(payload.body.SerializeToString())
-
-        header = self.socket_req.recv()
-        body = self.socket_req.recv()
-
-        response_header = dtp_struct.ResponseHeader()
-        response_header.ParseFromString(header)
-        assert(response_header.api_id == response_api_id)
-        if(response_header.api_id == dtp_api_id.LOGIN_ACCOUNT_RESPONSE):
-            response_body = dtp_struct.LoginAccountResponse()
-        elif(response_header.api_id == dtp_api_id.LOGOUT_ACCOUNT_RESPONSE):
-            response_body = dtp_struct.LogoutAccountResponse()
-        elif(response_header.api_id == dtp_api_id.QUERY_ORDERS_RESPONSE):
-            response_body = dtp_struct.QueryOrdersResponse()
-        elif(response_header.api_id == dtp_api_id.QUERY_FILLS_RESPONSE):
-            response_body = dtp_struct.QueryFillsResponse()
-        elif(response_header.api_id == dtp_api_id.QUERY_CAPITAL_RESPONSE):
-            response_body = dtp_struct.QueryCapitalResponse()
-        elif(response_header.api_id == dtp_api_id.QUERY_POSITION_RESPONSE):
-            response_body = dtp_struct.QueryPositionResponse()
-        elif(response_header.api_id == dtp_api_id.QUERY_RATION_RESPONSE):
-            response_body = dtp_struct.QueryRationResponse()
-        else:
-            assert(False)
-        response_body.ParseFromString(body)
-        response_payload = Payload(response_header, response_body)
-        return response_payload
-
-
 
 
 def query_capital(token):
@@ -160,10 +88,7 @@ class Dispatcher(object):
         self._run()
     
     def _run(self):
-        """
-        启动送件(至服务端)线程，处理请求
-        启动派件(至客户端)线程，分发响应
-        """
+
         self._running = True
         threading.Thread(target=self.process_inbox).start()
         threading.Thread(target=self.process_outbox).start()
@@ -182,9 +107,6 @@ class Dispatcher(object):
     
     def bind(self, handler_id, handler):
         self._handlers[handler_id] = handler
-        
-    def handle(self, mail):
-        pass
     
     def put(self, mail):
         handler_id = mail['handler_id']
@@ -230,11 +152,10 @@ class DTP(object):
     def start(self):
 
         self._running = True
-        
         threading.Thread(target=self.handle_counter_response).start()
         
     def handle_login_request(self, mail):
-        
+
         header = dtp_struct.RequestHeader()
         header.request_id = generate_request_id()
         
@@ -321,8 +242,6 @@ class DTP(object):
             topic = sock.recv()
             report_header = sock.recv()
             report_body = sock.recv()
-            print("subcribed counter report...")
-
             
             header = dtp_struct.ReportHeader()
             header.ParseFromString(report_header)
@@ -338,12 +257,16 @@ class DTP(object):
             elif(header.api_id == dtp_api_id.CANCEL_REPORT):
                 body = dtp_struct.CancellationReport()
                 body.ParseFromString(report_body)
+                
             else:
                 print('unknown resp')
                 continue
             
-            print(header, body)
-            self.dispatcher.put(Payload(header, body))
+            handler_id = '{}_resp'.format(header.api_id)
+            self.dispatcher.put({
+                'handler_id': handler_id,
+                'content': Payload(header, body)
+            })
 
     
 
@@ -370,9 +293,11 @@ class DTP(object):
         if resp_type is dtp_struct.LoginAccountResponse:
             self._token = payload.body.token
         
-        # 派发登录响应
-        # self.dispatcher.put(response_payload)
-        print(payload.header, payload.body)
+        self.dispatcher.put({
+            'handler_id': '{}_resp'.format(response_header.api_id),
+            'content': payload
+        })
+
         
     def _handle_async_request(self, payload):
         
@@ -381,8 +306,17 @@ class DTP(object):
         
         self._async_req_channel.send(
             payload.body.SerializeToString())
+
+
+class Mail(object):
+    
+    def __init__(self, api_id, api_type, **kw):
+        if 'handler_id' not in kw:
+            kw['handler_id'] = '{}_{}'.format(api_id, api_type)
+        self._kw = kw
         
-        
+    def __getitem__(self, key):
+        return self._kw[key]
 
 class Trader(object):
     
@@ -395,28 +329,68 @@ class Trader(object):
         self.dispatcher = dispatcher = Dispatcher()
         self.broker = broker = DTP(dispatcher)
         
-        dispatcher.bind('order_insertion_resp', self._on_order)
-        dispatcher.bind('trade_resp', self._on_trade)
-        dispatcher.bind('account_resp', self._on_account)
+        dispatcher.bind(
+            '{}_resp'.format(LOGIN_ACCOUNT_RESPONSE),
+            self._on_login)
         
-        dispatcher.bind('login_req', broker.handle_login_request)
-        dispatcher.bind('logout_req', broker.handle_logout_request)
-        dispatcher.bind('order_insertion_req', broker.handle_send_order_request)
+        dispatcher.bind(
+            '{}_resp'.format(PLACE_REPORT), 
+            self._on_order)
+        
+        dispatcher.bind(
+            '{}_resp'.format(FILL_REPORT),
+            self._on_trade)
+        
+        dispatcher.bind(
+            '{}_resp'.format(QUERY_CAPITAL_RESPONSE),
+            self._on_account)
+        
+        dispatcher.bind(
+            '{}_req'.format(LOGIN_ACCOUNT_REQUEST),
+            broker.handle_login_request)
+        
+        dispatcher.bind(
+            '{}_req'.format(LOGOUT_ACCOUNT_REQUEST),
+            broker.handle_logout_request)
+        
+        dispatcher.bind(
+            '{}_req'.format(PLACE_ORDER),
+            broker.handle_send_order_request)
 
     
+    def _on_login(self, mail):
+        response = mail['content']
+        print(response.header)
+        print(response.body)
+
+
+        
     def _on_order(self, mail):
-        print('order:\n', mail)
+        response = mail['content']
+        print(response.header)
+        print(response.body)
     
     def _on_trade(self, mail):
-        print('trade:\n', mail)
+        response = mail['content']
+        print(response.header)
+        print(response.body)
         
     def _on_account(self, mail):
         print('account:\n', mail)
         
+
     def login(self, account, password, **kw):
-        mail = dict(
-            handler_id='login_req',
+        mail = Mail(
+            api_type='req',
             api_id=LOGIN_ACCOUNT_REQUEST,
+            account=account,
+            password=password
+        )
+        self.dispatcher.put(mail)
+        
+    def logout(self, account, password, **kw):
+        mail = Mail(
+            api_id=LOGOUT_ACCOUNT_REQUEST,
             account=account,
             password=password
         )
@@ -426,7 +400,11 @@ class Trader(object):
         """
         下单
         """
-        pass
+        mail = Mail(
+            api_id=LOGIN_ACCOUNT_REQUEST,
+            account=config['account']
+        )
+        self.dispatcher.put(mail)
     
     def send_order_batch(self, batch):
         """
@@ -482,30 +460,15 @@ class Trader(object):
         """
         pass
 
-def run():
-    
-    dispatcher = Dispatcher()
-    trader = Trader()
-    broker = DTP()
-    
-    dispatcher.register(trader._on_order)
-    dispatcher.register(trader._on_trade)
-    dispatcher.register(trader._on_account)
-    
-    dispatcher.register(dtper.handle_login_request)
-    dispatcher.register(dtper.handle_logout_request)
-    dispatcher.register(dtper.handle_send_order_request)
-    
-
-
 
 if __name__ == '__main__':
-    # login()
+
     login_mail = {
        'api_id':  LOGIN_ACCOUNT_REQUEST,
        'account': config['account'],
        'password': config['password']
     }
+    
     trader = Trader()
     trader.start()
     trader.login(**login_mail)
