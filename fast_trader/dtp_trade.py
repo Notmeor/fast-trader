@@ -6,9 +6,9 @@ import random
 import threading
 from queue import Queue
 
-from fast_trader import dtp_api_id as dtp_api_id
-from fast_trader import api_pb2 as dtp_struct
-from fast_trader import type_pb2 as dtp_type
+from fast_trader.dtp import dtp_api_id as dtp_api_id
+from fast_trader.dtp import api_pb2 as dtp_struct
+from fast_trader.dtp import type_pb2 as dtp_type
 
 SYNC_CHANNEL_PORT = "tcp://192.168.221.52:9203"
 SYNC_CHANNEL_PORT = "tcp://192.168.221.52:9003"
@@ -35,6 +35,7 @@ PLACE_BATCH_ORDER = 10002003
 PLACE_REPORT = 20001001
 FILL_REPORT = 20001002
 CANCEL_REPORT = 20001003
+CANCEL_REPORT_SUB = 11002002
 
 config = {
     'sync_channel_port': 'tcp://192.168.221.52:9003',
@@ -93,7 +94,10 @@ class Dispatcher(object):
             mail = self._outbox.get()
             self.dispatch(mail)
 
-    def bind(self, handler_id, handler):
+    def bind(self, handler_id, handler, override=False):
+        if not override and handler_id in self._handlers:
+            raise KeyError(
+                'handler {} already exists!')
         self._handlers[handler_id] = handler
 
     def put(self, mail):
@@ -183,31 +187,9 @@ class DTP(object):
 
         header = dtp_struct.RequestHeader()
         header.request_id = generate_request_id()
-        header.token = mail['token']
-
-        body = dtp_struct.PlaceOrder()
-        body.account_no = mail['account']
-        body.order_original_id = generate_original_id()
-        body.exchange = dtp_type.EXCHANGE_SH_A
-        body.code = "601398"
-        body.price = "5.5"
-        body.quantity = 1000
-        body.order_side = dtp_type.ORDER_SIDE_BUY
-        body.order_type = dtp_type.ORDER_TYPE_LIMIT
-
-        header.api_id = dtp_api_id.PLACE_ORDER
-
-        order_payload = Payload(header, body)
-
-        self._handle_async_request(order_payload)
-
-    def handle_send_order_request_(self, mail):
-
-        header = dtp_struct.RequestHeader()
-        header.request_id = generate_request_id()
         header.api_id = dtp_api_id.PLACE_ORDER
         header.token = mail['token']
-        
+
         body = dtp_struct.PlaceOrder()
         body.account_no = mail['account']
         body.order_original_id = generate_original_id()
@@ -215,8 +197,48 @@ class DTP(object):
         body.code = mail['code']
         body.price = mail['price']
         body.quantity = mail['quantity']
-        body.order_side = mail['order_size']
+        body.order_side = mail['order_side']
         body.order_type = mail['order_type']
+
+        order_payload = Payload(header, body)
+
+        self._handle_async_request(order_payload)
+
+    def handle_batch_order_request(self, mail):
+
+        header = dtp_struct.RequestHeader()
+        header.request_id = generate_request_id()
+        header.api_id = dtp_api_id.PLACE_BATCH_ORDER
+        header.token = mail['token']
+
+        body = dtp_struct.PlaceBatchOrder()
+        body.account_no = mail['account']
+
+        for order in mail['orders']:
+            item = body.order_list.add()
+            item.order_original_id = generate_original_id()
+            item.exchange = order['exchange']
+            item.code = order['code']
+            item.price = order['price']
+            item.quantity = order['quantity']
+            item.order_side = order['order_side']
+            item.order_type = order['order_type']
+
+        order_payload = Payload(header, body)
+
+        self._handle_async_request(order_payload)
+
+    def handle_order_cancelation_request(self, mail):
+
+        header = dtp_struct.RequestHeader()
+        header.request_id = generate_request_id()
+        header.api_id = dtp_api_id.CANCEL_ORDER
+        header.token = mail['token']
+
+        body = dtp_struct.CancelOrder()
+        body.account_no = mail['account']
+        body.exchange = mail['exchange']
+        body.order_exchange_id = mail['order_exchange_id']
 
         order_payload = Payload(header, body)
 
@@ -331,7 +353,7 @@ class DTP(object):
 
             header = dtp_struct.ReportHeader()
             header.ParseFromString(report_header)
-
+            print('handler_id:', header.api_id)
             if(header.api_id == dtp_api_id.PLACE_REPORT):
                 body = dtp_struct.PlacedReport()
                 body.ParseFromString(report_body)
@@ -345,10 +367,11 @@ class DTP(object):
                 body.ParseFromString(report_body)
 
             else:
-                print('unknown resp')
+                print('unknown resp:', header, header.message)
                 continue
 
             handler_id = '{}_resp'.format(header.api_id)
+
             self.dispatcher.put({
                 'handler_id': handler_id,
                 'content': Payload(header, body)
@@ -385,8 +408,6 @@ class DTP(object):
                 response_header.ParseFromString(_header)
 
                 response_body = resp_type()
-                print(_body)
-                # import pdb;pdb.set_trace()
                 response_body.ParseFromString(_body)
                 payload = Payload(response_header, response_body)
 
@@ -423,6 +444,19 @@ class Mail(object):
 
     def __getitem__(self, key):
         return self._kw[key]
+
+
+class Order(object):
+
+    exchange = dtp_type.EXCHANGE_SH_A
+    code = ''
+    price = ''
+    quantity = 0
+    order_side = dtp_type.ORDER_SIDE_BUY
+    order_type = dtp_type.ORDER_TYPE_LIMIT
+
+    def __getitem__(self, key):
+        return getattr(self, key)
 
 
 class Trader(object):
@@ -474,6 +508,10 @@ class Trader(object):
             self._on_ration_query)
 
         dispatcher.bind(
+            '{}_resp'.format(CANCEL_REPORT),
+            self._on_order_cancelation)
+
+        dispatcher.bind(
             '{}_req'.format(LOGIN_ACCOUNT_REQUEST),
             broker.handle_login_request)
 
@@ -484,6 +522,10 @@ class Trader(object):
         dispatcher.bind(
             '{}_req'.format(PLACE_ORDER),
             broker.handle_send_order_request)
+
+        dispatcher.bind(
+            '{}_req'.format(PLACE_BATCH_ORDER),
+            broker.handle_batch_order_request)
 
         dispatcher.bind(
             '{}_req'.format(QUERY_ORDERS_REQUEST),
@@ -505,6 +547,10 @@ class Trader(object):
             '{}_req'.format(QUERY_RATION_REQUEST),
             broker.handle_query_ration_request)
 
+        dispatcher.bind(
+            '{}_req'.format(CANCEL_ORDER),
+            broker.handle_order_cancelation_request)
+
     def _on_login(self, mail):
         response = mail['content']
         self._token = response.body.token
@@ -520,6 +566,7 @@ class Trader(object):
         print('----- 报单回报 -----')
         response = mail['content']
         print(response.header)
+        print(response.header.message)
         print(response.body)
 
     def _on_trade(self, mail):
@@ -558,6 +605,18 @@ class Trader(object):
         print(response.header)
         print(response.body)
 
+    def _on_order_cancelation_submission(self, mail):
+        print('----- 撤销申请接收回报 -----')
+        response = mail['content']
+        print(response.header)
+        print(response.body)
+
+    def _on_order_cancelation(self, mail):
+        print('----- 报单撤销回报 -----')
+        response = mail['content']
+        print(response.header)
+        print(response.body)
+
     def login(self, account, password, **kw):
         self._account = account
         mail = Mail(
@@ -568,6 +627,15 @@ class Trader(object):
         )
         self.dispatcher.put(mail)
 
+        timeout = 0
+        while True:
+            if self._token != '':
+                break
+            time.sleep(0.5)
+            timeout += 0.5
+            if timeout > 5:
+                raise Exception('登录超时!')
+
     def logout(self, **kw):
         mail = Mail(
             api_type='req',
@@ -577,8 +645,8 @@ class Trader(object):
         )
         self.dispatcher.put(mail)
 
-    def send_order(self, exchange, code, price,
-                   quantity, order_side, order_type):
+    def send_order(self, exchange, code, price, quantity,
+                   order_side, order_type=dtp_type.ORDER_TYPE_LIMIT):
         """
         下单
         """
@@ -596,17 +664,61 @@ class Trader(object):
         )
         self.dispatcher.put(mail)
 
+    def place_order(self, order):
+
+        mail = Mail(
+            api_type='req',
+            api_id=PLACE_ORDER,
+            account=self._account,
+            token=self._token,
+            exchange=order.exchange,
+            code=order.code,
+            price=order.price,
+            quantity=order.quantity,
+            order_side=order.order_side,
+            order_type=order.order_type
+        )
+        self.dispatcher.put(mail)
+
+    def place_order_batch(self, orders):
+        """
+        批量下单
+        """
+        mail = Mail(
+            api_type='req',
+            api_id=PLACE_BATCH_ORDER,
+            account=self._account,
+            token=self._token,
+            orders=orders
+        )
+        self.dispatcher.put(mail)
+
     def send_order_batch(self, batch):
         """
         批量下单
         """
-        pass
+        mail = Mail(
+            api_type='req',
+            api_id=PLACE_ORDER,
+            account=self._account,
+            token=self._token,
+            order_list=batch
+        )
+        self.dispatcher.put(mail)
 
-    def cancel_order(self, **kw):
+    def cancel_order(self, exchange, order_exchange_id, **kw):
         """
         撤单
         """
-        pass
+        mail = Mail(
+            api_type='req',
+            api_id=CANCEL_ORDER,
+            account=self._account,
+            token=self._token,
+            exchange=exchange,
+            order_exchange_id=order_exchange_id
+        )
+        self.dispatcher.put(mail)
 
     def query_orders(self, **kw):
         """
@@ -699,6 +811,15 @@ class Trader(object):
         pass
 
 
+def test_send_order(trader):
+    trader.send_order(
+        exchange=dtp_type.EXCHANGE_SH_A,
+        code='601398',
+        price='1.9',
+        quantity=500,
+        order_side=dtp_type.ORDER_SIDE_BUY
+    )
+
 if __name__ == '__main__':
 
     login_mail = {
@@ -711,8 +832,6 @@ if __name__ == '__main__':
     trader.start()
     trader.login(**login_mail)
 
-    time.sleep(2)
-    
     trader.query_capital(
         account=config['account'],
         exchange=dtp_type.EXCHANGE_SH_A,
@@ -720,13 +839,23 @@ if __name__ == '__main__':
         pagination=''
     )
 #
-#    trader.query_position(
-#        account=config['account'],
-#        exchange=dtp_type.EXCHANGE_SH_A,
-#        code='',
-#        pagination=''
-#    )
+    trader.query_position(
+        account=config['account'],
+        exchange=dtp_type.EXCHANGE_SH_A,
+        code='',
+        pagination=''
+    )
 
     trader.query_trades(
         account=config['account']
     )
+
+    order_0 = Order()
+    order_1 = Order()
+    order_0.price = '1.96'
+    order_0.quantity = 2500
+    order_0.code = '601398'
+
+    order_1.price = '2.96'
+    order_1.code = '601399'
+    order_1.quantity = 3000

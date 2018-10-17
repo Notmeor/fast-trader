@@ -13,7 +13,7 @@ from google.protobuf import descriptor_pb2
 _sym_db = _symbol_database.Default()
 
 
-from dtp import type_pb2 as dtp_dot_type__pb2
+from fast_trader.dtp import type_pb2 as dtp_dot_type__pb2
 
 
 DESCRIPTOR = _descriptor.FileDescriptor(
