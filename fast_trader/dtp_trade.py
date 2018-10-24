@@ -22,6 +22,7 @@ from fast_trader.utils import timeit, message2dict, load_config
 config = load_config()
 
 
+
 def generate_request_id():
     return str(random.randrange(11000000, 11900000))
 
@@ -89,7 +90,7 @@ class Dispatcher(object):
 
         if handler_id.endswith('_req'):
             self._inbox.put(mail)
-        elif handler_id.endswith('_resp'):
+        elif handler_id.endswith('_rsp'):
             self._outbox.put(mail)
         else:
             raise Exception('Invalid message: {}'.format(mail))
@@ -362,12 +363,12 @@ class DTP(object):
                 body = dtp_struct_.PlaceBatchResponse()
                 body.ParseFromString(report_body)
             else:
-                print('unknown resp:', header, header.message)
+                print('unknown rsp:', header, header.message)
                 continue
 
             self.dispatcher.put(Mail(
                 api_id=header.api_id,
-                api_type='resp',
+                api_type='rsp',
                 content=Payload(header, body)
             ))
 
@@ -426,7 +427,7 @@ class DTP(object):
 
                 mail = Mail(
                     api_id=response_header.api_id,
-                    api_type='resp',
+                    api_type='rsp',
                     sync=sync,
                     content=payload
                 )
@@ -491,9 +492,6 @@ class Order(object):
         return getattr(self, key)
 
 
-
-
-
 class Trader(object):
 
     def __init__(self):
@@ -504,7 +502,7 @@ class Trader(object):
         self._position_results = []
         self._trade_results = []
         self._order_results = []
-        
+
         self._strategies = []
 
     def start(self):
@@ -513,204 +511,46 @@ class Trader(object):
         self.broker = DTP(self.dispatcher,
                           account=config['account'])
 
-        
+
         self.bind()
 
     def bind(self):
-        
-        dispatcher, broker = self.dispatcher, self.broker 
 
-        dispatcher.bind(
-            '{}_resp'.format(LOGIN_ACCOUNT_RESPONSE),
-            self._on_login)
+        dispatcher, broker = self.dispatcher, self.broker
 
-        dispatcher.bind(
-            '{}_resp'.format(LOGOUT_ACCOUNT_RESPONSE),
-            self._on_logout)
+        for api_id in RSP_API_NAMES:
+            dispatcher.bind('{}_rsp'.format(api_id), self._on_response)
 
-        dispatcher.bind(
-            '{}_resp'.format(PLACE_REPORT),
-            self._on_order)
-
-        dispatcher.bind(
-            '{}_resp'.format(FILL_REPORT),
-            self._on_trade)
-
-        dispatcher.bind(
-            '{}_resp'.format(QUERY_ORDERS_RESPONSE),
-            self._on_order_query)
-
-        dispatcher.bind(
-            '{}_resp'.format(QUERY_FILLS_RESPONSE),
-            self._on_trade_query)
-
-        dispatcher.bind(
-            '{}_resp'.format(QUERY_POSITION_RESPONSE),
-            self._on_position_query)
-
-        dispatcher.bind(
-            '{}_resp'.format(QUERY_CAPITAL_RESPONSE),
-            self._on_capital_query)
-
-        dispatcher.bind(
-            '{}_resp'.format(QUERY_RATION_RESPONSE),
-            self._on_ration_query)
-
-        dispatcher.bind(
-            '{}_resp'.format(CANCEL_REPORT),
-            self._on_order_cancelation)
-
-        dispatcher.bind(
-            '{}_resp'.format(dtp_api_id.CANCEL_RESPONSE),
-            self._on_order_cancelation_submission)
-
-        dispatcher.bind(
-            '{}_resp'.format(dtp_api_id.PLACE_BATCH_RESPONSE),
-            self._on_batch_order_submission)
-
-        dispatcher.bind(
-            '{}_req'.format(LOGIN_ACCOUNT_REQUEST),
-            broker.handle_login_request)
-
-        dispatcher.bind(
-            '{}_req'.format(LOGOUT_ACCOUNT_REQUEST),
-            broker.handle_logout_request)
-
-        dispatcher.bind(
-            '{}_req'.format(PLACE_ORDER),
-            broker.handle_send_order_request)
-
-        dispatcher.bind(
-            '{}_req'.format(PLACE_BATCH_ORDER),
-            broker.handle_batch_order_request)
-
-        dispatcher.bind(
-            '{}_req'.format(QUERY_ORDERS_REQUEST),
-            broker.handle_query_order_request)
-
-        dispatcher.bind(
-            '{}_req'.format(QUERY_FILLS_REQUEST),
-            broker.handle_query_trade_request)
-
-        dispatcher.bind(
-            '{}_req'.format(QUERY_POSITION_REQUEST),
-            broker.handle_query_position_request)
-
-        dispatcher.bind(
-            '{}_req'.format(QUERY_CAPITAL_REQUEST),
-            broker.handle_query_capital_request)
-
-        dispatcher.bind(
-            '{}_req'.format(QUERY_RATION_REQUEST),
-            broker.handle_query_ration_request)
-
-        dispatcher.bind(
-            '{}_req'.format(CANCEL_ORDER),
-            broker.handle_order_cancelation_request)
+        for api_id in REQ_API_NAMES:
+            api_name = REQ_API_NAMES[api_id]
+            handler = getattr(broker, api_name)
+            dispatcher.bind('{}_req'.format(api_id), handler)
 
     def add_strategy(self, strategy):
         self._strategies.append(strategy)
 
-    def _on_login(self, mail):
+    def _on_response(self, mail):
+        print('on response:', mail)
+        print(mail['content'].header.message)
+
+        api_id = mail['api_id']
         response = mail['content']
-        self._token = response.body.token
-        print(response.header)
-        print(response.body)
+        msg = message2dict(response.body)
 
-    def _on_logout(self, mail):
-        response = mail['content']
-        print(response.header)
-        print(response.body)
+        if api_id == LOGIN_ACCOUNT_RESPONSE:
+            self.on_login(msg)
+        elif api_id == LOGOUT_ACCOUNT_RESPONSE:
+            self.on_logout(msg)
+        else:
+            for ea in self._strategies:
+                getattr(ea, RSP_API_NAMES[api_id])(msg)
 
-    def _on_order(self, mail):
-        print('----- 报单回报 -----')
-        response = mail['content']
-        print(response.header)
-        print(response.header.message)
-        print(response.body)
+    def on_login(self, msg):
+        self._token = msg['token']
+        print('on_login', msg)
 
-        order = message2dict(response.body)
-        self._update_open_orders(order)
-        self.on_order(order)
-
-    def _on_trade(self, mail):
-        print('----- 成交回报 -----')
-        response = mail['content']
-        print(response.header)
-        print(response.body)
-
-        trade = message2dict(response.body)
-        self.on_order(trade)
-
-    def _on_order_query(self, mail):
-        print('----- 订单查询回报 -----')
-        response = mail['content']
-        print(response.header)
-        print(response.body)
-        self._order_results.append(response)
-
-    def _on_trade_query(self, mail):
-        print('----- 成交查询回报 -----')
-        response = mail['content']
-        print(response.header)
-        print(response.body)
-        self._trade_results.append(response)
-
-    def _on_position_query(self, mail):
-        print('----- 持仓查询回报 -----')
-        response = mail['content']
-        print(response.header)
-        print(response.body)
-
-        self._position_results.append(response)
-        
-        for ea in self._strategies:
-            msg = message2dict(response.body)
-            ea.on_position_query(msg)
-
-    def _on_capital_query(self, mail):
-        print('----- 资金查询回报 -----')
-        response = mail['content']
-        print(response.header)
-        print(response.body)
-
-    def _on_ration_query(self, mail):
-        print('----- 配售权益查询回报 -----')
-        response = mail['content']
-        print(response.header)
-        print(response.body)
-
-    def _on_batch_order_submission(self, mail):
-        print('----- 批量报单接收回报 -----')
-        response = mail['content']
-        print(response.header)
-        print(response.header.message)
-        print(response.body)
-
-    def _on_order_cancelation_submission(self, mail):
-        print('----- 撤销申请接收回报 -----')
-        response = mail['content']
-        print(response.header)
-        print(response.header.message)
-        print(response.body)
-
-    def _on_order_cancelation(self, mail):
-        print('----- 报单撤销回报 -----')
-        response = mail['content']
-        print(response.header)
-        print(response.body)
-
-    def _update_open_orders(self, order):
-        """
-        更新未完成订单列表
-        """
-        pass
-
-    def _update_today_trades(self, trade):
-        """
-        更新今日成交列表
-        """
-        pass
+    def on_logout(self, mail):
+        print('on_logout', msg)
 
     def login(self, account, password, **kw):
         self._account = account
@@ -877,8 +717,6 @@ class Trader(object):
             token=self._token
         )
         self.dispatcher.put(mail)
-
-
 
 
 class PositionDetail(object):
