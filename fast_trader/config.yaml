@@ -1,0 +1,30 @@
+
+
+
+  # 指数行情
+  index_feed_channel: 'tcp://192.168.211.194:7778'
+  # 快照行情
+  tick_feed_channel: 'tcp://192.168.211.194:7779'
+  # 逐笔成交
+  trade_feed_channel: 'tcp://192.168.211.194:7781'
+  # 逐笔报单
+  order_feed_channel: 'tcp://192.168.211.194:7782'
+  # 交易队列
+  queue_feed_channel: 'tcp://192.168.211.194:7783'
+  
+
+  # 同步查询
+  sync_channel_port: 'tcp://192.168.221.52:9003'
+  # 异步查询
+  async_channel_port: 'tcp://192.168.221.91:9101'
+  # 异步查询响应
+  resp_channel_port: 'tcp://192.168.221.52:9002'
+  # 风控消息
+  risk_channel_port: 'tcp://192.168.221.91:9102'
+
+
+  # 账号
+  account: '021000062436'
+  # 密码
+  password: '111111'
+  
