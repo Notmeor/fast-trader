@@ -47,7 +47,7 @@ RSP_API_NAMES = {
     QUERY_RATION_RESPONSE: 'on_ration_query',    
     PLACE_REPORT: 'on_order',
     FILL_REPORT: 'on_trade',
-    CANCEL_REPORT: 'on_order_cacelation',    
+    CANCEL_REPORT: 'on_order_cancelation',    
     CANCEL_RESPONSE: 'on_order_cancelation_submission',
     PLACE_BATCH_RESPONSE: 'on_batch_order_submission'
 }

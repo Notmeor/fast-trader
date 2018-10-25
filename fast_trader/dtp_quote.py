@@ -6,35 +6,14 @@ import time, datetime
 import queue
 import threading
 
-import pymongo
-from dtp import quotation_pb2 as quote_struct
+import numpy as np
+import pandas as pd
 
-from fast_trader.utils import message2dict, load_config
+from fast_trader.dtp import quotation_pb2 as quote_struct
+
+from fast_trader.utils import timeit, message2dict, load_config, Mail
 
 conf = load_config()
-
-
-class Mongo(object):
-
-    url = 'mongodb://192.168.211.169:27017'
-
-    def __init__(self):
-        self._client = pymongo.MongoClient(self.url)
-
-    def __getitem__(self, key):
-        return self._client[key]
-
-    def close(self):
-        self._client.close()
-
-    def __enter__(self):
-        return self._client
-
-    def __exit__(self, et, ev, tb):
-        self.close()
-
-    def __def__(self):
-        self.close()
 
 
 class MarketFeed(object):
@@ -47,25 +26,28 @@ class MarketFeed(object):
         self._queue = queue.Queue()
         self._running = False
 
-        self._socket.connect(self.url)
-
     @property
     def is_alive(self):
         return self._running
 
     def _parse_data(self, msg):
+
         if msg.endswith(b')'):
-            return msg.decode()
+            # return msg.decode()
+            return
+
         data = quote_struct.MarketData()
         data.ParseFromString(msg)
         _type = data.Type.Name(data.type).lower()
+
         return getattr(data, _type)
 
-    def subscribe(self, codes):
-        self._socket.subscribe(codes)
+    def sub(self, topic):
+        self._socket.subscribe(topic)
 
-    def start(self):
+    def _start(self):
 
+        self._socket.connect(self.url)
         self._running = True
 
         while self._running:
@@ -97,12 +79,41 @@ class QuoteFeed(MarketFeed):
 
         super().__init__(*args, **kw)
 
-        self.url = config['{}_channel'.format(name)]
+        self.name = name
+        self.url = conf['{}_channel'.format(name)]
+        self.subscribed_codes = []
         self._listeners = []
         self._handlers = []
 
-        self.subscribe('')
-        threading.Thread(target=self.start).start()
+    def start(self):
+        if not self.subscribed_codes:
+            print('当前订阅列表为空!')
+            return
+        threading.Thread(target=self._start).start()
+
+    def _to_topic(self, code):
+        kind = {
+            'trade_feed': 'transaction',
+            'index_feed': 'index',
+            'tick_feed': 'snapshot',
+            'order_feed': 'order',
+            'queue_feed': 'order_queue'
+        }[self.name]
+        topic = '{}({})'.format(kind, code)
+        return topic
+
+    def subscribe(self, code):
+
+        if isinstance(code, list):
+            for c in code:
+                self.subscribe(c)
+        elif isinstance(code, str):
+            self.subscribed_codes.append(code)
+            topic = self._to_topic(code)
+            self.sub(topic)
+        else:
+            raise TypeError(
+                'Expected `list` or `str`, got `{}`'.format(type(code)))
 
     def add_listener(self, listener):
         self._listeners.append(listener)
@@ -111,128 +122,12 @@ class QuoteFeed(MarketFeed):
 
         for listener in self._listeners:
             listener.put(Mail(
-                api_id='trade_feed',
-                api_type='resp',
+                api_id=self.name,
+                api_type='rsp',
                 content=data
             ))
 
 
-def to_datetime(n_date, n_time):
-    dt = datetime.datetime.strptime(
-        '{}{}'.format(n_date, n_time),
-        '%Y%m%d%H%M%S%f')
-    return dt.astimezone(datetime.timezone.utc)
-
-
-class Store(object):
-
-    def __init__(self, db_name):
-
-        from influxdb import InfluxDBClient
-        from influxdb import DataFrameClient
-
-        config = self.get_config()
-
-        self.client = InfluxDBClient(
-            host=config['host'],
-            port=config['port'],
-            username=config['user'],
-            password=config['password'],
-            database=db_name
-        )
-
-        self.df_client = DataFrameClient(
-            host=config['host'],
-            port=config['port'],
-            username=config['user'],
-            password=config['password'],
-            database=db_name
-        )
-
-        if {'name': db_name} not in self.client.get_list_database():
-            self.client.create_database(db_name)
-
-    def get_config(self):
-        return {
-            'host': 'localhost',
-            'port': 8086,
-            'user': 'root',
-            'password': 'root'
-        }
-
-    def write_points(self, points):
-        self.client.write_points(points)
-
-    def write_df(self, df):
-        self.df_client.write_points(df)
-
-    def query(self, query):
-        return self.client.query(query)
-
-
-class Ticks(MarketFeed):
-
-    url = conf['tick_feed_channel']
-
-    def __init__(self, *args, **kw):
-        super().__init__(*args, **kw)
-
-        self._queue = queue.Queue()
-
-        self._store = Store('test')
-
-        self.subscribe('snapshot(000651)')
-        threading.Thread(target=self.start).start()
-
-    def on_data(self, data):
-
-        if not isinstance(data, str):
-            self._queue.put(data)
-            self._store.write_points([
-                {
-                    'measurement': 'market_tick',
-                    'fields': message2dict(data),
-                    'time': to_datetime(data.nActionDay, data.nLocalTime)
-                }
-            ])
-
-    def get(self):
-        return self._queue.get()
-
-
-class Trades(MarketFeed):
-
-    url = conf['trade_feed_channel']
-
-    def __init__(self, *args, **kw):
-        super().__init__(*args, **kw)
-        self._queue = queue.Queue()
-
-        self._store = Store('test')
-
-        self.subscribe('transaction(000651)')
-        threading.Thread(target=self.start).start()
-
-    def on_data(self, data):
-
-        if not isinstance(data, str):
-            self._queue.put(data)
-            self._store.write_points([
-                {
-                    'measurement': 'market_trade',
-                    'fields': message2dict(data),
-                    'time': to_datetime(data.nActionDay, data.nLocalTime)
-                }
-            ])
-
-    def get(self):
-        return self._queue.get()
-
-
-if __name__ == '__main__':
-    pass
-    ticks = Ticks()
-    trades = Trades()
 
 
 

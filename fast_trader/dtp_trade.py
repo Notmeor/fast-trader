@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 
+import os
 import zmq
 import time
 import random
 import threading
+import logging
 from queue import Queue
-
-from google.protobuf.message import Message
 
 from fast_trader.dtp import dtp_api_id
 from fast_trader.dtp.dtp_api_id import *
@@ -16,11 +16,11 @@ from fast_trader.dtp import type_pb2 as dtp_type
 from fast_trader.dtp import ext_api_pb2 as dtp_struct_
 from fast_trader.dtp import ext_type_pb2 as dtp_type_
 
-from fast_trader.utils import timeit, message2dict, load_config
+from fast_trader.utils import timeit, message2dict, load_config, Mail
+from fast_trader.logging import setup_logging
 
 
 config = load_config()
-
 
 
 def generate_request_id():
@@ -37,14 +37,9 @@ class Payload(object):
         self.header = header
         self.body = body
 
-#    def __repr__(self):
-#        return '{}\n{}'.format(self.header, self.body)
-
 
 class Dispatcher(object):
-    """
-    消息中转
-    """
+
     def __init__(self, **kw):
 
         self._handlers = {}
@@ -125,6 +120,8 @@ class DTP(object):
         self._risk_report_channel = self._ctx.socket(zmq.SUB)
         self._risk_report_channel.connect(config['risk_channel_port'])
         self._async_resp_channel.subscribe('{}'.format(self._account))
+        
+        self.logger = logging.getLogger('fast_trader.dtp_trade.DTP')
 
         self.start()
 
@@ -247,10 +244,11 @@ class DTP(object):
 
         self._handle_sync_request(payload)
 
-        self.handle_query_order_response()
+        return self.handle_query_order_response(mail['sync'])
 
-    def handle_query_order_response(self):
-        self._handle_sync_response(dtp_struct.QueryOrdersResponse)
+    def handle_query_order_response(self, sync=False):
+        return self._handle_sync_response(
+            dtp_struct.QueryOrdersResponse, sync=sync)
 
     def handle_query_trade_request(self, mail):
 
@@ -266,10 +264,11 @@ class DTP(object):
 
         self._handle_sync_request(payload)
 
-        self.handle_query_trade_response()
+        return self.handle_query_trade_response(sync=mail['sync'])
 
-    def handle_query_trade_response(self):
-        self._handle_sync_response(dtp_struct.QueryFillsResponse)
+    def handle_query_trade_response(self, sync=False):
+        return self._handle_sync_response(
+            dtp_struct.QueryFillsResponse, sync=sync)
 
     def handle_query_position_request(self, mail):
 
@@ -285,8 +284,7 @@ class DTP(object):
 
         self._handle_sync_request(payload)
 
-        return self.handle_query_position_response(
-            sync=mail['sync'])
+        return self.handle_query_position_response(sync=mail['sync'])
 
     def handle_query_position_response(self, sync=False):
         return self._handle_sync_response(
@@ -325,10 +323,11 @@ class DTP(object):
 
         self._handle_sync_request(payload)
 
-        self.handle_query_ration_response()
+        return self.handle_query_ration_response(mail['sync'])
 
-    def handle_query_ration_response(self):
-        self._handle_sync_response(dtp_struct.QueryRationResponse)
+    def handle_query_ration_response(self, sync=False):
+        return self._handle_sync_response(
+            dtp_struct.QueryRationResponse, sync=sync)
 
     def handle_counter_response(self):
 
@@ -363,7 +362,8 @@ class DTP(object):
                 body = dtp_struct_.PlaceBatchResponse()
                 body.ParseFromString(report_body)
             else:
-                print('unknown rsp:', header, header.message)
+                self.logger.warning('未知响应 api_id={}, {}'.format(
+                    header.api_id, header.message))
                 continue
 
             self.dispatcher.put(Mail(
@@ -377,7 +377,7 @@ class DTP(object):
         风控消息推送
         """
         sock = self._risk_report_channel
-        print('已启动风控消息监听线程...')
+
         while self._running:
 
             topic = sock.recv()
@@ -386,11 +386,11 @@ class DTP(object):
 
             header = dtp_struct.ReportHeader()
             header.ParseFromString(report_header)
-            print('风控消息:', header.api_id)
+            self.logger.warning('风控消息 {}', header.api_id, header.message)
 
             body = dtp_struct.PlacedReport()
             body.ParseFromString(report_body)
-            print(header, body)
+
 
     def _handle_sync_request(self, payload):
         try:
@@ -400,8 +400,7 @@ class DTP(object):
             self._sync_req_resp_channel.send(
                 payload.body.SerializeToString())
         except zmq.ZMQError as e:
-            print('e:', e)
-            print('正在查询中...')
+            self.logger.error('查询响应中...', exc_info=True)
 
     def _handle_sync_response(self, resp_type, sync=False):
 
@@ -437,7 +436,7 @@ class DTP(object):
 
                 return self.dispatcher.put(mail)
 
-        print('{} 查询超时'.format(resp_type))
+        self.logger.error('{} 查询超时'.format(resp_type))
 
     def _handle_async_request(self, payload):
 
@@ -446,33 +445,6 @@ class DTP(object):
 
         self._async_req_channel.send(
             payload.body.SerializeToString())
-
-
-class Mail(object):
-
-    def __init__(self, api_id, api_type, **kw):
-
-        if 'handler_id' not in kw:
-            kw['handler_id'] = '{}_{}'.format(api_id, api_type)
-
-        if 'sync' not in kw:
-            kw['sync'] = False
-
-        kw.update({
-            'api_id': api_id,
-            'api_type': api_type
-        })
-
-        self._kw = kw
-
-    def __getitem__(self, key):
-        return self._kw[key]
-
-    def __repr__(self):
-        return repr(self._kw)
-
-    def get(self, key, default=None):
-        return self._kw.get(key, default)
 
 
 class BadRequest(Exception):
@@ -494,8 +466,10 @@ class Order(object):
 
 class Trader(object):
 
-    def __init__(self):
+    def __init__(self, dispatcher=None):
 
+        self.dispatcher = dispatcher
+        
         self._account = ''
         self._token = ''
 
@@ -504,10 +478,15 @@ class Trader(object):
         self._order_results = []
 
         self._strategies = []
+        
+        setup_logging()
+        self.logger = logging.getLogger('fast_trader.dtp_trade.Trader')
+        self.logger.info('初始化 process_id={}'.format(os.getpid()))
 
     def start(self):
-
-        self.dispatcher = Dispatcher()
+        
+        if self.dispatcher is None:
+            self.dispatcher = Dispatcher()
         self.broker = DTP(self.dispatcher,
                           account=config['account'])
 
@@ -530,8 +509,8 @@ class Trader(object):
         self._strategies.append(strategy)
 
     def _on_response(self, mail):
-        print('on response:', mail)
-        print(mail['content'].header.message)
+        self.logger.info('on response {}'.format(mail))
+        self.logger.info(mail['content'].header.message)
 
         api_id = mail['api_id']
         response = mail['content']
@@ -545,12 +524,17 @@ class Trader(object):
             for ea in self._strategies:
                 getattr(ea, RSP_API_NAMES[api_id])(msg)
 
+    @property
+    def account_no(self):
+        return self._account
+
     def on_login(self, msg):
         self._token = msg['token']
-        print('on_login', msg)
+        
+        self.logger.info('登入账户 {}, {}'.format(self.account_no, msg))
 
     def on_logout(self, mail):
-        print('on_logout', msg)
+        self.logger.info('登出账户 {}'.format(self.account_no))
 
     def login(self, account, password, **kw):
         self._account = account
@@ -569,6 +553,7 @@ class Trader(object):
             time.sleep(0.5)
             timeout += 0.5
             if timeout > 5:
+                self.logger.error('登录超时')
                 raise Exception('登录超时!')
 
 
@@ -599,6 +584,11 @@ class Trader(object):
             order_type=order_type
         )
         self.dispatcher.put(mail)
+        
+        self.logger.info(('发送报单 account={}, code={}, price={}, quantity={},'
+                         + ' order_side={}, order_type={}').format(
+                         self.account_no, code, price, quantity, order_side,
+                         order_type))
 
     def place_order(self, order):
 
@@ -663,10 +653,11 @@ class Trader(object):
         mail = Mail(
             api_type='req',
             api_id=QUERY_ORDERS_REQUEST,
+            sync=kw.get('sync', False),
             account=self._account,
             token=self._token
         )
-        self.dispatcher.put(mail)
+        return self.dispatcher.put(mail)
 
     def query_trades(self, **kw):
         """
@@ -675,10 +666,11 @@ class Trader(object):
         mail = Mail(
             api_type='req',
             api_id=QUERY_FILLS_REQUEST,
+            sync=kw.get('sync', False),
             account=self._account,
             token=self._token
         )
-        self.dispatcher.put(mail)
+        return self.dispatcher.put(mail)
 
     def query_position(self, **kw):
         """
@@ -713,10 +705,11 @@ class Trader(object):
         mail = Mail(
             api_type='req',
             api_id=QUERY_RATION_REQUEST,
+            sync=kw.get('sync', False),
             account=self._account,
             token=self._token
         )
-        self.dispatcher.put(mail)
+        return self.dispatcher.put(mail)
 
 
 class PositionDetail(object):
@@ -751,53 +744,8 @@ class AccountDetail(object):
     balance = 0.
 
 
-def test_send_order(trader, code):
-    trader.send_order(
-        exchange=dtp_type.EXCHANGE_SH_A,
-        code=code,
-        price='0.9',
-        quantity=1500,
-        order_side=dtp_type.ORDER_SIDE_BUY
-    )
-
-def _order(code):
-    trader.send_order(
-        exchange=dtp_type.EXCHANGE_SH_A,
-        code=code,
-        price='0.9',
-        quantity=300,
-        order_side=dtp_type.ORDER_SIDE_BUY
-    )
-
 if __name__ == '__main__':
 
-    login_mail = {
-       'api_id':  dtp_api_id.LOGIN_ACCOUNT_REQUEST,
-       'account': config['account'],
-       'password': config['password']
-    }
-
     trader = Trader()
-
     trader.start()
-    trader.login(**login_mail)
-
-    trader.query_capital(sync=True)
-
-    ret = trader.query_position(sync=True)
-
-
-#
-#    trader.query_trades(
-#        account=config['account']
-#    )
-#
-#    order_0 = Order()
-#    order_1 = Order()
-#    order_0.price = '1.96'
-#    order_0.quantity = 2500
-#    order_0.code = '601398'
-#
-#    order_1.price = '2.96'
-#    order_1.code = '601399'
-#    order_1.quantity = 3000
+    trader.login(**config)
