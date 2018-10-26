@@ -5,6 +5,7 @@ import random
 import time, datetime
 import queue
 import threading
+import logging
 
 import numpy as np
 import pandas as pd
@@ -27,14 +28,13 @@ class MarketFeed(object):
         self._running = False
 
     @property
-    def is_alive(self):
+    def is_running(self):
         return self._running
 
     def _parse_data(self, msg):
 
         if msg.endswith(b')'):
-            # return msg.decode()
-            return
+            return msg.decode()
 
         data = quote_struct.MarketData()
         data.ParseFromString(msg)
@@ -54,8 +54,8 @@ class MarketFeed(object):
             ret = self._socket.recv()
 
             data = self._parse_data(ret)
-            self.on_data(data)
-            # time.sleep(1)
+            if not isinstance(data, str):
+                self.on_data(data)
 
     def on_data(self, data):
 
@@ -85,10 +85,18 @@ class QuoteFeed(MarketFeed):
         self._listeners = []
         self._handlers = []
 
+        self.logger = logging.getLogger(
+            'fast_trader.dtp_quote.{}'.format(name))
+
     def start(self):
+
         if not self.subscribed_codes:
-            print('当前订阅列表为空!')
+            self.logger.warning('当前订阅列表为空!')
             return
+
+        if self.is_running:
+            return
+
         threading.Thread(target=self._start).start()
 
     def _to_topic(self, code):
@@ -108,6 +116,8 @@ class QuoteFeed(MarketFeed):
             for c in code:
                 self.subscribe(c)
         elif isinstance(code, str):
+            if code in self.subscribed_codes:
+                return
             self.subscribed_codes.append(code)
             topic = self._to_topic(code)
             self.sub(topic)

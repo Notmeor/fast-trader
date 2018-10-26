@@ -76,8 +76,10 @@ def message2dict(msg):
         return msg
 
 
-def int2datetime(n_date, n_time):
+def int2datetime(n_date, n_time, utc=False):
     dt = datetime.datetime.strptime(
         '{}{}'.format(n_date, n_time),
         '%Y%m%d%H%M%S%f')
-    return dt.astimezone(datetime.timezone.utc)
+    if utc:
+        return dt.astimezone(datetime.timezone.utc)
+    return dt
