@@ -27,6 +27,21 @@ class MyStrategy(Strategy):
 
     def on_start(self):
         self.market_trades = defaultdict(list)
+        
+        self.on_order_list = []
+        self.on_trade_list = []
+
+        # 起始报单时间
+        self.ordering_start = datetime.time(14, 50)
+        self.ordering_interval = datetime.timedelta(minutes=1)
+        self.cur_period = self.ordering_start # datetime.timedelta(seconds=0)
+        # 报单比率
+        self.ordering_ratio = 0.05
+        # 报单总量
+        self.ordering_quota = 100000
+        # 完成周期
+        self.order_range = datetime.timedelta(minutes=10)
+        
 
     def subscribe(self):
         ds = self.subscribed_datasources[0]
@@ -66,7 +81,7 @@ class MyStrategy(Strategy):
 
     @timeit
     def get_position_detail_by_code(self, code):
-        positions = self.get_position()
+        positions = self.get_positions()
         for p in positions:
             if p['code'] == code:
                 return p
@@ -77,6 +92,30 @@ class MyStrategy(Strategy):
         data = market_trade['content']
         if data.nPrice > 0:
             self.market_trades[data.szCode].append(data)
+        
+        
+        if not data.szCode == '002230':
+            return
+        
+        self.cur_period = int2datetime(n_time=data['nTime'])
+        self.market_quantity += data.quantity
+        
+        if self.cur_period - self.ordering_start >= self.ordering_interval:
+            price = self.get_last_price(data.szCode)
+            units = int(self.market_quantiy * self.ordering_ratio / 100)
+            
+            self.ordering_start = self.cur_period
+            self.market_quantiy = 0
+
+            quantity = min(units * 100, self.ordering_quota)
+            if quantity > 0:
+                self.buy(data.szCode, price, quantity)
+                self.ordering_quota -= quantity
+                self.logger.infi('分批报单 quantiy={}'.format(quantity))
+            
+                if self.ordering_quote <= 0:
+                    self.logger.warning('报单全部完成')
+        
 
     def on_market_order(self, market_order):
         # print('逐笔委托')
@@ -84,14 +123,12 @@ class MyStrategy(Strategy):
 
     def on_order(self, order):
         show_title('报单回报')
-        print(order)
+        self.on_order_list.append(order)
 
     def on_trade(self, trade):
         show_title('成交回报')
         print(trade)
-
-    def on_position_query(self, position):
-        print('position:', position)
+        self.on_trade_list.append(trade)
 
     def on_order_cancelation(self, msg):
         show_title('撤单回报')

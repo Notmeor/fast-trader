@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import datetime, time
-
+import random
 import threading
 import logging
 
@@ -19,6 +19,14 @@ from fast_trader.utils import timeit, message2dict, load_config, Mail
 
 
 config = load_config()
+
+
+def generate_request_id():
+    return str(random.randrange(11000000, 11900000))
+
+
+def generate_original_id():
+    return str(random.randrange(61000000, 61900000))
 
 
 class Strategy(object):
@@ -97,9 +105,17 @@ class Strategy(object):
         mail = self.trader.query_orders(sync=True)
         payload = mail['content']
         msg = message2dict(payload.body)
-        orders = self._orders = msg['order_list']
+        orders = self._orders = msg.get('order_list', {})
         return orders
 
+    @timeit
+    def get_trades(self):
+        mail = self.trader.query_orders(sync=True)
+        payload = mail['content']
+        msg = message2dict(payload.body)
+        orders = self._orders = msg.get('order_list', {})
+        return orders
+    
     @timeit
     def get_open_orders(self):
         """
@@ -158,7 +174,7 @@ class Strategy(object):
                 queue_feed # 委托队列
                 index_feed # 指数行情
         """
-            
+
         name = datasource.name
 
         handler = {
@@ -241,7 +257,7 @@ class Strategy(object):
         """
         撤单提交响应
         """
-    
+
     def on_order_cancelation(self, msg):
         """
         撤单确认回报
@@ -271,6 +287,31 @@ class Strategy(object):
         """
         pass
 
+    def buy_many(self, orders):
+        """
+        批量买入
+        """
+        for order in orders:
+            order['exchange'] = self.get_exchange(order['code'])
+            order['price'] = str(order['price'])
+            order['order_side'] = dtp_type.ORDER_SIDE_BUY
+            order['order_type'] = dtp_type.ORDER_TYPE_LIMIT
+            order['order_original_id'] = generate_original_id()
+
+        self.trader.place_order_batch(orders)
+
+    def sell_many(self, orders):
+        """
+        批量买入
+        """
+        for order in orders:
+            order['exchange'] = self.get_exchange(order['code'])
+            order['price'] = str(order['price'])
+            order['order_side'] = dtp_type.ORDER_SIDE_SELL
+            order['order_type'] = dtp_type.ORDER_TYPE_LIMIT
+
+        self.trader.place_order_batch(orders)
+
     def buy(self, code, price, quantity):
         """
         委托买入
@@ -281,9 +322,11 @@ class Strategy(object):
         price: float
         quantity: int
         """
-        exchange = self._get_exchange(code)
+        order_original_id = generate_original_id()
+        exchange = self.get_exchange(code)
         price = str(price)
         self.trader.send_order(
+            order_original_id=order_original_id,
             exchange=exchange, code=code,
             price=price, quantity=quantity,
             order_side=dtp_type.ORDER_SIDE_BUY)
@@ -298,9 +341,11 @@ class Strategy(object):
         price: float
         quantity: int
         """
+        order_original_id = generate_original_id()
         exchange = self.get_exchange(code)
         price = str(price)
         self.trader.send_order(
+            order_original_id=order_original_id,
             exchange=exchange, code=code,
             price=price, quantity=quantity,
             order_side=dtp_type.ORDER_SIDE_SELL)
@@ -316,7 +361,7 @@ class Strategy(object):
         """
         exchange = kw['exchange']
         order_exchange_id = kw['order_exchange_id']
-        self.trader.cancel_order(exchange, order_exchange_id)
+        self.trader.cancel_order(**kw)
 
 
 def get_strategy_instance(MyStrategyCls):

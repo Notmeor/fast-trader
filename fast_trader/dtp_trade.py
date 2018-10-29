@@ -25,19 +25,19 @@ config = load_config()
 REQUEST_TIMEOUT = 5
 
 
+class Payload(object):
+
+    def __init__(self, header, body):
+        self.header = header
+        self.body = body
+
+
 def generate_request_id():
     return str(random.randrange(11000000, 11900000))
 
 
 def generate_original_id():
     return str(random.randrange(61000000, 61900000))
-
-
-class Payload(object):
-
-    def __init__(self, header, body):
-        self.header = header
-        self.body = body
 
 
 class Dispatcher(object):
@@ -96,6 +96,41 @@ class Dispatcher(object):
         return self._handlers[mail['handler_id']](mail)
 
 
+class DTPType(object):
+
+    api_map = {
+        'CANCEL_REPORT': 'CancellationReport',
+        'CANCEL_ORDER': 'CancelOrder',
+        'CANCEL_RESPONSE': 'CancelResponse',
+        'FILL_REPORT': 'FillReport',
+        'LOGIN_ACCOUNT_REQUEST': 'LoginAccountRequest',
+        'LOGIN_ACCOUNT_RESPONSE': 'LoginAccountResponse',
+        'LOGOUT_ACCOUNT_REQUEST': 'LogoutAccountRequest',
+        'LOGOUT_ACCOUNT_RESPONSE': 'LogoutAccountResponse',
+        'PLACE_REPORT': 'PlacedReport',
+        'PLACE_BATCH_ORDER': 'PlaceBatchOrder',
+        'PLACE_BATCH_RESPONSE': 'PlaceBatchResponse',
+        'PLACE_ORDER': 'PlaceOrder',
+        'QUERY_CAPITAL_REQUEST': 'QueryCapitalRequest',
+        'QUERY_CAPITAL_RESPONSE': 'QueryCapitalResponse',
+        'QUERY_FILLS_REQUEST': 'QueryFillsRequest',
+        'QUERY_FILLS_RESPONSE': 'QueryFillsResponse',
+        'QUERY_ORDERS_REQUEST': 'QueryOrdersRequest',
+        'QUERY_ORDERS_RESPONSE': 'QueryOrdersResponse',
+        'QUERY_POSITION_REQUEST': 'QueryPositionRequest',
+        'QUERY_POSITION_RESPONSE': 'QueryPositionResponse',
+        'QUERY_RATION_REQUEST': 'QueryRationRequest',
+        'QUERY_RATION_RESPONSE': 'QueryRationResponse'
+    }
+
+    proto_structs = {getattr(dtp_api_id, k): getattr(dtp_struct, v)
+                     for k, v in api_map.items()}
+
+    @classmethod
+    def get_proto_type(cls, api_id):
+        return cls.proto_structs[api_id]
+
+
 class DTP(object):
 
     def __init__(self, dispatcher=None):
@@ -115,7 +150,7 @@ class DTP(object):
 
         # 异步查询响应通道
         self._async_resp_channel = self._ctx.socket(zmq.SUB)
-        self._async_resp_channel.connect(config['resp_channel_port'])
+        self._async_resp_channel.connect(config['rsp_channel_port'])
         self._async_resp_channel.subscribe('{}'.format(self._account))
 
         # 风控推送通道
@@ -133,203 +168,75 @@ class DTP(object):
         threading.Thread(target=self.handle_counter_response).start()
         threading.Thread(target=self.handle_compliance_report).start()
 
-    def handle_login_request(self, mail):
+    def _assign(self, cmsg, attrs):
+        for attr, value in attrs.items():
+            name = attr
+            if attr == 'account':
+                name = 'account_no'
+            elif attr not in ['password', 'exchange', 'order_exchange_id',
+                           'code', 'price', 'quantity', 'order_side',
+                           'order_type', 'order_list']:
+                continue
+            if isinstance(value, list):
+                repeated = getattr(cmsg, attr)
+                for i in value:
+                    item = repeated.add()
+                    self._assign(item, i)
+            else:
+                setattr(cmsg, name, value)
+
+    def handle_sync_request(self, mail):
 
         header = dtp_struct.RequestHeader()
         header.request_id = generate_request_id()
         header.api_id = mail['api_id']
 
-        body = dtp_struct.LoginAccountRequest()
-        body.account_no = mail['account']
-        body.password = mail['password']
+        token = mail.get('token')
+        if token:
+            header.token = mail['token']
+
+        req_type = DTPType.get_proto_type(mail['api_id'])
+
+        body = req_type()
+
+#        for k, v in mail._kw.items():
+#            name = k
+#            if k == 'account':
+#                name = 'account_no'
+#            elif k not in ['password', 'exchange', 'order_exchange_id']:
+#                continue
+#
+#            setattr(body, name, mail[k])
+
+        self._assign(body, mail._kw)
+
+        self.logger.warning('account_no: {}'.format(body.account_no))
 
         payload = Payload(header, body)
 
         self._handle_sync_request(payload)
 
-        return self.handle_login_response(sync=mail['sync'])
+        return self._handle_sync_response(sync=mail['sync'])
 
-    def handle_login_response(self, sync=False):
-        return self._handle_sync_response(
-            dtp_struct.LoginAccountResponse, sync=sync)
-
-    def handle_logout_request(self, mail):
+    def handle_async_request(self, mail):
 
         header = dtp_struct.RequestHeader()
         header.request_id = generate_request_id()
         header.api_id = mail['api_id']
         header.token = mail['token']
 
-        body = dtp_struct.LoginAccountRequest()
-        body.account_no = mail['account']
+        req_type = DTPType.get_proto_type(header.api_id)
+        body = req_type()
+
+        self._assign(body, mail._kw)
 
         payload = Payload(header, body)
 
-        self._handle_sync_request(payload)
+        self._async_req_channel.send(
+            payload.header.SerializeToString(), zmq.SNDMORE)
 
-        self.handle_logout_response()
-
-    def handle_logout_response(self):
-        self._handle_sync_response(dtp_struct.LogoutAccountResponse)
-
-    def handle_query_order_request(self, mail):
-        header = dtp_struct.RequestHeader()
-        header.request_id = generate_request_id()
-        header.api_id = dtp_api_id.QUERY_ORDERS_REQUEST
-        header.token = mail['token']
-
-        body = dtp_struct.QueryOrdersRequest()
-        body.account_no = mail['account']
-
-        payload = Payload(header, body)
-
-        self._handle_sync_request(payload)
-
-        return self.handle_query_order_response(mail['sync'])
-
-    def handle_query_order_response(self, sync=False):
-        return self._handle_sync_response(
-            dtp_struct.QueryOrdersResponse, sync=sync)
-
-    def handle_query_trade_request(self, mail):
-
-        header = dtp_struct.RequestHeader()
-        header.request_id = generate_request_id()
-        header.api_id = dtp_api_id.QUERY_FILLS_REQUEST
-        header.token = mail['token']
-
-        body = dtp_struct.QueryFillsRequest()
-        body.account_no = mail['account']
-
-        payload = Payload(header, body)
-
-        self._handle_sync_request(payload)
-
-        return self.handle_query_trade_response(sync=mail['sync'])
-
-    def handle_query_trade_response(self, sync=False):
-        return self._handle_sync_response(
-            dtp_struct.QueryFillsResponse, sync=sync)
-
-    def handle_query_position_request(self, mail):
-
-        header = dtp_struct.RequestHeader()
-        header.request_id = generate_request_id()
-        header.api_id = dtp_api_id.QUERY_POSITION_REQUEST
-        header.token = mail['token']
-
-        body = dtp_struct.QueryPositionRequest()
-        body.account_no = mail['account']
-
-        payload = Payload(header, body)
-
-        self._handle_sync_request(payload)
-
-        return self.handle_query_position_response(sync=mail['sync'])
-
-    def handle_query_position_response(self, sync=False):
-        return self._handle_sync_response(
-            dtp_struct.QueryPositionResponse, sync=sync)
-
-    def handle_query_capital_request(self, mail):
-
-        header = dtp_struct.RequestHeader()
-        header.api_id = dtp_api_id.QUERY_CAPITAL_REQUEST
-        header.request_id = generate_request_id()
-        header.token = mail['token']
-
-        body = dtp_struct.QueryCapitalRequest()
-        body.account_no = mail['account']
-        payload = Payload(header, body)
-
-        self._handle_sync_request(payload)
-
-        return self.handle_query_capital_response(
-            sync=mail['sync'])
-
-    def handle_query_capital_response(self, sync=False):
-        return self._handle_sync_response(
-            dtp_struct.QueryCapitalResponse, sync=sync)
-
-    def handle_query_ration_request(self, mail):
-
-        header = dtp_struct.RequestHeader()
-        header.api_id = dtp_api_id.QUERY_RATION_REQUEST
-        header.request_id = generate_request_id()
-        header.token = mail['token']
-
-        body = dtp_struct.QueryRationRequest()
-        body.account_no = mail['account']
-        payload = Payload(header, body)
-
-        self._handle_sync_request(payload)
-
-        return self.handle_query_ration_response(mail['sync'])
-
-    def handle_query_ration_response(self, sync=False):
-        return self._handle_sync_response(
-            dtp_struct.QueryRationResponse, sync=sync)
-
-    def handle_send_order_request(self, mail):
-
-        header = dtp_struct.RequestHeader()
-        header.request_id = generate_request_id()
-        header.api_id = dtp_api_id.PLACE_ORDER
-        header.token = mail['token']
-
-        body = dtp_struct.PlaceOrder()
-        body.account_no = mail['account']
-        body.order_original_id = generate_original_id()
-        body.exchange = mail['exchange']
-        body.code = mail['code']
-        body.price = mail['price']
-        body.quantity = mail['quantity']
-        body.order_side = mail['order_side']
-        body.order_type = mail['order_type']
-
-        order_payload = Payload(header, body)
-
-        self._handle_async_request(order_payload)
-
-    def handle_batch_order_request(self, mail):
-
-        header = dtp_struct.RequestHeader()
-        header.request_id = generate_request_id()
-        header.api_id = dtp_api_id.PLACE_BATCH_ORDER
-        header.token = mail['token']
-
-        body = dtp_struct.PlaceBatchOrder()
-        body.account_no = mail['account']
-
-        for order in mail['orders']:
-            item = body.order_list.add()
-            item.order_original_id = generate_original_id()
-            item.exchange = order['exchange']
-            item.code = order['code']
-            item.price = order['price']
-            item.quantity = order['quantity']
-            item.order_side = order['order_side']
-            item.order_type = order['order_type']
-
-        order_payload = Payload(header, body)
-
-        self._handle_async_request(order_payload)
-
-    def handle_order_cancelation_request(self, mail):
-
-        header = dtp_struct.RequestHeader()
-        header.request_id = generate_request_id()
-        header.api_id = dtp_api_id.CANCEL_ORDER
-        header.token = mail['token']
-
-        body = dtp_struct.CancelOrder()
-        body.account_no = mail['account']
-        body.exchange = mail['exchange']
-        body.order_exchange_id = mail['order_exchange_id']
-
-        order_payload = Payload(header, body)
-
-        self._handle_async_request(order_payload)
+        self._async_req_channel.send(
+            payload.body.SerializeToString())
 
     def handle_counter_response(self):
 
@@ -345,26 +252,12 @@ class DTP(object):
             header = dtp_struct.ReportHeader()
             header.ParseFromString(report_header)
 
-            if (header.api_id == dtp_api_id.PLACE_REPORT):
-                body = dtp_struct.PlacedReport()
-                body.ParseFromString(report_body)
+            rsp_type = DTPType.get_proto_type(header.api_id)
 
-            elif (header.api_id == dtp_api_id.FILL_REPORT):
-                body = dtp_struct.FillReport()
+            try:
+                body = rsp_type()
                 body.ParseFromString(report_body)
-
-            elif (header.api_id == dtp_api_id.CANCEL_REPORT):
-                body = dtp_struct.CancellationReport()
-                body.ParseFromString(report_body)
-
-            elif header.api_id == dtp_api_id.CANCEL_RESPONSE:
-                body = dtp_struct_.CancelResponse()
-                body.ParseFromString(report_body)
-
-            elif header.api_id == dtp_api_id.PLACE_BATCH_RESPONSE:
-                body = dtp_struct_.PlaceBatchResponse()
-                body.ParseFromString(report_body)
-            else:
+            except Exception:
                 self.logger.warning('未知响应 api_id={}, {}'.format(
                     header.api_id, header.message))
                 continue
@@ -405,7 +298,7 @@ class DTP(object):
         except zmq.ZMQError as e:
             self.logger.error('查询响应中...', exc_info=True)
 
-    def _handle_sync_response(self, resp_type, sync=False):
+    def _handle_sync_response(self, sync=False):
 
         waited_time = 0
 
@@ -423,10 +316,12 @@ class DTP(object):
                 response_header = dtp_struct.ResponseHeader()
                 response_header.ParseFromString(_header)
 
-                response_body = resp_type()
+                api_id = response_header.api_id
+                rsp_type = DTPType.get_proto_type(api_id)
+
+                response_body = rsp_type()
                 response_body.ParseFromString(_body)
                 payload = Payload(response_header, response_body)
-                api_id = response_header.api_id
 
                 mail = Mail(
                     api_id=api_id,
@@ -441,18 +336,6 @@ class DTP(object):
                 return self.dispatcher.put(mail)
 
         self.logger.error('{} 查询超时'.format(resp_type))
-
-    def _handle_async_request(self, payload):
-
-        self._async_req_channel.send(
-            payload.header.SerializeToString(), zmq.SNDMORE)
-
-        self._async_req_channel.send(
-            payload.body.SerializeToString())
-
-
-class BadRequest(Exception):
-    pass
 
 
 class Order(object):
@@ -493,7 +376,7 @@ class Trader(object):
 
         if self.dispatcher is None:
             self.dispatcher = Dispatcher()
-        
+
         if self.broker is None:
             self.broker = DTP(self.dispatcher)
 
@@ -603,8 +486,9 @@ class Trader(object):
         )
         return self.dispatcher.put(mail)
 
-    def send_order(self, exchange, code, price, quantity,
-                   order_side, order_type=dtp_type.ORDER_TYPE_LIMIT):
+    def send_order(self, order_original_id, exchange,
+                   code, price, quantity, order_side,
+                   order_type=dtp_type.ORDER_TYPE_LIMIT):
         """
         报单委托
         """
@@ -613,6 +497,7 @@ class Trader(object):
             api_id=PLACE_ORDER,
             account=self._account,
             token=self._token,
+            order_original_id=order_original_id,
             exchange=exchange,
             code=code,
             price=price,
@@ -652,22 +537,10 @@ class Trader(object):
             api_id=PLACE_BATCH_ORDER,
             account=self._account,
             token=self._token,
-            orders=orders
+            order_list=orders
         )
         self.dispatcher.put(mail)
-
-    def send_order_batch(self, batch):
-        """
-        批量下单
-        """
-        mail = Mail(
-            api_type='req',
-            api_id=PLACE_ORDER,
-            account=self._account,
-            token=self._token,
-            order_list=batch
-        )
-        self.dispatcher.put(mail)
+        self.logger.info('批量买入委托 {}'.format(mail))
 
     def cancel_order(self, **kw):
         """

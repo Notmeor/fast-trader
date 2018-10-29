@@ -76,10 +76,22 @@ def message2dict(msg):
         return msg
 
 
-def int2datetime(n_date, n_time, utc=False):
-    dt = datetime.datetime.strptime(
-        '{}{}'.format(n_date, n_time),
-        '%Y%m%d%H%M%S%f')
+def int2datetime(n_date=None, n_time=None, utc=False):
+    if n_date is None and n_time is None:
+        raise ValueError
+    elif n_date and n_time is None:
+        dt = datetime.datetime.strptime('{}'.format(n_date), '%Y%m%d')
+    elif n_date is None and n_time:
+        dt = datetime.datetime.strptime('{}'.format(n_time), '%H%M%S').time()
+    else:
+        dt = datetime.datetime.strptime(
+            '{}{}'.format(n_date, n_time),
+            '%Y%m%d%H%M%S%f')
     if utc:
         return dt.astimezone(datetime.timezone.utc)
     return dt
+
+
+def _convert(ss):
+    import re
+    return '_'.join(re.findall('[A-Z][^A-Z]*', ss)).upper()

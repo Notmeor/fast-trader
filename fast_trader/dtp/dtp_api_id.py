@@ -23,17 +23,31 @@ CANCEL_RESPONSE = 11002002
 PLACE_BATCH_RESPONSE = 11002003
 
 
+#REQ_API_NAMES = {
+#    LOGIN_ACCOUNT_REQUEST: 'handle_login_request',
+#    LOGOUT_ACCOUNT_REQUEST: 'handle_logout_request',
+#    QUERY_ORDERS_REQUEST: 'handle_query_order_request',
+#    QUERY_FILLS_REQUEST: 'handle_query_trade_request',
+#    QUERY_CAPITAL_REQUEST: 'handle_query_capital_request',
+#    QUERY_POSITION_REQUEST: 'handle_query_position_request',
+#    QUERY_RATION_REQUEST: 'handle_query_ration_request',
+#    PLACE_ORDER: 'handle_send_order_request',
+#    CANCEL_ORDER: 'handle_order_cancelation_request',
+#    PLACE_BATCH_ORDER: 'handle_batch_order_request'
+#}
+
+
 REQ_API_NAMES = {
-    LOGIN_ACCOUNT_REQUEST: 'handle_login_request',
-    LOGOUT_ACCOUNT_REQUEST: 'handle_logout_request',
-    QUERY_ORDERS_REQUEST: 'handle_query_order_request',
-    QUERY_FILLS_REQUEST: 'handle_query_trade_request',
-    QUERY_CAPITAL_REQUEST: 'handle_query_capital_request',
-    QUERY_POSITION_REQUEST: 'handle_query_position_request',
-    QUERY_RATION_REQUEST: 'handle_query_ration_request',
-    PLACE_ORDER: 'handle_send_order_request',
-    CANCEL_ORDER: 'handle_order_cancelation_request',
-    PLACE_BATCH_ORDER: 'handle_batch_order_request'
+    LOGIN_ACCOUNT_REQUEST: 'handle_sync_request',
+    LOGOUT_ACCOUNT_REQUEST: 'handle_sync_request',
+    QUERY_ORDERS_REQUEST: 'handle_sync_request',
+    QUERY_FILLS_REQUEST: 'handle_sync_request',
+    QUERY_CAPITAL_REQUEST: 'handle_sync_request',
+    QUERY_POSITION_REQUEST: 'handle_sync_request',
+    QUERY_RATION_REQUEST: 'handle_sync_request',
+    PLACE_ORDER: 'handle_async_request',
+    CANCEL_ORDER: 'handle_async_request',
+    PLACE_BATCH_ORDER: 'handle_async_request'
 }
 
 
