@@ -271,24 +271,6 @@ class Strategy(object):
         """
         pass
 
-    def on_trade_query(self, trades):
-        """
-        成交查询回报
-        """
-        pass
-
-    def on_position_query(self, position):
-        """
-        持仓查询回报
-        """
-        pass
-
-    def on_capital_query(self, account):
-        """
-        资金查询回报
-        """
-        pass
-
     def on_compliance_report(self, report):
         """
         风控回报

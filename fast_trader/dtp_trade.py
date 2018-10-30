@@ -382,9 +382,9 @@ class Trader(object):
         if self.broker is None:
             self.broker = DTP(self.dispatcher)
 
-        self.bind()
+        self._bind()
 
-    def bind(self):
+    def _bind(self):
 
         dispatcher, broker = self.dispatcher, self.broker
 
@@ -439,7 +439,9 @@ class Trader(object):
     def login(self, account, password, sync=True, **kw):
 
         self._account = account
-        ret = self.login_account(account=account, password=password, sync=True)
+        ret = self._login_account(account=account,
+                                  password=password,
+                                  sync=True)
 
         if ret['ret_code'] != 0:
             raise Exception(ret['err_message'])
@@ -501,26 +503,12 @@ class Trader(object):
         )
         self.dispatcher.put(mail)
 
-        self.logger.info(('报单委托 account={}, code={}, price={}, quantity={},'
-                         + ' order_side={}, order_type={}').format(
-                         self.account_no, code, price, quantity, order_side,
-                         order_type))
-
-    def place_order(self, order):
-
-        mail = Mail(
-            api_type='req',
-            api_id=PLACE_ORDER,
-            account=self._account,
-            token=self._token,
-            exchange=order.exchange,
-            code=order.code,
-            price=order.price,
-            quantity=order.quantity,
-            order_side=order.order_side,
-            order_type=order.order_type
-        )
-        self.dispatcher.put(mail)
+#        self.logger.info(('报单委托 account={}, code={}, price={}, quantity={},'
+#                         + ' order_side={}, order_type={}').format(
+#                         self.account_no, code, price, quantity, order_side,
+#                         order_type))
+        
+        self.logger.info('报单委托 {}'.format(mail))
 
     def place_order_batch(self, orders):
         """
