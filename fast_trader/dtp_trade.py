@@ -8,6 +8,7 @@ import threading
 import logging
 from queue import Queue
 
+from fast_trader import zmq_context
 from fast_trader.dtp import dtp_api_id
 from fast_trader.dtp.dtp_api_id import *
 from fast_trader.dtp import api_pb2 as dtp_struct
@@ -52,9 +53,12 @@ class Dispatcher(object):
         self._outbox = Queue()
 
         self._running = False
-        self._run()
+        self.start()
 
-    def _run(self):
+    def start(self):
+        
+        if self._running:
+            return
 
         self._running = True
         threading.Thread(target=self.process_inbox).start()
@@ -138,7 +142,7 @@ class DTP(object):
         self.dispatcher = dispatcher or Queue()
 
         self._account = config['account']
-        self._ctx = zmq.Context()
+        self._ctx = zmq_context.CONTEXT
 
         # 同步查询通道
         self._sync_req_resp_channel = self._ctx.socket(zmq.REQ)
@@ -168,20 +172,20 @@ class DTP(object):
         threading.Thread(target=self.handle_counter_response).start()
         threading.Thread(target=self.handle_compliance_report).start()
 
-    def _assign(self, cmsg, attrs):
+    def _populate_message(self, cmsg, attrs):
         for attr, value in attrs.items():
             name = attr
             if attr == 'account':
                 name = 'account_no'
             elif attr not in ['password', 'exchange', 'order_exchange_id',
-                           'code', 'price', 'quantity', 'order_side',
-                           'order_type', 'order_list']:
+                              'code', 'price', 'quantity', 'order_side',
+                              'order_type', 'order_list']:
                 continue
             if isinstance(value, list):
                 repeated = getattr(cmsg, attr)
                 for i in value:
                     item = repeated.add()
-                    self._assign(item, i)
+                    self._populate_message(item, i)
             else:
                 setattr(cmsg, name, value)
 
@@ -199,24 +203,72 @@ class DTP(object):
 
         body = req_type()
 
-#        for k, v in mail._kw.items():
-#            name = k
-#            if k == 'account':
-#                name = 'account_no'
-#            elif k not in ['password', 'exchange', 'order_exchange_id']:
-#                continue
-#
-#            setattr(body, name, mail[k])
-
-        self._assign(body, mail._kw)
+        self._populate_message(body, mail._kw)
 
         self.logger.warning('account_no: {}'.format(body.account_no))
 
         payload = Payload(header, body)
 
-        self._handle_sync_request(payload)
+        try:
+            self._sync_req_resp_channel.send(
+                payload.header.SerializeToString(), zmq.SNDMORE)
+            self._sync_req_resp_channel.send(
+                payload.body.SerializeToString())
+        except zmq.ZMQError:
+            self.logger.error('查询响应中...', exc_info=True)
 
-        return self._handle_sync_response(sync=mail['sync'])
+        return self.handle_sync_response(
+            api_id=mail['api_id'], sync=mail['sync'])
+
+    def handle_sync_response(self, api_id, sync=False):
+
+        waited_time = 0
+
+        while waited_time < REQUEST_TIMEOUT:
+
+            try:
+                _header = self._sync_req_resp_channel.recv(flags=zmq.NOBLOCK)
+                _body = self._sync_req_resp_channel.recv(flags=zmq.NOBLOCK)
+
+            except zmq.ZMQError as e:
+                time.sleep(0.1)
+                waited_time += 0.1
+
+            else:
+                response_header = dtp_struct.ResponseHeader()
+                response_header.ParseFromString(_header)
+
+                api_id = response_header.api_id
+                rsp_type = DTPType.get_proto_type(api_id)
+
+                response_body = rsp_type()
+                response_body.ParseFromString(_body)
+                payload = Payload(response_header, response_body)
+
+                mail = Mail(
+                    api_id=api_id,
+                    api_type='rsp',
+                    sync=sync,
+                    content=payload
+                )
+
+                if sync:
+                    return mail
+
+                return self.dispatcher.put(mail)
+
+        mail = Mail(
+            api_id=api_id,
+            api_type='rsp',
+            sync=sync,
+            ret_code=-1,
+            err_message='请求超时'
+        )
+
+        self.logger.error('请求超时 api_id={}'.format(api_id))
+        if sync:
+            return mail
+        return self.dispatcher.put(mail)
 
     def handle_async_request(self, mail):
 
@@ -228,7 +280,7 @@ class DTP(object):
         req_type = DTPType.get_proto_type(header.api_id)
         body = req_type()
 
-        self._assign(body, mail._kw)
+        self._populate_message(body, mail._kw)
 
         payload = Payload(header, body)
 
@@ -286,56 +338,6 @@ class DTP(object):
 
             body = dtp_struct.PlacedReport()
             body.ParseFromString(report_body)
-
-
-    def _handle_sync_request(self, payload):
-        try:
-            self._sync_req_resp_channel.send(
-                payload.header.SerializeToString(), zmq.SNDMORE)
-
-            self._sync_req_resp_channel.send(
-                payload.body.SerializeToString())
-        except zmq.ZMQError as e:
-            self.logger.error('查询响应中...', exc_info=True)
-
-    def _handle_sync_response(self, sync=False):
-
-        waited_time = 0
-
-        while waited_time < REQUEST_TIMEOUT:
-
-            try:
-                _header = self._sync_req_resp_channel.recv(flags=zmq.NOBLOCK)
-                _body = self._sync_req_resp_channel.recv(flags=zmq.NOBLOCK)
-
-            except zmq.ZMQError as e:
-                time.sleep(0.1)
-                waited_time += 0.1
-
-            else:
-                response_header = dtp_struct.ResponseHeader()
-                response_header.ParseFromString(_header)
-
-                api_id = response_header.api_id
-                rsp_type = DTPType.get_proto_type(api_id)
-
-                response_body = rsp_type()
-                response_body.ParseFromString(_body)
-                payload = Payload(response_header, response_body)
-
-                mail = Mail(
-                    api_id=api_id,
-                    api_type='rsp',
-                    sync=sync,
-                    content=payload
-                )
-
-                if sync:
-                    return mail
-
-                return self.dispatcher.put(mail)
-
-        self.logger.error('{} 查询超时'.format(resp_type))
 
 
 class Order(object):
@@ -434,11 +436,13 @@ class Trader(object):
     def on_logout(self, mail):
         self.logger.info('登出账户 {}'.format(self.account_no))
 
-
-    def login(self, account, password, sync=True):
+    def login(self, account, password, sync=True, **kw):
 
         self._account = account
         ret = self.login_account(account=account, password=password, sync=True)
+
+        if ret['ret_code'] != 0:
+            raise Exception(ret['err_message'])
 
         if sync:
 
@@ -457,16 +461,6 @@ class Trader(object):
                     '登录失败 <{}> {}'.format(self.account_no, login_msg))
 
             return ret
-
-        timeout = 0
-        while True:
-            if self._token != '':
-                break
-            time.sleep(0.5)
-            timeout += 0.5
-            if timeout > REQUEST_TIMEOUT:
-                self.logger.error('登录超时')
-                raise Exception('登录超时!')
 
 
     def logout(self, **kw):

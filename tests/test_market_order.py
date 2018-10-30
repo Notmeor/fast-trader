@@ -3,6 +3,9 @@
 import time, datetime
 from collections import defaultdict
 
+import numpy as np
+import pandas as pd
+
 from fast_trader.dtp import dtp_api_id
 from fast_trader.dtp import type_pb2 as dtp_type
 from fast_trader.dtp_quote import QuoteFeed
@@ -26,15 +29,11 @@ class MyStrategy(Strategy):
         return [p['code'] for p in positions]
 
     def set_params(self, **kw):
-        """
-        约定参数均以 `p_` 开头，避免与其它变量冲突
-        """
         self.params = kw
 
     def on_start(self):
-        
-        self.market_trades = defaultdict(list)
-        self.market_snapshots = defaultdict(list)
+
+        self.market_orders = defaultdict(list)
 
         self.on_order_list = []
         self.on_trade_list = []
@@ -42,12 +41,14 @@ class MyStrategy(Strategy):
         # 起始报单时间
         self.ordering_start = datetime.datetime.combine(
                 datetime.date.today(), datetime.time(8, 50))
-        self.ordering_interval = datetime.timedelta(seconds=5)
+        
+        interval = self.params['ordering_interval']
+        self.ordering_interval = datetime.timedelta(seconds=interval)
         self.cur_period = self.ordering_start
         # 报单比率
-        self.ordering_ratio = 0.01
+        self.ordering_ratio = self.params['ordering_ratio']
         # 报单总量
-        self.ordering_quota = 10000
+        self.ordering_quota = self.params['ordering_quota']
         # 完成周期
         self.order_range = datetime.timedelta(minutes=1)
         # 总交易量
@@ -97,46 +98,80 @@ class MyStrategy(Strategy):
             if p['code'] == code:
                 return p
 
+    def get_array(self, data, name):
+        arr = [getattr(data, '{}_{}'.format(name, i)) for i in range(10)]
+        return np.array(arr)
+
     def on_market_trade(self, market_trade):
-
-        data = market_trade['content']
-
-        if data.nPrice > 0:
-            self.market_trades[data.szCode].append(data)
-
-        if not data.szCode == '002230':
-            return
-        
-        if len(self.market_trades[data.szCode]) < 1:
-            return
-
-        self.cur_period = int2datetime(n_date=data.nActionDay,
-                                       n_time=data.nTime)
-        self.market_quantity += data.nVolume
-
-        if self.cur_period - self.ordering_start >= self.ordering_interval:
-            price = self.get_last_price(data.szCode)
-            units = int(self.market_quantity * self.ordering_ratio / 100)
-
-            self.ordering_start = self.cur_period
-            self.market_quantiy = 0
-
-            quantity = min(units * 100, self.ordering_quota)
-            if quantity > 0:
-                self.buy(data.szCode, price, quantity)
-                self.ordering_quota -= quantity
-                self.logger.info('分批报单 quantiy={}'.format(quantity))
-
-                if self.ordering_quota <= 0:
-                    self.logger.warning('报单全部完成')
+        """
+        逐笔成交推送
+        """
+        pass
 
 
     def on_market_order(self, market_order):
-        pass
-    
+        """
+        逐笔委托推送
+        """
+        data = market_order['content']
+        self.market_orders[data.szCode].append(data)
+        
+        if data.szCode != '002230':
+            return
+        
+        '''
+        szWindCode: "002230.SZ"
+        szCode: "002230"
+        nActionDay: 20181030
+        nTime: 133053290
+        nOrder: 6553617
+        nPrice: 225900
+        nVolume: 2100
+        chOrderKind: "0"
+        chFunctionCode: "B"
+        chStatus: "\000"
+        chFlag: "null"
+        nLocalTime: 133052415
+        '''
+        
+
     def on_market_snapshot(self, snapshot):
+        """
+        行情快照推送
+        """
         data = snapshot['content']
         self.market_snapshots[data.szCode].append(data)
+
+        if data.szCode != '002230':
+            return
+
+        '''
+        每隔一段时间发出买入委托
+        委托价格=卖1到卖10的加权均价
+        委托数量=卖1到卖10的总委托量乘以委托系数
+        '''
+        # nAskVol_0 到 nAskVol_9
+        ask_vols = self.get_array(data, 'nAskVol')
+        # nAskPrice_0 到 nAskPrice_9
+        ask_prices = self.get_array(data, 'nAskPrice') / 10000
+        
+        # 十档委托卖出均价
+        total_ask_vols = ask_vols.sum()
+        avg_price = (ask_vols * ask_prices).sum() / total_ask_vols
+        # 委托数量
+        quantity = total_ask_vols * self.ordering_ratio
+
+        order_quantity = int(min(quantity, self.ordering_quota) / 100) * 100
+
+        if order_quantity > 0:
+
+            self.buy(data.szCode, round(avg_price, 2), order_quantity)
+            self.ordering_quota -= order_quantity
+            self.logger.info('分批报单 quantiy={}'.format(order_quantity))
+
+            if self.ordering_quota <= 0:
+                self.logger.info('报单全部完成')
+
 
 
     def on_order(self, order):
@@ -159,20 +194,19 @@ class MyStrategy(Strategy):
 
 if __name__ == '__main__':
 
+    # 策略实例化
     strategy = get_strategy_instance(MyStrategy)
 
-    datasource_0 = QuoteFeed('trade_feed')
-    datasource_0.subscribe(['002230', '000001'])
-
-    datasource_1 = QuoteFeed('tick_feed')
-    datasource_1.subscribe(['002230'])
+    # 订阅行情
+    datasource_0 = QuoteFeed('order_feed')
+    datasource_0.subscribe(['002230'])
 
     strategy.add_datasource(datasource_0)
-    strategy.add_datasource(datasource_1)
 
+    # 设置参数
+    strategy.set_params(ordering_interval=10,
+                        ordering_ratio=0.01,
+                        ordering_quota=10000)
+
+    # 启动策略
     strategy.start()
-
-    ea = strategy
-
-
-

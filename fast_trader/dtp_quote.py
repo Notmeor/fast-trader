@@ -10,6 +10,7 @@ import logging
 import numpy as np
 import pandas as pd
 
+from fast_trader import zmq_context
 from fast_trader.dtp import quotation_pb2 as quote_struct
 
 from fast_trader.utils import timeit, message2dict, load_config, Mail
@@ -22,7 +23,7 @@ class MarketFeed(object):
     url = None
 
     def __init__(self):
-        self._ctx = zmq.Context()
+        self._ctx = zmq_context.CONTEXT
         self._socket = self._ctx.socket(zmq.SUB)
         self._queue = queue.Queue()
         self._running = False
@@ -124,6 +125,9 @@ class QuoteFeed(MarketFeed):
         else:
             raise TypeError(
                 'Expected `list` or `str`, got `{}`'.format(type(code)))
+
+    def subscribe_all(self):
+        self.sub('')
 
     def add_listener(self, listener):
         self._listeners.append(listener)

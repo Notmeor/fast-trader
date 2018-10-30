@@ -53,8 +53,6 @@ class Strategy(object):
 
         self.on_start()
 
-        # 启动行情线程
-        self.start_market()
 
         self.trader.add_strategy(self)
         self.trader.start()
@@ -67,7 +65,12 @@ class Strategy(object):
 
         if self.trader.logined:
             self._started = True
+            self.on_start()
             self.logger.info('策略启动成功')
+
+            # 启动行情线程
+            self.start_market()
+
         else:
             self.logger.info(
                 '策略启动失败 账户<{}>未成功登录'.format(self.account_no))
@@ -115,7 +118,7 @@ class Strategy(object):
         msg = message2dict(payload.body)
         orders = self._orders = msg.get('order_list', {})
         return orders
-    
+
     @timeit
     def get_open_orders(self):
         """
@@ -177,17 +180,9 @@ class Strategy(object):
 
         name = datasource.name
 
-        handler = {
-           'trade_feed': self.on_market_trade,
-           'tick_feed': self.on_tick,
-           'queue_feed': self.on_market_queue,
-           'order_feed': self.on_market_order,
-           'index_feed': self.on_market_index
-        }[name]
-
         dispatcher = self.dispatcher
         datasource.add_listener(dispatcher)
-        dispatcher.bind('{}_rsp'.format(name), handler)
+        dispatcher.bind('{}_rsp'.format(name), self.on_quote_message)
 
         self.subscribed_datasources.append(datasource)
 
@@ -200,13 +195,23 @@ class Strategy(object):
         """
         pass
 
-    def on_market_trade(self, market_trade):
-        """
-        逐笔成交行情
-        """
-        pass
+    def on_quote_message(self, message):
 
-    def on_tick(self, tick):
+        api_id = message['api_id']
+        data = message['content']
+
+        if api_id == 'trade_feed':
+            self.on_market_trade(data)
+        elif api_id == 'tick_feed':
+            self.on_market_snapshot(data)
+        elif api_id == 'order_feed':
+            self.on_market_order(data)
+        elif api_id == 'queue_feed':
+            self.on_market_queue(data)
+        elif api_id == 'index_feed':
+            self.on_market_index(data)
+
+    def on_market_snapshot(self, market_snapshot):
         """
         快照行情
         """
@@ -252,16 +257,19 @@ class Strategy(object):
         """
         报单查询
         """
+        pass
 
     def on_order_cancelation_submission(self, msg):
         """
         撤单提交响应
         """
+        pass
 
     def on_order_cancelation(self, msg):
         """
         撤单确认回报
         """
+        pass
 
     def on_trade_query(self, trades):
         """
@@ -387,19 +395,4 @@ def get_strategy_instance(MyStrategyCls):
 
     return strategy
 
-
-if __name__ == '__main__':
-
-    strategy = get_strategy_instance(Strategy)
-
-    datasource_0 = QuoteFeed('trade_feed')
-    datasource_0.subscribe(['002230'])
-
-    datasource_1 = QuoteFeed('order_feed')
-    datasource_1.subscribe(['002230'])
-
-    strategy.add_datasource(datasource_0)
-    strategy.add_datasource(datasource_1)
-
-    strategy.start()
 

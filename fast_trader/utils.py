@@ -19,6 +19,9 @@ class Mail(object):
         if 'sync' not in kw:
             kw['sync'] = False
 
+        if 'ret_code' not in kw:
+            kw['ret_code'] = 0
+
         kw.update({
             'api_id': api_id,
             'api_type': api_type
@@ -82,7 +85,7 @@ def int2datetime(n_date=None, n_time=None, utc=False):
     elif n_date and n_time is None:
         dt = datetime.datetime.strptime('{}'.format(n_date), '%Y%m%d')
     elif n_date is None and n_time:
-        dt = datetime.datetime.strptime('{}'.format(n_time), '%H%M%S').time()
+        dt = datetime.datetime.strptime('{}'.format(n_time), '%H%M%S%f').time()
     else:
         dt = datetime.datetime.strptime(
             '{}{}'.format(n_date, n_time),
