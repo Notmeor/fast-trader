@@ -28,7 +28,7 @@ REQUEST_TIMEOUT = 5
 
 class Payload(object):
 
-    
+
     def __init__(self, header, body):
         self.header = header
         self.body = body
@@ -217,10 +217,12 @@ class DTP(object):
 #        # Do not log password
 #        # bmsg.pop('password', None)
 #        self.logger.info('{}, {}'.format(hmsg, bmsg))
-        
+
         mail._kw.pop('password', None)
         self.logger.info(mail)
 
+        print(payload.header, payload.body)
+        
         try:
             self._sync_req_resp_channel.send(
                 payload.header.SerializeToString(), zmq.SNDMORE)
@@ -258,17 +260,17 @@ class DTP(object):
 
                 body = rsp_type()
                 body.ParseFromString(report_body)
-                payload = Payload(header, body)
 
                 mail = Mail(
                     api_id=api_id,
                     api_type='rsp',
-                    sync=sync,
-                    content=payload
+                    sync=sync
                 )
 
-                self.logger.info('{}, {}'.format(
-                    message2dict(header), message2dict(body)))
+                mail['header'] = message2dict(header)
+                mail['body'] = message2dict(body)
+
+                self.logger.info(mail)
 
                 if sync:
                     return mail
@@ -302,8 +304,7 @@ class DTP(object):
 
         payload = Payload(header, body)
 
-        self.logger.info('{}, {}'.format(
-            message2dict(header), message2dict(body)))
+        self.logger.info(mail)
 
         self._async_req_channel.send(
             payload.header.SerializeToString(), zmq.SNDMORE)
@@ -335,14 +336,17 @@ class DTP(object):
                     header.api_id, header.message))
                 continue
 
-            self.logger.info('{}, {}'.format(
-                message2dict(header), message2dict(body)))
-
-            self.dispatcher.put(Mail(
+            mail = Mail(
                 api_id=header.api_id,
-                api_type='rsp',
-                content=Payload(header, body)
-            ))
+                api_type='rsp'
+            )
+
+            mail['header'] = message2dict(header)
+            mail['body'] = message2dict(body)
+
+            self.logger.info(mail)
+
+            self.dispatcher.put(mail)
 
     def handle_compliance_report(self):
         """
@@ -429,16 +433,14 @@ class Trader(object):
     def _on_response(self, mail):
 
         api_id = mail['api_id']
-        response = mail['content']
-        msg = message2dict(response.body)
 
         if api_id == LOGIN_ACCOUNT_RESPONSE:
-            self.on_login(msg)
+            self.on_login(mail)
         elif api_id == LOGOUT_ACCOUNT_RESPONSE:
-            self.on_logout(msg)
+            self.on_logout(mail)
         else:
             for ea in self._strategies:
-                getattr(ea, RSP_API_NAMES[api_id])(msg)
+                getattr(ea, RSP_API_NAMES[api_id])(mail)
 
     @property
     def account_no(self):
@@ -472,12 +474,11 @@ class Trader(object):
 
         if sync:
 
-            payload = ret['content']
-            login_msg = payload.header.message
+            login_msg = ret['header']['message']
 
-            if payload.header.code == dtp_type.RESPONSE_CODE_OK:
+            if ret['header']['code'] == dtp_type.RESPONSE_CODE_OK:
                 self._logined = True
-                self._token = payload.body.token
+                self._token = ret['body']['token']
 
                 self.logger.info(
                     '登录成功 <{}> {}'.format(self.account_no, login_msg))

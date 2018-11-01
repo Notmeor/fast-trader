@@ -32,6 +32,43 @@ class Mail(object):
     def __getitem__(self, key):
         return self._kw[key]
 
+    def __setitem__(self, key, value):
+        self._kw[key] = value
+
+    def __getattr__(self, key):
+        return self._kw[key]
+
+    def __setattr__(self, key, value):
+        if key != '_kw':
+            raise AttributeError('Assignment not allowed')
+        super().__setattr__(key, value)
+
+    def __repr__(self):
+        return repr(self._kw)
+
+    def get(self, key, default=None):
+        return self._kw.get(key, default)
+
+
+class Foo(object):
+
+    def __init__(self, **kw):
+        self._kw = kw
+
+    def __getitem__(self, key):
+        return self._kw[key]
+
+    def __setitem__(self, key, value):
+        self._kw[key] = value
+
+    def __getattr__(self, key):
+        return self._kw[key]
+
+    def __setattr__(self, key, value):
+        if key != '_kw':
+            raise AttributeError('Assignment not allowed')
+        super().__setattr__(key, value)
+
     def __repr__(self):
         return repr(self._kw)
 
@@ -99,14 +136,14 @@ def message2dict(msg, including_default_value_fields=True):
         for field in msg.DESCRIPTOR.fields:
             name = field.name
             dct[name] = message2dict(getattr(msg, name))
-        
+
         return dct
 
     elif isinstance(msg, RepeatedCompositeContainer):
         return list(map(message2dict, msg))
 
     else:
-        return msg  
+        return msg
 
 def message2tuple(msg, kind):
     """
@@ -119,9 +156,9 @@ def message2tuple(msg, kind):
     for field in msg.DESCRIPTOR.fields:
         name = field.name
         dct[name] = getattr(msg, name)
-    
+
     ret = kind(**dct)
-    
+
     return ret
 
 

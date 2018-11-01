@@ -111,17 +111,14 @@ class Strategy(object):
         查询报单（同步）
         """
         mail = self.trader.query_orders(sync=True)
-        payload = mail['content']
-        msg = message2dict(payload.body)
-        orders = self._orders = msg.get('order_list', {})
+
+        orders = self._orders = mail['body'].get('order_list', {})
         return orders
 
     @timeit
     def get_trades(self):
         mail = self.trader.query_trades(sync=True)
-        payload = mail['content']
-        msg = message2dict(payload.body)
-        trades = self._trades = msg.get('fill_list', {})
+        trades = self._trades = mail['body'].get('fill_list', {})
         return trades
 
     @timeit
@@ -156,8 +153,8 @@ class Strategy(object):
         查询资金（同步）
         """
         mail = self.trader.query_capital(sync=True)
-        payload = mail['content']
-        return message2dict(payload.body)
+
+        return mail['body']
 
     def get_exchange(self, code):
         """
