@@ -9,9 +9,26 @@ from google.protobuf.pyext._message import RepeatedCompositeContainer
 import yaml
 
 
-class Mail(object):
+class attrdict(dict):
 
-    def __init__(self, api_id, api_type, **kw):
+    __slots__ = ()
+
+    def __getattr__(self, key):
+        try:
+            return self[key]
+        except KeyError as e:
+            raise AttributeError(key)
+
+    def __setattr__(self, key, value):
+        raise AttributeError('Assignment not allowed')
+
+
+class Mail(attrdict):
+
+    def __init__(self, api_type, api_id, **kw):
+
+        if api_type == 'req':
+            assert 'request_id' in kw
 
         if 'handler_id' not in kw:
             kw['handler_id'] = '{}_{}'.format(api_id, api_type)
@@ -23,57 +40,11 @@ class Mail(object):
             kw['ret_code'] = 0
 
         kw.update({
-            'api_id': api_id,
-            'api_type': api_type
+            'api_type': api_type,
+            'api_id': api_id
         })
 
-        self._kw = kw
-
-    def __getitem__(self, key):
-        return self._kw[key]
-
-    def __setitem__(self, key, value):
-        self._kw[key] = value
-
-    def __getattr__(self, key):
-        return self._kw[key]
-
-    def __setattr__(self, key, value):
-        if key != '_kw':
-            raise AttributeError('Assignment not allowed')
-        super().__setattr__(key, value)
-
-    def __repr__(self):
-        return repr(self._kw)
-
-    def get(self, key, default=None):
-        return self._kw.get(key, default)
-
-
-class Foo(object):
-
-    def __init__(self, **kw):
-        self._kw = kw
-
-    def __getitem__(self, key):
-        return self._kw[key]
-
-    def __setitem__(self, key, value):
-        self._kw[key] = value
-
-    def __getattr__(self, key):
-        return self._kw[key]
-
-    def __setattr__(self, key, value):
-        if key != '_kw':
-            raise AttributeError('Assignment not allowed')
-        super().__setattr__(key, value)
-
-    def __repr__(self):
-        return repr(self._kw)
-
-    def get(self, key, default=None):
-        return self._kw.get(key, default)
+        self.update(kw)
 
 
 def timeit(func):
@@ -122,14 +93,13 @@ def message2dict_(msg, including_default_value_fields=True):
         return msg
 
 
-@timeit
 def message2dict(msg, including_default_value_fields=True):
     """
     Convert protobuf message to dict
     """
     # return msg
 
-    dct = {}
+    dct = attrdict()
 
     if isinstance(msg, Message):
 
@@ -144,6 +114,7 @@ def message2dict(msg, including_default_value_fields=True):
 
     else:
         return msg
+
 
 def message2tuple(msg, kind):
     """

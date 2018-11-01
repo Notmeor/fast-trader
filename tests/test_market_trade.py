@@ -102,7 +102,6 @@ class MyStrategy(Strategy):
         if data.nPrice > 0:
             self.market_trades[data.szCode].append(data)
 
-        return
         if not data.szCode == '002230':
             return
         
@@ -129,13 +128,11 @@ class MyStrategy(Strategy):
                 if self.ordering_quota <= 0:
                     self.logger.warning('报单全部完成')
 
-
     def on_market_order(self, market_order):
         pass
-    
+
     def on_market_snapshot(self, data):
         self.market_snapshots[data.szCode].append(data)
-
 
     def on_order(self, order):
         show_title('报单回报')
@@ -160,10 +157,10 @@ if __name__ == '__main__':
     strategy = get_strategy_instance(MyStrategy)
 
     datasource_0 = QuoteFeed('trade_feed')
-    datasource_0.subscribe(['002230', '000001'])
+    datasource_0.subscribe(['300104', '002230', '000001'])
 
     datasource_1 = QuoteFeed('tick_feed')
-    datasource_1.subscribe(['002230'])
+    datasource_1.subscribe(['300104', '002230'])
 
     strategy.add_datasource(datasource_0)
     strategy.add_datasource(datasource_1)

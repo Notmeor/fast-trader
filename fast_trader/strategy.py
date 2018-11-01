@@ -23,14 +23,6 @@ from fast_trader.utils import (timeit, message2dict, load_config, Mail,
 config = load_config()
 
 
-def generate_request_id():
-    return str(random.randrange(11000000, 11900000))
-
-
-def generate_original_id():
-    return str(random.randrange(61000000, 61900000))
-
-
 class Strategy(object):
 
     def __init__(self, *args, **kw):
@@ -46,7 +38,7 @@ class Strategy(object):
         self.logger = logging.getLogger('fast_trader.strategy')
 
     def set_dispatcher(self, dispatcher):
-        self.dispatcher = Dispatcher()
+        self.dispatcher = dispatcher
 
     def set_trader(self, trader):
         self.trader = trader
@@ -91,18 +83,16 @@ class Strategy(object):
         return {p['code']: p['balance'] for p in self._positions
                 if p.get('balance', 0) != 0}
 
+    def generate_order_id(self):
+        return self.trader.generate_order_id()
+
     @timeit
     def get_positions(self):
         """
         查询持仓（同步）
         """
         mail = self.trader.query_positions(sync=True)
-        payload = mail['content']
-        msg = message2dict(payload.body)
-        try:
-            position = self._positions = msg['position_list']
-        except:
-            position = self._positions = msg.position_list
+        position = self._positions = mail.body.position_list
         return position
 
     @timeit
@@ -296,7 +286,7 @@ class Strategy(object):
             order['price'] = str(order['price'])
             order['order_side'] = dtp_type.ORDER_SIDE_BUY
             order['order_type'] = dtp_type.ORDER_TYPE_LIMIT
-            order['order_original_id'] = generate_original_id()
+            order['order_original_id'] = self.generate_order_id()
 
         self.trader.place_order_batch(orders)
 
@@ -321,11 +311,16 @@ class Strategy(object):
         code: str
         price: float
         quantity: int
+
+        Returns
+        ----------
+        ret: int
+            返回原始委托编号
         """
-        order_original_id = generate_original_id()
+        order_original_id = self.generate_order_id()
         exchange = self.get_exchange(code)
         price = str(price)
-        self.trader.send_order(
+        return self.trader.send_order(
             order_original_id=order_original_id,
             exchange=exchange, code=code,
             price=price, quantity=quantity,
@@ -340,11 +335,16 @@ class Strategy(object):
         code: str
         price: float
         quantity: int
+        
+        Returns
+        ----------
+        ret: int
+            返回原始委托编号
         """
-        order_original_id = generate_original_id()
+        order_original_id = self.generate_order_id()
         exchange = self.get_exchange(code)
         price = str(price)
-        self.trader.send_order(
+        return self.trader.send_order(
             order_original_id=order_original_id,
             exchange=exchange, code=code,
             price=price, quantity=quantity,

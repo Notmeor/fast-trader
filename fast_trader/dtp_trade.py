@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 
 import os
-import zmq
 import time
-import random
+import datetime
+
 import threading
 import logging
+import zmq
 from queue import Queue
 
 from fast_trader import zmq_context
@@ -24,22 +25,6 @@ from fast_trader.logging import setup_logging
 config = load_config()
 
 REQUEST_TIMEOUT = 5
-
-
-class Payload(object):
-
-
-    def __init__(self, header, body):
-        self.header = header
-        self.body = body
-
-
-def generate_request_id():
-    return str(random.randrange(11000000, 11900000))
-
-
-def generate_original_id():
-    return str(random.randrange(61000000, 61900000))
 
 
 class Dispatcher(object):
@@ -178,7 +163,7 @@ class DTP(object):
             name = attr
             if attr == 'account':
                 name = 'account_no'
-
+            # FIXME: filtering
             elif attr in ['api_type', 'api_id', 'content', 'handler_id',
                           'token', 'sync', 'ret_code']:
                 continue
@@ -193,11 +178,10 @@ class DTP(object):
                 except Exception as e:
                     self.logger.debug(e)
 
-
     def handle_sync_request(self, mail):
 
         header = dtp_struct.RequestHeader()
-        header.request_id = generate_request_id()
+        header.request_id = mail['request_id']
         header.api_id = mail['api_id']
 
         token = mail.get('token')
@@ -208,26 +192,16 @@ class DTP(object):
 
         body = req_type()
 
-        self._populate_message(body, mail._kw)
+        self._populate_message(body, mail)
 
-        payload = Payload(header, body)
-
-#        hmsg = message2dict(header)
-#        bmsg = message2dict(body)
-#        # Do not log password
-#        # bmsg.pop('password', None)
-#        self.logger.info('{}, {}'.format(hmsg, bmsg))
-
-        mail._kw.pop('password', None)
+        mail.pop('password', None)
         self.logger.info(mail)
 
-        print(payload.header, payload.body)
-        
         try:
             self._sync_req_resp_channel.send(
-                payload.header.SerializeToString(), zmq.SNDMORE)
+                header.SerializeToString(), zmq.SNDMORE)
             self._sync_req_resp_channel.send(
-                payload.body.SerializeToString())
+                body.SerializeToString())
         except zmq.ZMQError:
             self.logger.error('查询响应中...', exc_info=True)
 
@@ -293,24 +267,22 @@ class DTP(object):
     def handle_async_request(self, mail):
 
         header = dtp_struct.RequestHeader()
-        header.request_id = generate_request_id()
+        header.request_id = mail['request_id']
         header.api_id = mail['api_id']
         header.token = mail['token']
 
         req_type = DTPType.get_proto_type(header.api_id)
         body = req_type()
 
-        self._populate_message(body, mail._kw)
-
-        payload = Payload(header, body)
+        self._populate_message(body, mail)
 
         self.logger.info(mail)
 
         self._async_req_channel.send(
-            payload.header.SerializeToString(), zmq.SNDMORE)
+            header.SerializeToString(), zmq.SNDMORE)
 
         self._async_req_channel.send(
-            payload.body.SerializeToString())
+            body.SerializeToString())
 
     def handle_counter_response(self):
 
@@ -391,9 +363,15 @@ class Trader(object):
         self.dispatcher = dispatcher
         self.broker = broker
 
+        self._request_id = 0
+        self._order_original_id = 0
+
         self._account = ''
         self._token = ''
         self._logined = False
+
+        self._number = 1
+        self._max_number = 10
 
         self._position_results = []
         self._trade_results = []
@@ -426,6 +404,53 @@ class Trader(object):
             api_name = REQ_API_NAMES[api_id]
             handler = getattr(broker, api_name)
             dispatcher.bind('{}_req'.format(api_id), handler)
+
+    def _set_number(self, number, max_number=None):
+        """
+        预留接口
+
+        如要同时启动多个trader实例, 为了保证请求/报单编号的唯一性，
+        可以根据trader编号, 为其分配独立的取值范围
+        """
+        self._number = number
+        if max_number:
+            self._max_number = max_number
+
+    def _generate_initial_id(self):
+        """
+        计算初始编号
+        """
+        max_int = 2147483647
+        total_range = range(1, max_int + 1)
+        range_len = int(max_int / self._max_number)
+        no = self._number - 1
+        cur_range_start = total_range[no * range_len]
+
+        now = datetime.datetime.now()
+        checkpoint = (now - datetime.datetime(*now.timetuple()[:3])).seconds
+
+        return int(checkpoint / 86400 * range_len + cur_range_start)
+
+    def generate_request_id(self):
+        """
+        请求id，保证当日不重复
+        """
+        if self._request_id == 0:
+            self._request_id = self._generate_initial_id()
+
+        request_id = self._request_id
+        self._request_id += 1
+        return str(request_id)
+
+    def generate_order_id(self):
+        """
+        用户报单编号，保证当日不重复
+        """
+        if self._order_original_id == 0:
+            self._order_original_id = self._generate_initial_id()
+        order_id = self._order_original_id
+        self._order_original_id += 1
+        return str(order_id)
 
     def add_strategy(self, strategy):
         self._strategies.append(strategy)
@@ -466,8 +491,8 @@ class Trader(object):
 
         self._account = account
         ret = self.login_account(account=account,
-                                  password=password,
-                                  sync=True)
+                                 password=password,
+                                 sync=True)
 
         if ret['ret_code'] != 0:
             raise Exception(ret['err_message'])
@@ -489,11 +514,11 @@ class Trader(object):
 
             return ret
 
-
     def logout(self, **kw):
         mail = Mail(
             api_type='req',
             api_id=LOGOUT_ACCOUNT_REQUEST,
+            request_id=self.generate_request_id(),
             account=self._account,
             token=self._token
         )
@@ -503,6 +528,7 @@ class Trader(object):
         mail = Mail(
             api_type='req',
             api_id=LOGIN_ACCOUNT_REQUEST,
+            request_id=self.generate_request_id(),
             **kw
         )
         return self.dispatcher.put(mail)
@@ -516,6 +542,7 @@ class Trader(object):
         mail = Mail(
             api_type='req',
             api_id=PLACE_ORDER,
+            request_id=self.generate_request_id(),
             account=self._account,
             token=self._token,
             order_original_id=order_original_id,
@@ -537,6 +564,7 @@ class Trader(object):
         mail = Mail(
             api_type='req',
             api_id=PLACE_BATCH_ORDER,
+            request_id=self.generate_request_id(),
             account=self._account,
             token=self._token,
             order_list=orders
@@ -551,6 +579,7 @@ class Trader(object):
         mail = Mail(
             api_type='req',
             api_id=CANCEL_ORDER,
+            request_id=self.generate_request_id(),
             account=self._account,
             token=self._token,
             exchange=kw['exchange'],
@@ -565,6 +594,7 @@ class Trader(object):
         mail = Mail(
             api_type='req',
             api_id=QUERY_ORDERS_REQUEST,
+            request_id=self.generate_request_id(),
             sync=kw.get('sync', False),
             account=self._account,
             token=self._token
@@ -578,12 +608,14 @@ class Trader(object):
         mail = Mail(
             api_type='req',
             api_id=QUERY_FILLS_REQUEST,
+            request_id=self.generate_request_id(),
             sync=kw.get('sync', False),
             account=self._account,
             token=self._token
         )
         return self.dispatcher.put(mail)
 
+    @timeit
     def query_positions(self, **kw):
         """
         查询持仓
@@ -591,12 +623,14 @@ class Trader(object):
         mail = Mail(
             api_type='req',
             api_id=QUERY_POSITION_REQUEST,
+            request_id=self.generate_request_id(),
             sync=kw.get('sync', False),
             account=self._account,
             token=self._token
         )
         return self.dispatcher.put(mail)
 
+    @timeit
     def query_capital(self, **kw):
         """
         查询账户资金
@@ -604,6 +638,7 @@ class Trader(object):
         mail = Mail(
             api_type='req',
             api_id=QUERY_CAPITAL_REQUEST,
+            request_id=self.generate_request_id(),
             sync=kw.get('sync', False),
             account=self._account,
             token=self._token
@@ -617,6 +652,7 @@ class Trader(object):
         mail = Mail(
             api_type='req',
             api_id=QUERY_RATION_REQUEST,
+            request_id=self.generate_request_id(),
             sync=kw.get('sync', False),
             account=self._account,
             token=self._token
