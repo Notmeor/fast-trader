@@ -28,6 +28,7 @@ REQUEST_TIMEOUT = 5
 
 class Payload(object):
 
+    
     def __init__(self, header, body):
         self.header = header
         self.body = body
@@ -56,7 +57,7 @@ class Dispatcher(object):
         self.start()
 
     def start(self):
-        
+
         if self._running:
             return
 
@@ -177,9 +178,9 @@ class DTP(object):
             name = attr
             if attr == 'account':
                 name = 'account_no'
-            elif attr not in ['password', 'exchange', 'order_exchange_id',
-                              'code', 'price', 'quantity', 'order_side',
-                              'order_type', 'order_list']:
+
+            elif attr in ['api_type', 'api_id', 'content', 'handler_id',
+                          'token', 'sync', 'ret_code']:
                 continue
             if isinstance(value, list):
                 repeated = getattr(cmsg, attr)
@@ -187,7 +188,11 @@ class DTP(object):
                     item = repeated.add()
                     self._populate_message(item, i)
             else:
-                setattr(cmsg, name, value)
+                try:
+                    setattr(cmsg, name, value)
+                except Exception as e:
+                    self.logger.debug(e)
+
 
     def handle_sync_request(self, mail):
 
@@ -205,9 +210,16 @@ class DTP(object):
 
         self._populate_message(body, mail._kw)
 
-        self.logger.warning('account_no: {}'.format(body.account_no))
-
         payload = Payload(header, body)
+
+#        hmsg = message2dict(header)
+#        bmsg = message2dict(body)
+#        # Do not log password
+#        # bmsg.pop('password', None)
+#        self.logger.info('{}, {}'.format(hmsg, bmsg))
+        
+        mail._kw.pop('password', None)
+        self.logger.info(mail)
 
         try:
             self._sync_req_resp_channel.send(
@@ -227,23 +239,26 @@ class DTP(object):
         while waited_time < REQUEST_TIMEOUT:
 
             try:
-                _header = self._sync_req_resp_channel.recv(flags=zmq.NOBLOCK)
-                _body = self._sync_req_resp_channel.recv(flags=zmq.NOBLOCK)
+                report_header = self._sync_req_resp_channel.recv(
+                    flags=zmq.NOBLOCK)
+
+                report_body = self._sync_req_resp_channel.recv(
+                    flags=zmq.NOBLOCK)
 
             except zmq.ZMQError as e:
                 time.sleep(0.1)
                 waited_time += 0.1
 
             else:
-                response_header = dtp_struct.ResponseHeader()
-                response_header.ParseFromString(_header)
+                header = dtp_struct.ResponseHeader()
+                header.ParseFromString(report_header)
 
-                api_id = response_header.api_id
+                api_id = header.api_id
                 rsp_type = DTPType.get_proto_type(api_id)
 
-                response_body = rsp_type()
-                response_body.ParseFromString(_body)
-                payload = Payload(response_header, response_body)
+                body = rsp_type()
+                body.ParseFromString(report_body)
+                payload = Payload(header, body)
 
                 mail = Mail(
                     api_id=api_id,
@@ -251,6 +266,9 @@ class DTP(object):
                     sync=sync,
                     content=payload
                 )
+
+                self.logger.info('{}, {}'.format(
+                    message2dict(header), message2dict(body)))
 
                 if sync:
                     return mail
@@ -284,6 +302,9 @@ class DTP(object):
 
         payload = Payload(header, body)
 
+        self.logger.info('{}, {}'.format(
+            message2dict(header), message2dict(body)))
+
         self._async_req_channel.send(
             payload.header.SerializeToString(), zmq.SNDMORE)
 
@@ -300,7 +321,7 @@ class DTP(object):
             report_header = sock.recv()
             report_body = sock.recv()
 
-            self.logger.warning('topic: {}'.format(topic))
+            self.logger.debug('topic: {}'.format(topic))
             header = dtp_struct.ReportHeader()
             header.ParseFromString(report_header)
 
@@ -313,6 +334,9 @@ class DTP(object):
                 self.logger.warning('未知响应 api_id={}, {}'.format(
                     header.api_id, header.message))
                 continue
+
+            self.logger.info('{}, {}'.format(
+                message2dict(header), message2dict(body)))
 
             self.dispatcher.put(Mail(
                 api_id=header.api_id,
@@ -338,6 +362,9 @@ class DTP(object):
 
             body = dtp_struct.PlacedReport()
             body.ParseFromString(report_body)
+
+            self.logger.info('{}, {}'.format(
+                message2dict(header), message2dict(body)))
 
 
 class Order(object):
@@ -401,9 +428,6 @@ class Trader(object):
 
     def _on_response(self, mail):
 
-        self.logger.info(message2dict(mail['content'].header))
-        self.logger.info(message2dict(mail['content'].body))
-
         api_id = mail['api_id']
         response = mail['content']
         msg = message2dict(response.body)
@@ -439,7 +463,7 @@ class Trader(object):
     def login(self, account, password, sync=True, **kw):
 
         self._account = account
-        ret = self._login_account(account=account,
+        ret = self.login_account(account=account,
                                   password=password,
                                   sync=True)
 
@@ -459,7 +483,7 @@ class Trader(object):
                     '登录成功 <{}> {}'.format(self.account_no, login_msg))
 
             else:
-                self.logger.info(
+                self.logger.warning(
                     '登录失败 <{}> {}'.format(self.account_no, login_msg))
 
             return ret
@@ -503,11 +527,6 @@ class Trader(object):
         )
         self.dispatcher.put(mail)
 
-#        self.logger.info(('报单委托 account={}, code={}, price={}, quantity={},'
-#                         + ' order_side={}, order_type={}').format(
-#                         self.account_no, code, price, quantity, order_side,
-#                         order_type))
-        
         self.logger.info('报单委托 {}'.format(mail))
 
     def place_order_batch(self, orders):

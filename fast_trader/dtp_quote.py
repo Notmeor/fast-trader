@@ -7,11 +7,13 @@ import queue
 import threading
 import logging
 
+from collections import namedtuple
+
 import numpy as np
 import pandas as pd
 
 from fast_trader import zmq_context
-from fast_trader.dtp import quotation_pb2 as quote_struct
+from fast_trader.dtp import Quotation_pb2 as quote_struct
 
 from fast_trader.utils import timeit, message2dict, load_config, Mail
 
@@ -142,8 +144,10 @@ class QuoteFeed(MarketFeed):
             ))
 
 
+def get_fields(proto_type):
+    return [f.name for f in proto_type.DESCRIPTOR.fields]
 
-
-
-
-
+Snapshot = namedtuple('Snapshot', get_fields(quote_struct.Stock))
+Transaction = namedtuple('Transaction', get_fields(quote_struct.Transaction))
+MarketOrder = namedtuple('MarketOrder', get_fields(quote_struct.Order))
+Index = namedtuple('Index', get_fields(quote_struct.Index))

@@ -122,6 +122,7 @@ class MyStrategy(Strategy):
 
         self.market_snapshots[data.szCode].append(data)
 
+        return
         if data.szCode != '002230':
             return
 

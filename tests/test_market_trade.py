@@ -97,13 +97,12 @@ class MyStrategy(Strategy):
             if p['code'] == code:
                 return p
 
-    def on_market_trade(self, market_trade):
-
-        data = market_trade['content']
+    def on_market_trade(self, data):
 
         if data.nPrice > 0:
             self.market_trades[data.szCode].append(data)
 
+        return
         if not data.szCode == '002230':
             return
         
@@ -134,8 +133,7 @@ class MyStrategy(Strategy):
     def on_market_order(self, market_order):
         pass
     
-    def on_market_snapshot(self, snapshot):
-        data = snapshot['content']
+    def on_market_snapshot(self, data):
         self.market_snapshots[data.szCode].append(data)
 
 
@@ -153,7 +151,7 @@ class MyStrategy(Strategy):
         print(msg)
 
     def on_order_cancelation_submission(self, msg):
-        show_title('报单提交回报')
+        show_title('撤单提交回报')
         print(msg)
 
 

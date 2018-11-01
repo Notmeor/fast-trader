@@ -59,7 +59,7 @@ def load_config(path=None):
     return conf
 
 
-def message2dict(msg):
+def message2dict_(msg, including_default_value_fields=True):
     """
     Convert protobuf message to dict
     """
@@ -67,9 +67,15 @@ def message2dict(msg):
     dct = {}
 
     if isinstance(msg, Message):
+
+        if including_default_value_fields:
+            for field in msg.DESCRIPTOR.fields:
+                dct[field.name] = field.default_value
+
         fields = msg.ListFields()
         for field, value in fields:
             dct[field.name] = message2dict(value)
+
         return dct
 
     elif isinstance(msg, RepeatedCompositeContainer):
@@ -77,6 +83,46 @@ def message2dict(msg):
 
     else:
         return msg
+
+
+@timeit
+def message2dict(msg, including_default_value_fields=True):
+    """
+    Convert protobuf message to dict
+    """
+    # return msg
+
+    dct = {}
+
+    if isinstance(msg, Message):
+
+        for field in msg.DESCRIPTOR.fields:
+            name = field.name
+            dct[name] = message2dict(getattr(msg, name))
+        
+        return dct
+
+    elif isinstance(msg, RepeatedCompositeContainer):
+        return list(map(message2dict, msg))
+
+    else:
+        return msg  
+
+def message2tuple(msg, kind):
+    """
+    Convert protobuf message to namedtuple
+    Doesn't support nested messages
+    """
+
+    dct = {}
+
+    for field in msg.DESCRIPTOR.fields:
+        name = field.name
+        dct[name] = getattr(msg, name)
+    
+    ret = kind(**dct)
+    
+    return ret
 
 
 def int2datetime(n_date=None, n_time=None, utc=False):

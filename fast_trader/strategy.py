@@ -6,7 +6,8 @@ import threading
 import logging
 
 from fast_trader.dtp_trade import DTP, Trader, Dispatcher
-from fast_trader.dtp_quote import QuoteFeed, conf
+from fast_trader.dtp_quote import (QuoteFeed, conf, Transaction, Snapshot,
+                                   MarketOrder, Index)
 
 from fast_trader.dtp import dtp_api_id as dtp_api_id
 from fast_trader.dtp import api_pb2 as dtp_struct
@@ -15,7 +16,8 @@ from fast_trader.dtp import type_pb2 as dtp_type
 from fast_trader.dtp import ext_api_pb2 as dtp_struct_
 from fast_trader.dtp import ext_type_pb2 as dtp_type_
 
-from fast_trader.utils import timeit, message2dict, load_config, Mail
+from fast_trader.utils import (timeit, message2dict, load_config, Mail,
+                               message2tuple)
 
 
 config = load_config()
@@ -72,7 +74,7 @@ class Strategy(object):
             self.start_market()
 
         else:
-            self.logger.info(
+            self.logger.warning(
                 '策略启动失败 账户<{}>未成功登录'.format(self.account_no))
 
     def start_market(self):
@@ -97,7 +99,10 @@ class Strategy(object):
         mail = self.trader.query_positions(sync=True)
         payload = mail['content']
         msg = message2dict(payload.body)
-        position = self._positions = msg['position_list']
+        try:
+            position = self._positions = msg['position_list']
+        except:
+            position = self._positions = msg.position_list
         return position
 
     @timeit
@@ -113,11 +118,11 @@ class Strategy(object):
 
     @timeit
     def get_trades(self):
-        mail = self.trader.query_orders(sync=True)
+        mail = self.trader.query_trades(sync=True)
         payload = mail['content']
         msg = message2dict(payload.body)
-        orders = self._orders = msg.get('order_list', {})
-        return orders
+        trades = self._trades = msg.get('fill_list', {})
+        return trades
 
     @timeit
     def get_open_orders(self):
@@ -198,17 +203,25 @@ class Strategy(object):
     def on_quote_message(self, message):
 
         api_id = message['api_id']
-        data = message['content']
 
         if api_id == 'trade_feed':
+            data = message2tuple(message['content'], Transaction)
             self.on_market_trade(data)
+
         elif api_id == 'tick_feed':
+            data = message2tuple(message['content'], Snapshot)
             self.on_market_snapshot(data)
+
         elif api_id == 'order_feed':
+            data = message2tuple(message['content'], MarketOrder)
             self.on_market_order(data)
+
         elif api_id == 'queue_feed':
+            data = message['content']
             self.on_market_queue(data)
+
         elif api_id == 'index_feed':
+            data = message2tuple(message['content'], Index)
             self.on_market_index(data)
 
     def on_market_snapshot(self, market_snapshot):
