@@ -34,12 +34,19 @@ class Payload(object):
         self.body = body
 
 
+#def generate_request_id():
+#    return str(random.randrange(11000000, 11900000))
+#
+#
+#def generate_original_id():
+#    return str(random.randrange(61000000, 61900000))
+
 def generate_request_id():
-    return str(random.randrange(11000000, 11900000))
+    return str(random.randrange(1100000000, 1190000000))
 
 
 def generate_original_id():
-    return str(random.randrange(61000000, 61900000))
+    return str(random.randrange(1000000000, 1100000000))
 
 
 class Dispatcher(object):

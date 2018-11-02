@@ -159,14 +159,14 @@ if __name__ == '__main__':
 
     strategy = get_strategy_instance(MyStrategy)
 
-    datasource_0 = QuoteFeed('trade_feed')
-    datasource_0.subscribe(['002230', '000001'])
-
-    datasource_1 = QuoteFeed('tick_feed')
-    datasource_1.subscribe(['002230'])
-
-    strategy.add_datasource(datasource_0)
-    strategy.add_datasource(datasource_1)
+#    datasource_0 = QuoteFeed('trade_feed')
+#    datasource_0.subscribe(['002230', '000001'])
+#
+#    datasource_1 = QuoteFeed('tick_feed')
+#    datasource_1.subscribe(['002230'])
+#
+#    strategy.add_datasource(datasource_0)
+#    strategy.add_datasource(datasource_1)
 
     strategy.start()
 

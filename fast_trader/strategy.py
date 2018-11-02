@@ -19,16 +19,11 @@ from fast_trader.dtp import ext_type_pb2 as dtp_type_
 from fast_trader.utils import (timeit, message2dict, load_config, Mail,
                                message2tuple)
 
+from fast_trader.dtp_trade import generate_request_id, generate_original_id
+
 
 config = load_config()
 
-
-def generate_request_id():
-    return str(random.randrange(11000000, 11900000))
-
-
-def generate_original_id():
-    return str(random.randrange(61000000, 61900000))
 
 
 class Strategy(object):
