@@ -22,6 +22,8 @@ from fast_trader.dtp import ext_type_pb2 as dtp_type_
 from fast_trader.utils import timeit, message2dict, load_config, Mail
 from fast_trader.logging import setup_logging
 
+from concurrent.futures import ProcessPoolExecutor
+executor = ProcessPoolExecutor(2)
 
 config = load_config()
 
@@ -126,7 +128,7 @@ class DTP(object):
 
     def __init__(self, dispatcher=None):
         
-        self._debug_time = None
+        self._debug_time = datetime.datetime.now()
 
         self.dispatcher = dispatcher or Queue()
 
@@ -160,6 +162,7 @@ class DTP(object):
         self._running = True
         threading.Thread(target=self.handle_counter_response).start()
         threading.Thread(target=self.handle_compliance_report).start()
+        # tt = executor.submit(self.handle_compliance_report)
 
     def _populate_message(self, cmsg, attrs):
         for attr, value in attrs.items():
@@ -267,6 +270,7 @@ class DTP(object):
             return mail
         return self.dispatcher.put(mail)
 
+    @timeit
     def handle_async_request(self, mail):
 
         header = dtp_struct.RequestHeader()
@@ -294,11 +298,13 @@ class DTP(object):
         sock = self._async_resp_channel
 
         while self._running:
-
+            t0_ = time.time()
+            t1_ = time.clock()
             topic = sock.recv()
             report_header = sock.recv()
             report_body = sock.recv()
-
+            print('recv in {}, {}'.format(time.time() - t0_,
+                                          time.clock() - t1_))
             self.logger.debug('topic: {}'.format(topic))
             header = dtp_struct.ReportHeader()
             header.ParseFromString(report_header)
@@ -320,7 +326,6 @@ class DTP(object):
 
             mail['header'] = message2dict(header)
             mail['body'] = message2dict(body)
-
 
             self.logger.warning('{}, {}, elapsed: {}'.format(
                 mail.body.get('order_original_id'),
@@ -443,13 +448,13 @@ class Trader(object):
         计算初始编号
         """
         
-        if number == 2:
-            self._id_ranges[number] = list(range(10, 1000))
-            return 10
-        
-        if number == 5:
-            self._id_ranges[number] = list(range(1000, 2000))
-            return 1010
+        if number == 1:
+            self._id_ranges[number] = list(range(100, 1000))
+            return 110
+#        
+#        if number == 5:
+#            self._id_ranges[number] = list(range(1000, 2000))
+#            return 1200
 
         max_int = 2147483647
         total_range = range(1, max_int + 1)
@@ -473,8 +478,8 @@ class Trader(object):
         """
         name = '{}_{}'.format('_request_id', number)
         if not hasattr(self, name):
-            # setattr(self, name, self._generate_initial_id(number))
-            setattr(self, name, 61000000)
+            setattr(self, name, self._generate_initial_id(number))
+            # setattr(self, name, 61000000)
             
         request_id = getattr(self, name)
         setattr(self, name, request_id + 1)
@@ -487,8 +492,8 @@ class Trader(object):
         """
         name = '{}_{}'.format('_order_id', number)
         if not hasattr(self, name):
-            # setattr(self, name, self._generate_initial_id(number))
-            setattr(self, name, 200)
+            setattr(self, name, self._generate_initial_id(number))
+            # setattr(self, name, 200)
 
         order_id = getattr(self, name)
         setattr(self, name, order_id + 1)

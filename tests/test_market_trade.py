@@ -154,7 +154,7 @@ class MyStrategy(Strategy):
 
 if __name__ == '__main__':
 
-    strategy = get_strategy_instance(MyStrategy)
+    strategy = get_strategy_instance(MyStrategy, 3)
 
     datasource_0 = QuoteFeed('trade_feed')
     datasource_0.subscribe(['300104', '002230', '000001'])

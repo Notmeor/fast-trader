@@ -200,13 +200,13 @@ if __name__ == '__main__':
     strategy_2.buy('002230', 22, 1000)
     logger.info("strategy_2.buy('002230', 22, 1000)")
 
-#    strategy_5 = MyStrategy(5)
-#    strategy_5.set_dispatcher(dispatcher)
-#    strategy_5.set_trader(trader)
-#    strategy_5.start()
-#    
-#    strategy_5.buy('002230', 21, 1000)
-#    logger.info("strategy_5.buy('002230', 21, 1000)")
+    strategy_5 = MyStrategy(5)
+    strategy_5.set_dispatcher(dispatcher)
+    strategy_5.set_trader(trader)
+    strategy_5.start()
+    
+    strategy_5.buy('002230', 21, 1000)
+    logger.info("strategy_5.buy('002230', 21, 1000)")
 
 
 

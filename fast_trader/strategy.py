@@ -50,7 +50,7 @@ class Strategy(object):
 
         self.subscribed_datasources = []
         
-        self._set_market()
+        # self._set_market()
 
         self.logger = logging.getLogger(
             'fast_trader.strategy.Strategy-{}'.format(number))
@@ -399,20 +399,21 @@ class Strategy(object):
         self.trader.cancel_order(number=self.strategy_id, **kw)
 
 
+# 用于 trader 与 dtp通道 以及 策略实例 间的消息分发
+# 将所有行情数据与柜台回报压入同一个队列进行分发，实现策略的同步执行（无需加锁）
+dispatcher = Dispatcher()
+
+# dtp通道
+dtp = DTP(dispatcher)
+
+# 提供交易接口
+trader = Trader(dispatcher, dtp)
+    
 def get_strategy_instance(MyStrategyCls, number):
     """
     策略实例化流程演示
     """
 
-    # 用于 trader 与 dtp通道 以及 策略实例 间的消息分发
-    # 将所有行情数据与柜台回报压入同一个队列进行分发，实现策略的同步执行（无需加锁）
-    dispatcher = Dispatcher()
-
-    # dtp通道
-    dtp = DTP(dispatcher)
-
-    # 提供交易接口
-    trader = Trader(dispatcher, dtp)
 
     # 策略实例
     strategy = MyStrategyCls(number)
