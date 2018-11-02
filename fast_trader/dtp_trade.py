@@ -8,6 +8,7 @@ import threading
 import logging
 import zmq
 from queue import Queue
+from collections import OrderedDict
 
 from fast_trader import zmq_context
 from fast_trader.dtp import dtp_api_id
@@ -65,7 +66,7 @@ class Dispatcher(object):
     def bind(self, handler_id, handler, override=False):
         if not override and handler_id in self._handlers:
             raise KeyError(
-                'handler {} already exists!')
+                'handler {} already exists!'.format(handler_id))
         self._handlers[handler_id] = handler
 
     def put(self, mail):
@@ -124,6 +125,8 @@ class DTPType(object):
 class DTP(object):
 
     def __init__(self, dispatcher=None):
+        
+        self._debug_time = None
 
         self.dispatcher = dispatcher or Queue()
 
@@ -283,6 +286,8 @@ class DTP(object):
 
         self._async_req_channel.send(
             body.SerializeToString())
+        
+        self._debug_time = datetime.datetime.now()
 
     def handle_counter_response(self):
 
@@ -316,6 +321,14 @@ class DTP(object):
             mail['header'] = message2dict(header)
             mail['body'] = message2dict(body)
 
+
+            self.logger.warning('{}, {}, elapsed: {}'.format(
+                mail.body.get('order_original_id'),
+                header.request_id, 
+                abs(self._debug_time - datetime.datetime.now())))
+
+            self._debug_time = datetime.datetime.now()
+                
             self.logger.info(mail)
 
             self.dispatcher.put(mail)
@@ -363,6 +376,7 @@ class Trader(object):
         self.dispatcher = dispatcher
         self.broker = broker
 
+        self._started = False
         self._request_id = 0
         self._order_original_id = 0
 
@@ -372,18 +386,23 @@ class Trader(object):
 
         self._number = 1
         self._max_number = 10
+        self._id_ranges = {}
 
         self._position_results = []
         self._trade_results = []
         self._order_results = []
 
         self._strategies = []
+        self._strategy_dict = OrderedDict()
 
         setup_logging()
         self.logger = logging.getLogger('fast_trader.dtp_trade.Trader')
         self.logger.info('初始化 process_id={}'.format(os.getpid()))
 
     def start(self):
+        
+        if self._started:
+            return 
 
         if self.dispatcher is None:
             self.dispatcher = Dispatcher()
@@ -392,6 +411,8 @@ class Trader(object):
             self.broker = DTP(self.dispatcher)
 
         self._bind()
+        
+        self._started = True
 
     def _bind(self):
 
@@ -416,44 +437,83 @@ class Trader(object):
         if max_number:
             self._max_number = max_number
 
-    def _generate_initial_id(self):
+    @timeit
+    def _generate_initial_id(self, number):
         """
         计算初始编号
         """
+        
+        if number == 2:
+            self._id_ranges[number] = list(range(10, 1000))
+            return 10
+        
+        if number == 5:
+            self._id_ranges[number] = list(range(1000, 2000))
+            return 1010
+
         max_int = 2147483647
         total_range = range(1, max_int + 1)
         range_len = int(max_int / self._max_number)
-        no = self._number - 1
-        cur_range_start = total_range[no * range_len]
+        no = number - 1
+        cur_range = total_range[no * range_len: (no + 1) * range_len]
+
+        if number not in self._id_ranges:
+            self._id_ranges[number] = cur_range
+                
 
         now = datetime.datetime.now()
         checkpoint = (now - datetime.datetime(*now.timetuple()[:3])).seconds
 
-        return int(checkpoint / 86400 * range_len + cur_range_start)
+        return int(checkpoint / 86400 * range_len + cur_range[0])
 
-    def generate_request_id(self):
+    @timeit
+    def generate_request_id(self, number=1):
         """
         请求id，保证当日不重复
         """
-        if self._request_id == 0:
-            self._request_id = self._generate_initial_id()
-
-        request_id = self._request_id
-        self._request_id += 1
+        name = '{}_{}'.format('_request_id', number)
+        if not hasattr(self, name):
+            # setattr(self, name, self._generate_initial_id(number))
+            setattr(self, name, 61000000)
+            
+        request_id = getattr(self, name)
+        setattr(self, name, request_id + 1)
         return str(request_id)
 
-    def generate_order_id(self):
+    @timeit
+    def generate_order_id(self, number):
         """
         用户报单编号，保证当日不重复
         """
-        if self._order_original_id == 0:
-            self._order_original_id = self._generate_initial_id()
-        order_id = self._order_original_id
-        self._order_original_id += 1
+        name = '{}_{}'.format('_order_id', number)
+        if not hasattr(self, name):
+            # setattr(self, name, self._generate_initial_id(number))
+            setattr(self, name, 200)
+
+        order_id = getattr(self, name)
+        setattr(self, name, order_id + 1)
         return str(order_id)
 
     def add_strategy(self, strategy):
         self._strategies.append(strategy)
+        self._strategy_dict[strategy.strategy_id] = strategy
+        
+        self._generate_initial_id(strategy.strategy_id)
+
+    def _is_assignee(self, strategy, mail):
+
+        id_range = self._id_ranges[strategy.strategy_id]
+        
+        if mail.header.request_id != '':
+
+            if int(mail.header.request_id) in id_range:
+                return True
+        
+        order_id = mail.body.get('order_original_id')
+        if order_id and order_id in id_range:
+            return True
+        
+        return False
 
     def _on_response(self, mail):
 
@@ -465,7 +525,8 @@ class Trader(object):
             self.on_logout(mail)
         else:
             for ea in self._strategies:
-                getattr(ea, RSP_API_NAMES[api_id])(mail)
+                if self._is_assignee(ea, mail):
+                    getattr(ea, RSP_API_NAMES[api_id])(mail)
 
     @property
     def account_no(self):
@@ -535,14 +596,14 @@ class Trader(object):
 
     def send_order(self, order_original_id, exchange,
                    code, price, quantity, order_side,
-                   order_type=dtp_type.ORDER_TYPE_LIMIT):
+                   order_type=dtp_type.ORDER_TYPE_LIMIT, number=-1):
         """
         报单委托
         """
         mail = Mail(
             api_type='req',
             api_id=PLACE_ORDER,
-            request_id=self.generate_request_id(),
+            request_id=self.generate_request_id(number),
             account=self._account,
             token=self._token,
             order_original_id=order_original_id,
@@ -557,15 +618,14 @@ class Trader(object):
 
         self.logger.info('报单委托 {}'.format(mail))
 
-    def place_order_batch(self, orders):
+    def place_order_batch(self, orders, number):
         """
         批量下单
         """
         mail = Mail(
             api_type='req',
             api_id=PLACE_BATCH_ORDER,
-            request_id=self.generate_request_id(),
-            account=self._account,
+            request_id=self.generate_request_id(number),
             token=self._token,
             order_list=orders
         )
@@ -579,7 +639,7 @@ class Trader(object):
         mail = Mail(
             api_type='req',
             api_id=CANCEL_ORDER,
-            request_id=self.generate_request_id(),
+            request_id=self.generate_request_id(kw['number']),
             account=self._account,
             token=self._token,
             exchange=kw['exchange'],
@@ -594,7 +654,7 @@ class Trader(object):
         mail = Mail(
             api_type='req',
             api_id=QUERY_ORDERS_REQUEST,
-            request_id=self.generate_request_id(),
+            request_id=self.generate_request_id(kw['number']),
             sync=kw.get('sync', False),
             account=self._account,
             token=self._token
@@ -608,7 +668,7 @@ class Trader(object):
         mail = Mail(
             api_type='req',
             api_id=QUERY_FILLS_REQUEST,
-            request_id=self.generate_request_id(),
+            request_id=self.generate_request_id(kw['number']),
             sync=kw.get('sync', False),
             account=self._account,
             token=self._token
@@ -623,7 +683,7 @@ class Trader(object):
         mail = Mail(
             api_type='req',
             api_id=QUERY_POSITION_REQUEST,
-            request_id=self.generate_request_id(),
+            request_id=self.generate_request_id(kw['number']),
             sync=kw.get('sync', False),
             account=self._account,
             token=self._token
@@ -638,7 +698,7 @@ class Trader(object):
         mail = Mail(
             api_type='req',
             api_id=QUERY_CAPITAL_REQUEST,
-            request_id=self.generate_request_id(),
+            request_id=self.generate_request_id(kw['number']),
             sync=kw.get('sync', False),
             account=self._account,
             token=self._token
@@ -652,7 +712,7 @@ class Trader(object):
         mail = Mail(
             api_type='req',
             api_id=QUERY_RATION_REQUEST,
-            request_id=self.generate_request_id(),
+            request_id=self.generate_request_id(kw['number']),
             sync=kw.get('sync', False),
             account=self._account,
             token=self._token

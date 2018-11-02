@@ -23,9 +23,24 @@ from fast_trader.utils import (timeit, message2dict, load_config, Mail,
 config = load_config()
 
 
+class Market(object):
+    
+    def __init__(self):
+        self._strategies = []
+    
+    def add_strategy(self, strategy):
+        self._strategies.append(strategy)
+
+    def on_quote_message(self, message):
+        for ea in self._strategies:
+            ea.on_quote_message(message)
+
+
 class Strategy(object):
 
-    def __init__(self, *args, **kw):
+    def __init__(self, number, *args, **kw):
+
+        self._strategy_id = number
 
         self._started = False
 
@@ -34,21 +49,29 @@ class Strategy(object):
         self._trades = {}
 
         self.subscribed_datasources = []
+        
+        self._set_market()
 
-        self.logger = logging.getLogger('fast_trader.strategy')
+        self.logger = logging.getLogger(
+            'fast_trader.strategy.Strategy-{}'.format(number))
 
     def set_dispatcher(self, dispatcher):
         self.dispatcher = dispatcher
 
     def set_trader(self, trader):
         self.trader = trader
+        self.trader.add_strategy(self)
+
+    def _set_market(self, market=None):
+        if market is None:
+            market = Market()
+        self.market = market
+        market.add_strategy(self)
 
     def start(self):
 
         self.on_start()
 
-
-        self.trader.add_strategy(self)
         self.trader.start()
 
         self._account = config['account']
@@ -75,6 +98,11 @@ class Strategy(object):
             ds.start()
 
     @property
+    def strategy_id(self):
+        # return '{}_{}'.format(self.account_no, self._strategy_id)
+        return self._strategy_id
+
+    @property
     def account_no(self):
         return self.trader._account
 
@@ -84,7 +112,7 @@ class Strategy(object):
                 if p.get('balance', 0) != 0}
 
     def generate_order_id(self):
-        return self.trader.generate_order_id()
+        return self.trader.generate_order_id(self._strategy_id)
 
     @timeit
     def get_positions(self):
@@ -174,10 +202,16 @@ class Strategy(object):
 
         dispatcher = self.dispatcher
         datasource.add_listener(dispatcher)
-        dispatcher.bind('{}_rsp'.format(name), self.on_quote_message)
+        try:
+            dispatcher.bind('{}_rsp'.format(name),
+                            self.market.on_quote_message)
+
+        except Exception as e:
+            print(e)
+            pass
 
         self.subscribed_datasources.append(datasource)
-
+            
         if self._started:
             datasource.start()
 
@@ -288,7 +322,7 @@ class Strategy(object):
             order['order_type'] = dtp_type.ORDER_TYPE_LIMIT
             order['order_original_id'] = self.generate_order_id()
 
-        self.trader.place_order_batch(orders)
+        self.trader.place_order_batch(orders, number=self.strategy_id)
 
     def sell_many(self, orders):
         """
@@ -300,8 +334,9 @@ class Strategy(object):
             order['order_side'] = dtp_type.ORDER_SIDE_SELL
             order['order_type'] = dtp_type.ORDER_TYPE_LIMIT
 
-        self.trader.place_order_batch(orders)
+        self.trader.place_order_batch(orders, number=self.strategy_id)
 
+    @timeit
     def buy(self, code, price, quantity):
         """
         委托买入
@@ -324,7 +359,7 @@ class Strategy(object):
             order_original_id=order_original_id,
             exchange=exchange, code=code,
             price=price, quantity=quantity,
-            order_side=dtp_type.ORDER_SIDE_BUY)
+            order_side=dtp_type.ORDER_SIDE_BUY, number=self.strategy_id)
 
     def sell(self, code, price, quantity):
         """
@@ -348,7 +383,7 @@ class Strategy(object):
             order_original_id=order_original_id,
             exchange=exchange, code=code,
             price=price, quantity=quantity,
-            order_side=dtp_type.ORDER_SIDE_SELL)
+            order_side=dtp_type.ORDER_SIDE_SELL, number=self.strategy_id)
 
     def cancel_order(self, **kw):
         """
@@ -361,10 +396,10 @@ class Strategy(object):
         """
         exchange = kw['exchange']
         order_exchange_id = kw['order_exchange_id']
-        self.trader.cancel_order(**kw)
+        self.trader.cancel_order(number=self.strategy_id, **kw)
 
 
-def get_strategy_instance(MyStrategyCls):
+def get_strategy_instance(MyStrategyCls, number):
     """
     策略实例化流程演示
     """
@@ -380,7 +415,7 @@ def get_strategy_instance(MyStrategyCls):
     trader = Trader(dispatcher, dtp)
 
     # 策略实例
-    strategy = MyStrategyCls()
+    strategy = MyStrategyCls(number)
 
     strategy.set_dispatcher(dispatcher)
     strategy.set_trader(trader)
