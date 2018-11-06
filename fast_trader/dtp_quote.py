@@ -151,3 +151,16 @@ Snapshot = namedtuple('Snapshot', get_fields(quote_struct.Stock))
 Transaction = namedtuple('Transaction', get_fields(quote_struct.Transaction))
 MarketOrder = namedtuple('MarketOrder', get_fields(quote_struct.Order))
 Index = namedtuple('Index', get_fields(quote_struct.Index))
+OrderQueue = namedtuple('OrderQueue', get_fields(quote_struct.OrderQueue))
+
+if __name__ == '__main__':
+    
+
+    class QuoteFeed_(QuoteFeed):
+        
+        def on_data(self, data):
+            print(data)
+
+    md = QuoteFeed_('tick_feed')
+    md.subscribe(['002230', '300014'])
+    md.start()

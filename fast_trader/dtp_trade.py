@@ -12,7 +12,6 @@ from collections import OrderedDict
 
 from fast_trader import zmq_context
 from fast_trader.dtp import dtp_api_id
-from fast_trader.dtp.dtp_api_id import *
 from fast_trader.dtp import api_pb2 as dtp_struct
 from fast_trader.dtp import type_pb2 as dtp_type
 
@@ -127,8 +126,6 @@ class DTPType(object):
 class DTP(object):
 
     def __init__(self, dispatcher=None):
-        
-        self._debug_time = datetime.datetime.now()
 
         self.dispatcher = dispatcher or Queue()
 
@@ -162,27 +159,26 @@ class DTP(object):
         self._running = True
         threading.Thread(target=self.handle_counter_response).start()
         threading.Thread(target=self.handle_compliance_report).start()
-        # tt = executor.submit(self.handle_compliance_report)
 
+    @timeit
     def _populate_message(self, cmsg, attrs):
+
         for attr, value in attrs.items():
             name = attr
             if attr == 'account':
                 name = 'account_no'
-            # FIXME: filtering
-            elif attr in ['api_type', 'api_id', 'content', 'handler_id',
-                          'token', 'sync', 'ret_code']:
-                continue
+
             if isinstance(value, list):
                 repeated = getattr(cmsg, attr)
                 for i in value:
                     item = repeated.add()
                     self._populate_message(item, i)
+            elif isinstance(value, dict):
+                nv = getattr(cmsg, attr)
+                self._populate_message(nv, value)
             else:
-                try:
+                if hasattr(cmsg, name):
                     setattr(cmsg, name, value)
-                except Exception as e:
-                    self.logger.debug(e)
 
     def handle_sync_request(self, mail):
 
@@ -227,6 +223,13 @@ class DTP(object):
                 report_body = self._sync_req_resp_channel.recv(
                     flags=zmq.NOBLOCK)
 
+                try:
+                    ss = self._sync_req_resp_channel.recv(
+                        flags=zmq.NOBLOCK)
+                    print('ss:', ss)
+                except:
+                    pass
+
             except zmq.ZMQError as e:
                 time.sleep(0.1)
                 waited_time += 0.1
@@ -264,13 +267,11 @@ class DTP(object):
             ret_code=-1,
             err_message='请求超时'
         )
-
         self.logger.error('请求超时 api_id={}'.format(api_id))
         if sync:
             return mail
         return self.dispatcher.put(mail)
 
-    @timeit
     def handle_async_request(self, mail):
 
         header = dtp_struct.RequestHeader()
@@ -290,21 +291,17 @@ class DTP(object):
 
         self._async_req_channel.send(
             body.SerializeToString())
-        
-        self._debug_time = datetime.datetime.now()
 
     def handle_counter_response(self):
 
         sock = self._async_resp_channel
 
         while self._running:
-            t0_ = time.time()
-            t1_ = time.clock()
+
             topic = sock.recv()
             report_header = sock.recv()
             report_body = sock.recv()
-            print('recv in {}, {}'.format(time.time() - t0_,
-                                          time.clock() - t1_))
+
             self.logger.debug('topic: {}'.format(topic))
             header = dtp_struct.ReportHeader()
             header.ParseFromString(report_header)
@@ -327,13 +324,6 @@ class DTP(object):
             mail['header'] = message2dict(header)
             mail['body'] = message2dict(body)
 
-            self.logger.warning('{}, {}, elapsed: {}'.format(
-                mail.body.get('order_original_id'),
-                header.request_id, 
-                abs(self._debug_time - datetime.datetime.now())))
-
-            self._debug_time = datetime.datetime.now()
-                
             self.logger.info(mail)
 
             self.dispatcher.put(mail)
@@ -405,9 +395,9 @@ class Trader(object):
         self.logger.info('初始化 process_id={}'.format(os.getpid()))
 
     def start(self):
-        
+
         if self._started:
-            return 
+            return
 
         if self.dispatcher is None:
             self.dispatcher = Dispatcher()
@@ -416,18 +406,20 @@ class Trader(object):
             self.broker = DTP(self.dispatcher)
 
         self._bind()
-        
+
+        self._generate_initial_id()
+
         self._started = True
 
     def _bind(self):
 
         dispatcher, broker = self.dispatcher, self.broker
 
-        for api_id in RSP_API_NAMES:
+        for api_id in dtp_api_id.RSP_API_NAMES:
             dispatcher.bind('{}_rsp'.format(api_id), self._on_response)
 
-        for api_id in REQ_API_NAMES:
-            api_name = REQ_API_NAMES[api_id]
+        for api_id in dtp_api_id.REQ_API_NAMES:
+            api_name = dtp_api_id.REQ_API_NAMES[api_id]
             handler = getattr(broker, api_name)
             dispatcher.bind('{}_req'.format(api_id), handler)
 
@@ -443,33 +435,34 @@ class Trader(object):
             self._max_number = max_number
 
     @timeit
-    def _generate_initial_id(self, number):
+    def _generate_initial_id(self):
         """
         计算初始编号
         """
-        
-        if number == 1:
-            self._id_ranges[number] = list(range(100, 1000))
-            return 110
-#        
-#        if number == 5:
-#            self._id_ranges[number] = list(range(1000, 2000))
-#            return 1200
-
         max_int = 2147483647
         total_range = range(1, max_int + 1)
         range_len = int(max_int / self._max_number)
-        no = number - 1
-        cur_range = total_range[no * range_len: (no + 1) * range_len]
 
-        if number not in self._id_ranges:
+        for strategy in self._strategies:
+            number = strategy.strategy_id
+
+            if number > self._max_number:
+                raise Exception('Expect {} strategies at most.'
+                                .format(self._max_number))
+
+            no = number - 1
+            cur_range = total_range[no * range_len: (no + 1) * range_len]
+
             self._id_ranges[number] = cur_range
-                
 
-        now = datetime.datetime.now()
-        checkpoint = (now - datetime.datetime(*now.timetuple()[:3])).seconds
+            now = datetime.datetime.now()
+            midnight = datetime.datetime(*now.timetuple()[:3])
+            checkpoint = (now - midnight).seconds
+            initial_id = int(checkpoint / 86400 * range_len + cur_range[0])
+            self.logger.warning('{} {}'.format(number, initial_id))
 
-        return int(checkpoint / 86400 * range_len + cur_range[0])
+            setattr(self, '_order_id_{}'.format(number), initial_id)
+            setattr(self, '_request_id_{}'.format(number), initial_id)
 
     @timeit
     def generate_request_id(self, number=1):
@@ -478,22 +471,21 @@ class Trader(object):
         """
         name = '{}_{}'.format('_request_id', number)
         if not hasattr(self, name):
+            self.logger.warning(name)
             setattr(self, name, self._generate_initial_id(number))
-            # setattr(self, name, 61000000)
-            
+
         request_id = getattr(self, name)
         setattr(self, name, request_id + 1)
         return str(request_id)
 
-    @timeit
     def generate_order_id(self, number):
         """
         用户报单编号，保证当日不重复
         """
         name = '{}_{}'.format('_order_id', number)
         if not hasattr(self, name):
+            self.logger.warning(name)
             setattr(self, name, self._generate_initial_id(number))
-            # setattr(self, name, 200)
 
         order_id = getattr(self, name)
         setattr(self, name, order_id + 1)
@@ -502,36 +494,35 @@ class Trader(object):
     def add_strategy(self, strategy):
         self._strategies.append(strategy)
         self._strategy_dict[strategy.strategy_id] = strategy
-        
-        self._generate_initial_id(strategy.strategy_id)
 
     def _is_assignee(self, strategy, mail):
 
         id_range = self._id_ranges[strategy.strategy_id]
-        
+
         if mail.header.request_id != '':
 
             if int(mail.header.request_id) in id_range:
                 return True
-        
-        order_id = mail.body.get('order_original_id')
-        if order_id and order_id in id_range:
+            return False
+
+        order_id = mail.body['order_original_id']
+
+        if int(order_id) in id_range:
             return True
-        
         return False
 
     def _on_response(self, mail):
 
         api_id = mail['api_id']
 
-        if api_id == LOGIN_ACCOUNT_RESPONSE:
+        if api_id == dtp_api_id.LOGIN_ACCOUNT_RESPONSE:
             self.on_login(mail)
-        elif api_id == LOGOUT_ACCOUNT_RESPONSE:
+        elif api_id == dtp_api_id.LOGOUT_ACCOUNT_RESPONSE:
             self.on_logout(mail)
         else:
             for ea in self._strategies:
                 if self._is_assignee(ea, mail):
-                    getattr(ea, RSP_API_NAMES[api_id])(mail)
+                    getattr(ea, dtp_api_id.RSP_API_NAMES[api_id])(mail)
 
     @property
     def account_no(self):
@@ -558,7 +549,7 @@ class Trader(object):
         self._account = account
         ret = self.login_account(account=account,
                                  password=password,
-                                 sync=True)
+                                 sync=True, **kw)
 
         if ret['ret_code'] != 0:
             raise Exception(ret['err_message'])
@@ -581,10 +572,16 @@ class Trader(object):
             return ret
 
     def logout(self, **kw):
+        """
+        登出暂为空操作
+        """
+        pass
+
+    def logout_account(self, **kw):
         mail = Mail(
             api_type='req',
-            api_id=LOGOUT_ACCOUNT_REQUEST,
-            request_id=self.generate_request_id(),
+            api_id=dtp_api_id.LOGOUT_ACCOUNT_REQUEST,
+            request_id=kw['request_id'],
             account=self._account,
             token=self._token
         )
@@ -593,24 +590,23 @@ class Trader(object):
     def login_account(self, **kw):
         mail = Mail(
             api_type='req',
-            api_id=LOGIN_ACCOUNT_REQUEST,
-            request_id=self.generate_request_id(),
+            api_id=dtp_api_id.LOGIN_ACCOUNT_REQUEST,
             **kw
         )
         return self.dispatcher.put(mail)
 
-    def send_order(self, order_original_id, exchange,
+    def send_order(self, request_id, order_original_id, exchange,
                    code, price, quantity, order_side,
-                   order_type=dtp_type.ORDER_TYPE_LIMIT, number=-1):
+                   order_type=dtp_type.ORDER_TYPE_LIMIT):
         """
         报单委托
         """
         mail = Mail(
             api_type='req',
-            api_id=PLACE_ORDER,
-            request_id=self.generate_request_id(number),
+            api_id=dtp_api_id.PLACE_ORDER,
             account=self._account,
             token=self._token,
+            request_id=request_id,
             order_original_id=order_original_id,
             exchange=exchange,
             code=code,
@@ -623,14 +619,14 @@ class Trader(object):
 
         self.logger.info('报单委托 {}'.format(mail))
 
-    def place_order_batch(self, orders, number):
+    def place_order_batch(self, request_id, orders):
         """
         批量下单
         """
         mail = Mail(
             api_type='req',
-            api_id=PLACE_BATCH_ORDER,
-            request_id=self.generate_request_id(number),
+            api_id=dtp_api_id.PLACE_BATCH_ORDER,
+            request_id=request_id,
             token=self._token,
             order_list=orders
         )
@@ -643,12 +639,10 @@ class Trader(object):
         """
         mail = Mail(
             api_type='req',
-            api_id=CANCEL_ORDER,
-            request_id=self.generate_request_id(kw['number']),
+            api_id=dtp_api_id.CANCEL_ORDER,
             account=self._account,
             token=self._token,
-            exchange=kw['exchange'],
-            order_exchange_id=kw['order_exchange_id']
+            **kw
         )
         self.dispatcher.put(mail)
 
@@ -658,11 +652,10 @@ class Trader(object):
         """
         mail = Mail(
             api_type='req',
-            api_id=QUERY_ORDERS_REQUEST,
-            request_id=self.generate_request_id(kw['number']),
-            sync=kw.get('sync', False),
+            api_id=dtp_api_id.QUERY_ORDERS_REQUEST,
             account=self._account,
-            token=self._token
+            token=self._token,
+            **kw
         )
         return self.dispatcher.put(mail)
 
@@ -672,11 +665,10 @@ class Trader(object):
         """
         mail = Mail(
             api_type='req',
-            api_id=QUERY_FILLS_REQUEST,
-            request_id=self.generate_request_id(kw['number']),
-            sync=kw.get('sync', False),
+            api_id=dtp_api_id.QUERY_FILLS_REQUEST,
             account=self._account,
-            token=self._token
+            token=self._token,
+            **kw
         )
         return self.dispatcher.put(mail)
 
@@ -687,11 +679,10 @@ class Trader(object):
         """
         mail = Mail(
             api_type='req',
-            api_id=QUERY_POSITION_REQUEST,
-            request_id=self.generate_request_id(kw['number']),
-            sync=kw.get('sync', False),
+            api_id=dtp_api_id.QUERY_POSITION_REQUEST,
             account=self._account,
-            token=self._token
+            token=self._token,
+            **kw
         )
         return self.dispatcher.put(mail)
 
@@ -702,11 +693,10 @@ class Trader(object):
         """
         mail = Mail(
             api_type='req',
-            api_id=QUERY_CAPITAL_REQUEST,
-            request_id=self.generate_request_id(kw['number']),
-            sync=kw.get('sync', False),
+            api_id=dtp_api_id.QUERY_CAPITAL_REQUEST,
             account=self._account,
-            token=self._token
+            token=self._token,
+            **kw
         )
         return self.dispatcher.put(mail)
 
@@ -716,11 +706,10 @@ class Trader(object):
         """
         mail = Mail(
             api_type='req',
-            api_id=QUERY_RATION_REQUEST,
-            request_id=self.generate_request_id(kw['number']),
-            sync=kw.get('sync', False),
+            api_id=dtp_api_id.QUERY_RATION_REQUEST,
             account=self._account,
-            token=self._token
+            token=self._token,
+            **kw
         )
         return self.dispatcher.put(mail)
 

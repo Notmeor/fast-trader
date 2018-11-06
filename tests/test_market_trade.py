@@ -137,10 +137,11 @@ class MyStrategy(Strategy):
     def on_order(self, order):
         show_title('报单回报')
         self.on_order_list.append(order)
+        self.logger.info(order)
 
     def on_trade(self, trade):
         show_title('成交回报')
-        print(trade)
+        self.logger.info(trade)
         self.on_trade_list.append(trade)
 
     def on_order_cancelation(self, msg):
@@ -154,7 +155,7 @@ class MyStrategy(Strategy):
 
 if __name__ == '__main__':
 
-    strategy = get_strategy_instance(MyStrategy, 3)
+    strategy = get_strategy_instance(MyStrategy, 1)
 
     datasource_0 = QuoteFeed('trade_feed')
     datasource_0.subscribe(['300104', '002230', '000001'])
@@ -168,6 +169,8 @@ if __name__ == '__main__':
     strategy.start()
 
     ea = strategy
+
+    # ret1 = ea.trader.query_orders(request_id='33', sync=True, pagination={'size': 150})
 
 
 
