@@ -459,7 +459,7 @@ class Trader(object):
             midnight = datetime.datetime(*now.timetuple()[:3])
             checkpoint = (now - midnight).seconds
             initial_id = int(checkpoint / 86400 * range_len + cur_range[0])
-            self.logger.warning('{} {}'.format(number, initial_id))
+            self.logger.warning('初始请求编号 策略={} {}'.format(number, initial_id))
 
             setattr(self, '_order_id_{}'.format(number), initial_id)
             setattr(self, '_request_id_{}'.format(number), initial_id)
@@ -470,9 +470,6 @@ class Trader(object):
         请求id，保证当日不重复
         """
         name = '{}_{}'.format('_request_id', number)
-        if not hasattr(self, name):
-            self.logger.warning(name)
-            setattr(self, name, self._generate_initial_id(number))
 
         request_id = getattr(self, name)
         setattr(self, name, request_id + 1)
@@ -483,9 +480,6 @@ class Trader(object):
         用户报单编号，保证当日不重复
         """
         name = '{}_{}'.format('_order_id', number)
-        if not hasattr(self, name):
-            self.logger.warning(name)
-            setattr(self, name, self._generate_initial_id(number))
 
         order_id = getattr(self, name)
         setattr(self, name, order_id + 1)

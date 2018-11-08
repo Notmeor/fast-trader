@@ -9,7 +9,9 @@ import sqlite3
 
 
 class PositionStore(object):
-
+    """
+    PositionStore 接口定义
+    """
     def get_positions(self, strategy_id):
         """
         获取策略历史持仓
@@ -30,11 +32,14 @@ class PositionStore(object):
         """
         raise NotImplementedError
 
-    def set_positions(self, strategy_id, positions):
+    def set_positions(self, positions):
+        raise NotImplementedError
+
+    def get_position_by_code(self, code, **kw):
         raise NotImplementedError
 
 
-class Store(object):
+class SqliteStore(object):
 
     # TODO: use sqlalchemy
 
@@ -151,7 +156,7 @@ class SqlitePositionStore(PositionStore):
         """
         tid = threading.get_ident()
         if tid not in self._stores:
-            self._stores[tid] = Store(
+            self._stores[tid] = SqliteStore(
                 db_name='sqlite3',
                 table_name='positions',
                 fields=self.fields)

@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import os
-import time, datetime
+import time
+import datetime
 import functools
 
 from google.protobuf.message import Message
@@ -67,37 +68,10 @@ def load_config(path=None):
     return conf
 
 
-def message2dict_(msg, including_default_value_fields=True):
-    """
-    Convert protobuf message to dict
-    """
-
-    dct = {}
-
-    if isinstance(msg, Message):
-
-        if including_default_value_fields:
-            for field in msg.DESCRIPTOR.fields:
-                dct[field.name] = field.default_value
-
-        fields = msg.ListFields()
-        for field, value in fields:
-            dct[field.name] = message2dict(value)
-
-        return dct
-
-    elif isinstance(msg, RepeatedCompositeContainer):
-        return list(map(message2dict, msg))
-
-    else:
-        return msg
-
-
 def message2dict(msg, including_default_value_fields=True):
     """
     Convert protobuf message to dict
     """
-    # return msg
 
     dct = attrdict()
 
@@ -147,8 +121,3 @@ def int2datetime(n_date=None, n_time=None, utc=False):
     if utc:
         return dt.astimezone(datetime.timezone.utc)
     return dt
-
-
-def _convert(ss):
-    import re
-    return '_'.join(re.findall('[A-Z][^A-Z]*', ss)).upper()
