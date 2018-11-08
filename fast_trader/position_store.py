@@ -158,7 +158,7 @@ class SqlitePositionStore(PositionStore):
         return self._stores[tid]
 
     def read(self, query=None, limit=None):
-        self._store.read(query=query, limit=limit)
+        self.store.read(query=query, limit=limit)
 
     def get_positions(self, strategy_id):
         positions = self.store.read({'strategy_id': strategy_id}, limit=1)
