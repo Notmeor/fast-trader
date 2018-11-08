@@ -1,23 +1,14 @@
 # -*- coding: utf-8 -*-
 
-import datetime, time
-import random
-import threading
 import logging
 
 from fast_trader.dtp_trade import DTP, Trader, Dispatcher
-from fast_trader.dtp_quote import (QuoteFeed, conf, Transaction, Snapshot,
+from fast_trader.dtp_quote import (Transaction, Snapshot,
                                    MarketOrder, Index, OrderQueue)
 
-from fast_trader.dtp import dtp_api_id as dtp_api_id
-from fast_trader.dtp import api_pb2 as dtp_struct
 from fast_trader.dtp import type_pb2 as dtp_type
 
-from fast_trader.dtp import ext_api_pb2 as dtp_struct_
-from fast_trader.dtp import ext_type_pb2 as dtp_type_
-
-from fast_trader.utils import (timeit, message2dict, load_config, Mail,
-                               message2tuple)
+from fast_trader.utils import (timeit, load_config, message2tuple)
 
 
 config = load_config()
@@ -66,6 +57,9 @@ class Strategy(object):
         self.market = market
         market.add_strategy(self)
 
+    def set_position_store(self, store):
+        self._position_store = store
+
     def start(self):
 
         self.on_start()
@@ -98,7 +92,6 @@ class Strategy(object):
 
     @property
     def strategy_id(self):
-        # return '{}_{}'.format(self.account_no, self._strategy_id)
         return self._strategy_id
 
     @property
@@ -118,20 +111,10 @@ class Strategy(object):
 
     def check_owner(self, obj):
         """
-        判断报单查询响应是否属于当前策略
+        判断该查询响应数据是否属于当前策略
         """
         id_range = self.trader._id_ranges[self.strategy_id]
         return int(obj.order_original_id) in id_range
-
-    @timeit
-    def get_positions(self):
-        """
-        查询持仓（同步）
-        """
-        request_id = self.generate_request_id()
-        mail = self.trader.query_positions(request_id=request_id, sync=True)
-        position = self._positions = mail.body.get('position_list', [])
-        return position
 
     def _get_all_pages(self, handle):
         offset = 0
@@ -159,8 +142,7 @@ class Strategy(object):
                 break
             offset = mail.body.pagination.offset
 
-        objs = [obj for obj in all_objs if self.check_owner(obj)]
-        return objs
+        return all_objs
 
     @timeit
     def get_orders(self):
@@ -168,41 +150,79 @@ class Strategy(object):
         查询报单（同步）
         """
         orders = self._get_all_pages(self.trader.query_orders)
-        return orders
-
-    @timeit
-    def get_orders_(self):
-        """
-        查询报单（同步）
-        """
-        offset = 0
-        size = 200
-        all_orders = []
-        while True:
-            request_id = self.generate_request_id()
-            mail = self.trader.query_orders(request_id=request_id,
-                                            sync=True,
-                                            pagination={
-                                                'size': size,
-                                                'offset': offset
-                                            })
-            _orders = mail['body'].get('order_list', [])
-            print('len:', len(_orders))
-            all_orders.extend(_orders)
-            if len(_orders) < size:
-                break
-            offset = mail.body.pagination.offset
-
-        # all_orders = self._orders = mail['body'].get('order_list', {})
-        orders = [order for order in all_orders if self.check_owner(order)]
+        orders = [order for order in orders if self.check_owner(order)]
         return orders
 
     @timeit
     def get_trades(self):
-        request_id = self.generate_request_id()
-        mail = self.trader.query_trades(request_id=request_id, sync=True)
-        trades = self._trades = mail['body'].get('fill_list', [])
+        """
+        查询成交（同步）
+        """
+        trades = self._get_all_pages(self.trader.query_trades)
+        trades = [trade for trade in trades if self.check_owner(trade)]
         return trades
+
+    @timeit
+    def get_account_positions(self):
+        """
+        查询账户总持仓（同步）
+        """
+        positions = self._get_all_pages(self.trader.query_positions)
+        return positions
+
+    def get_positions(self):
+        """
+        查询策略持仓
+
+        从PositionStore中读取数据
+        """
+        return self._position_store.get_positions(self.strategy_id)
+
+    def get_position_by_code(self, code, exchange=None):
+        return self._position_store.get_position_by_code(
+                code=code, exchange=exchange)
+
+    def update_position(self, trade):
+
+        code = trade.code
+        order_side = trade.order_side
+        fill_quantity = trade.fill_quantity
+        last_pos = self.get_position_by_code(code)
+
+        last_quantity = last_pos['quantity']
+        last_cost_price = last_pos['cost_price'] or 0.
+
+        _sign = 1 if order_side == dtp_type.ORDER_SIDE_BUY else -1
+
+        quantity = fill_quantity * _sign + last_quantity
+        if order_side == dtp_type.ORDER_SIDE_BUY:
+            tot_value = (last_quantity * last_cost_price +
+                         fill_quantity * float(trade.price))
+            tot_quantity = (last_quantity + trade.fill_quantity)
+            cost_price = tot_value / tot_quantity
+        else:
+            cost_price = last_cost_price
+
+        self._position_store.set_positions([
+            {
+                'strategy_id': self.strategy_id,
+                'exchange': trade.exchange,
+                'code': trade.code,
+                'quantity': quantity,
+                'cost_price': cost_price,
+                'date': self.date_str,
+                'time': trade.fill_time
+            }
+        ])
+
+    @property
+    def positions(self):
+        if not hasattr(self, '_position_query_proxy'):
+            class _Positions(object):
+                def __getitem__(self, code):
+                    return self.get_position_by_code(code)
+            self._position_query_proxy = _Positions()
+        return self._position_query_proxy
 
     @timeit
     def get_open_orders(self):
@@ -342,17 +362,35 @@ class Strategy(object):
         """
         pass
 
-    def on_trade(self, trade):
+    def on_trade(self, msg):
         """
         成交回报
         """
-        pass
+        trade = msg.body
+        if msg.header.code == dtp_type.RESPONSE_CODE_OK:
+            original_id = trade.order_original_id
+            order_detail = self._orders[original_id]
+            order_detail.update(trade)
 
-    def on_order(self, order):
+        if msg.body.fill_status != 1:
+            self.logger.error(msg)
+        else:
+            # 更新本地持仓记录
+            self.update_position(trade)
+
+            self.on_trade_tmp(trade)
+
+    def on_order(self, msg):
         """
         订单回报
         """
-        pass
+        order = msg.body
+        if msg.header.code == dtp_type.RESPONSE_CODE_OK:
+            original_id = order.order_original_id
+            order_detail = self._orders[original_id]
+            order_detail.update(order)
+
+        self.on_order_tmp(order)
 
     def on_batch_order_submission(self, msg):
         """
@@ -387,12 +425,15 @@ class Strategy(object):
     def _insert_many(self, order_side, orders):
         request_id = self.generate_request_id()
         for order in orders:
+            order_original_id = self.generate_order_id()
             if 'exchange' not in order:
                 order['exchange'] = self.get_exchange(order['code'])
             order['price'] = str(order['price'])
             order['order_side'] = order_side
             order['order_type'] = dtp_type.ORDER_TYPE_LIMIT
-            order['order_original_id'] = self.generate_order_id()
+            order['order_original_id'] = order_original_id
+
+            self._orders[order_original_id] = order
 
         self.trader.place_order_batch(request_id=request_id, orders=orders)
         return orders
@@ -417,12 +458,12 @@ class Strategy(object):
 
         order = kw.copy()
         order.update({
-            'request_id': request_id,
             'order_original_id': order_original_id,
             'exchange': exchange,
             'price': price})
 
-        self.trader.send_order(**order)
+        self.trader.send_order(request_id=request_id, **order)
+        self._orders[order_original_id] = order
         return order
 
     @timeit
@@ -475,6 +516,10 @@ class Strategy(object):
         exchange: int
         order_exchange_id: str
         """
+        if 'order_exchange_id' not in kw:
+            self.logger.warning('未提供 order_exchange_id , 无法撤单')
+            return
+
         request_id = self.generate_request_id()
         self.trader.cancel_order(request_id=request_id, **kw)
 
@@ -496,11 +541,11 @@ trader = Trader(dispatcher, dtp)
 
 market = Market()
 
+
 def get_strategy_instance(MyStrategyCls, number):
     """
     策略实例化流程演示
     """
-
 
     # 策略实例
     strategy = MyStrategyCls(number)
@@ -511,5 +556,3 @@ def get_strategy_instance(MyStrategyCls, number):
     strategy.set_market(market)
 
     return strategy
-
-
