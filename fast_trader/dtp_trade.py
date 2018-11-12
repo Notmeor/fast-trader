@@ -7,6 +7,7 @@ import datetime
 import threading
 import logging
 import zmq
+import queue
 from queue import Queue
 from collections import OrderedDict
 
@@ -40,6 +41,10 @@ class Dispatcher(object):
         # 发件箱
         self._outbox = Queue()
 
+        self._market_queue = Queue()
+
+        self.logger = logging.getLogger('fast_trader.dtp_trade.Dispatcher')
+
         self._running = False
         self.start()
 
@@ -58,11 +63,26 @@ class Dispatcher(object):
             mail = self._inbox.get()
             self.dispatch(mail)
 
-    def process_outbox(self):
+    def process_outbox_(self):
 
         while self._running:
             mail = self._outbox.get()
             self.dispatch(mail)
+
+    def process_outbox(self):
+
+        while self._running:
+            try:
+                mail = self._outbox.get(block=False)
+                self.dispatch(mail)
+            except queue.Empty:
+                pass
+
+            try:
+                mail = self._market_queue.get(block=False)
+                self.dispatch(mail)
+            except queue.Empty:
+                pass
 
     def bind(self, handler_id, handler, override=False):
         if not override and handler_id in self._handlers:
@@ -79,6 +99,8 @@ class Dispatcher(object):
 
         if handler_id.endswith('_req'):
             self._inbox.put(mail)
+        elif handler_id[0].isalpha():
+            self._market_queue.put(mail)
         elif handler_id.endswith('_rsp'):
             self._outbox.put(mail)
         else:

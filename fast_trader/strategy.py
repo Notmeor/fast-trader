@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
+import collections
 
 from fast_trader.dtp_trade import DTP, Trader, Dispatcher
 from fast_trader.dtp_quote import (Transaction, Snapshot,
@@ -8,6 +9,7 @@ from fast_trader.dtp_quote import (Transaction, Snapshot,
 
 from fast_trader.dtp import type_pb2 as dtp_type
 
+from fast_trader.position_store import SqlitePositionStore as PositionStore
 from fast_trader.utils import (timeit, load_config, message2tuple)
 
 
@@ -36,7 +38,7 @@ class Strategy(object):
         self._started = False
 
         self._positions = {}
-        self._orders = {}
+        self._orders = collections.defaultdict(dict)
         self._trades = {}
 
         self.subscribed_datasources = []
@@ -57,12 +59,17 @@ class Strategy(object):
         self.market = market
         market.add_strategy(self)
 
-    def set_position_store(self, store):
+    def set_position_store(self, store=None):
+        if store is None:
+            store = PositionStore()
         self._position_store = store
 
     def start(self):
 
         self.on_start()
+
+        # xx
+        self.set_position_store()
 
         self.trader.start()
 
@@ -180,7 +187,9 @@ class Strategy(object):
 
     def get_position_by_code(self, code, exchange=None):
         return self._position_store.get_position_by_code(
-                code=code, exchange=exchange)
+                strategy_id=self.strategy_id,
+                code=code,
+                exchange=exchange)
 
     def update_position(self, trade):
 
@@ -219,7 +228,7 @@ class Strategy(object):
     def positions(self):
         if not hasattr(self, '_position_query_proxy'):
             class _Positions(object):
-                def __getitem__(self, code):
+                def __getitem__(self_, code):
                     return self.get_position_by_code(code)
             self._position_query_proxy = _Positions()
         return self._position_query_proxy
@@ -294,10 +303,13 @@ class Strategy(object):
         name = datasource.name
 
         dispatcher = self.dispatcher
-        datasource.add_listener(dispatcher)
+
+        # FIXME: bind once only
         try:
             dispatcher.bind('{}_rsp'.format(name),
                             self.market.on_quote_message)
+            
+            datasource.add_listener(dispatcher)
 
         except Exception as e:
             print(e)

@@ -86,7 +86,6 @@ class SqliteStore(object):
             ','.join(doc.keys()),
             ','.join(['?'] * len(doc))
         )
-        print(statement)
         cursor.execute(statement, list(doc.values()))
         self._conn.commit()
 
@@ -170,10 +169,10 @@ class SqlitePositionStore(PositionStore):
         return positions
 
     def set_positions(self, positions):
-        positions = self._store.write_many(positions)
+        positions = self.store.write_many(positions)
 
-    def get_position_by_code(self, code, exchange=None):
-        query = {'code': code}
+    def get_position_by_code(self, strategy_id, code, exchange=None):
+        query = {'strategy_id': strategy_id, 'code': code}
         if exchange is not None:
             query['exchange'] = exchange
         ret = self.store.read(query, limit=1)

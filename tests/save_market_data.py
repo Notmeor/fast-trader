@@ -9,7 +9,7 @@ import threading
 import numpy as np
 import pandas as pd
 
-from fast_trader.dtp import quotation_pb2 as quote_struct
+from fast_trader.dtp import Quotation_pb2 as quote_struct
 from fast_trader.dtp_quote import MarketFeed
 from fast_trader.utils import (timeit, message2dict, load_config, Mail,
                                int2datetime)
@@ -99,24 +99,25 @@ class Trades(MarketFeed):
 
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
-        self._queue = queue.Queue()
+        self._queue = list() # queue.Queue()
 
         self._store = Store('test')
 
-        self.subscribe('transaction(000651)')
-        threading.Thread(target=self.start).start()
+        self.sub('transaction(002230)')
+        threading.Thread(target=self._start).start()
 
     def on_data(self, data):
 
         if not isinstance(data, str):
-            self._queue.put(data)
-            self._store.write_points([
-                {
-                    'measurement': 'market_trade',
-                    'fields': message2dict(data),
-                    'time': int2datetime(data.nActionDay, data.nLocalTime)
-                }
-            ])
+            # self._queue.put(data)
+            self._queue.append(data)
+#            self._store.write_points([
+#                {
+#                    'measurement': 'market_trade',
+#                    'fields': message2dict(data),
+#                    'time': int2datetime(data.nActionDay, data.nLocalTime)
+#                }
+#            ])
 
     def get(self):
         return self._queue.get()
@@ -124,6 +125,6 @@ class Trades(MarketFeed):
 
 if __name__ == '__main__':
     pass
-    ticks = Ticks()
+    # ticks = Ticks()
     trades = Trades()
 
