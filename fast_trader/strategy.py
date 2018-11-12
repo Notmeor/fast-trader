@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import datetime
 import logging
 import collections
 
@@ -219,7 +220,7 @@ class Strategy(object):
                 'code': trade.code,
                 'quantity': quantity,
                 'cost_price': cost_price,
-                'date': self.date_str,
+                'date': datetime.datetime.now().strftime('%Y%m%d'),
                 'time': trade.fill_time
             }
         ])
