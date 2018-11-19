@@ -687,7 +687,6 @@ class Trader(object):
         )
         return self.dispatcher.put(mail)
 
-    @timeit
     def query_positions(self, **kw):
         """
         查询持仓
@@ -701,7 +700,6 @@ class Trader(object):
         )
         return self.dispatcher.put(mail)
 
-    @timeit
     def query_capital(self, **kw):
         """
         查询账户资金

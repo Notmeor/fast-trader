@@ -152,7 +152,6 @@ class Strategy(object):
 
         return all_objs
 
-    @timeit
     def get_orders(self):
         """
         查询报单（同步）
@@ -161,7 +160,6 @@ class Strategy(object):
         orders = [order for order in orders if self.check_owner(order)]
         return orders
 
-    @timeit
     def get_trades(self):
         """
         查询成交（同步）
@@ -170,7 +168,6 @@ class Strategy(object):
         trades = [trade for trade in trades if self.check_owner(trade)]
         return trades
 
-    @timeit
     def get_account_positions(self):
         """
         查询账户总持仓（同步）
@@ -234,7 +231,6 @@ class Strategy(object):
             self._position_query_proxy = _Positions()
         return self._position_query_proxy
 
-    @timeit
     def get_open_orders(self):
         """
         查询未成交报单（同步）
@@ -260,7 +256,6 @@ class Strategy(object):
         open_orders = [order for order in orders if order['status'] < 4]
         return open_orders
 
-    @timeit
     def get_capital(self):
         """
         查询资金（同步）

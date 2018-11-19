@@ -1,5 +1,9 @@
-
+import decimal
 import collections
+
+import pywidgets as widgets
+
+from data_provider.datafeed.universe import Universe
 
 def get_stock_name(code):
     if not hasattr(get_stock_name, '_pairs'):
@@ -30,7 +34,7 @@ def create_trading_panel(ea):
 
     confirm_btn = widgets.Button(description='下单')
 
-
+    out = widgets.Output()
 
     panel = box = widgets.Box([stock_code, stock_name, order_price,
                        stock_quantity, order_side, confirm_btn, out])
@@ -257,7 +261,6 @@ class Dashboard(object):
         self.trade_panel = self.create_panel(trade_label_dict)
         return self.trade_panel
 
-    @timeit
     def update_trade_panel(self, entry):
         ident = entry['order_original_id']
         self.update_panel_entry(
@@ -279,7 +282,6 @@ class Dashboard(object):
         self.position_panel = self.create_panel(position_label_dict)
         return self.position_panel
 
-    @timeit
     def update_position_panel(self, entry):
         ident = entry['code']
         self.update_panel_entry(
@@ -301,7 +303,6 @@ class Dashboard(object):
         self.order_panel = self.create_panel(order_label_dict)
         return self.order_panel
 
-    @timeit
     def update_order_panel(self, entry):
         ident = entry['order_original_id']
         self.update_panel_entry(
