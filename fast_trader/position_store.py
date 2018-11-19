@@ -105,6 +105,17 @@ class SqliteStore(object):
 
         cursor = self._conn.cursor()
         return cursor.execute(statement).fetchall()
+    
+    def read_latest(self, query):
+        query_str = self._format_condition(query)
+        statement = ("SELECT {fields} FROM {table} WHERE ID in" +
+                    "(SELECT MAX(ID) FROM {table} WHERE {con} GROUP BY code)").format(
+            fields=','.join(self.fields), 
+            con=query_str,
+            table=self.table_name)
+
+        cursor = self._conn.cursor()
+        return cursor.execute(statement).fetchall()
 
     @staticmethod
     def _format_assignment(doc):
@@ -115,6 +126,8 @@ class SqliteStore(object):
 
     @staticmethod
     def _format_condition(doc):
+        if isinstance(doc, str):
+            return doc
         s = str(doc)
         formatted = s[2:-1].replace(
             "': ", '=').replace(", '", ',').replace(',', ' and ')
@@ -165,7 +178,7 @@ class SqlitePositionStore(PositionStore):
         self.store.read(query=query, limit=limit)
 
     def get_positions(self, strategy_id):
-        positions = self.store.read({'strategy_id': strategy_id}, limit=1)
+        positions = self.store.read_latest({'strategy_id': strategy_id})
         return positions
 
     def set_positions(self, positions):

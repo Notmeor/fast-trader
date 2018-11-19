@@ -479,7 +479,6 @@ class Strategy(object):
         self._orders[order_original_id] = order
         return order
 
-    @timeit
     def buy(self, code, price, quantity, exchange=None):
         """
         委托买入

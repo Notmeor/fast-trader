@@ -27,7 +27,7 @@ executor = ProcessPoolExecutor(2)
 
 config = load_config()
 
-REQUEST_TIMEOUT = 5
+REQUEST_TIMEOUT = 60
 
 
 class Dispatcher(object):
@@ -182,7 +182,6 @@ class DTP(object):
         threading.Thread(target=self.handle_counter_response).start()
         threading.Thread(target=self.handle_compliance_report).start()
 
-    @timeit
     def _populate_message(self, cmsg, attrs):
 
         for attr, value in attrs.items():
@@ -456,7 +455,6 @@ class Trader(object):
         if max_number:
             self._max_number = max_number
 
-    @timeit
     def _generate_initial_id(self):
         """
         计算初始编号
@@ -486,7 +484,6 @@ class Trader(object):
             setattr(self, '_order_id_{}'.format(number), initial_id)
             setattr(self, '_request_id_{}'.format(number), initial_id)
 
-    @timeit
     def generate_request_id(self, number=1):
         """
         请求id，保证当日不重复
@@ -530,6 +527,8 @@ class Trader(object):
     def _on_response(self, mail):
 
         api_id = mail['api_id']
+
+        mail.body['message'] = mail.header.message
 
         if api_id == dtp_api_id.LOGIN_ACCOUNT_RESPONSE:
             self.on_login(mail)
