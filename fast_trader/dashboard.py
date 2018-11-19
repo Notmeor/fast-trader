@@ -1,7 +1,7 @@
 import decimal
 import collections
 
-import pywidgets as widgets
+import ipywidgets as widgets
 
 from data_provider.datafeed.universe import Universe
 
