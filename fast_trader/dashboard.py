@@ -1,6 +1,9 @@
 import decimal
 import collections
+import threading
+import time
 
+from ipywidgets import interact, Layout
 import ipywidgets as widgets
 
 from data_provider.datafeed.universe import Universe
@@ -197,6 +200,13 @@ class Dashboard(object):
             if child.ident == ident:
                 return True
         return False
+    
+    @staticmethod
+    def get_item(panel, ident):
+        for child in panel.children:
+            if child.ident == ident:
+                return child
+        return None
 
     @staticmethod
     def create_panel(label_dict):
@@ -269,13 +279,17 @@ class Dashboard(object):
             entry=entry,
             ident=ident)
         
-    def refresh_trade_panel(self):
-        trades = self.ea.get_trades()
+    def refresh_trade_panel(self, keep=20):
+        trades = self.ea.get_trades()[-keep:]
         for trade in trades:
             ident = trade['order_original_id']
             if self.has_item(self.trade_panel, ident):
                 continue
             self.update_trade_panel(trade)
+        
+        if keep > 0 and len(self.trade_panel.children) - 1 > keep:
+            self.trade_panel.children = self.trade_panel.children[:1] +\
+                self.trade_panel.children[-20:] 
 
     @apply_style(width='fit-content')
     def create_position_panel(self):
@@ -312,13 +326,16 @@ class Dashboard(object):
             ident=ident)
         
     def refresh_order_panel(self):
-        orders = self.ea.get_open_orders()
+        orders = self.ea.get_open_orders()[-20:]
         valid_idents = ['header']
         for order in orders:
             ident = order['order_original_id']
             valid_idents.append(ident)
-            if self.has_item(self.order_panel, ident):
-                continue
+            item = self.get_item(self.order_panel, ident)
+            if item is not None:
+                ind = list(order_label_dict.values()).index('freeze_amount')
+                if item.children[ind] == str(order['freeze_amount']):
+                    continue
             self.update_order_panel(order)
         
 #         children_to_remove = []
