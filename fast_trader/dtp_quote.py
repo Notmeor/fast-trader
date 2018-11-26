@@ -30,7 +30,6 @@ class MarketFeed(object):
         self._queue = queue.Queue()
         self._running = False
 
-    @property
     def is_running(self):
         return self._running
 
@@ -144,22 +143,31 @@ class QuoteFeed(MarketFeed):
             ))
 
 
-def get_fields(proto_type):
+def get_pb_fields(proto_type):
     return [f.name for f in proto_type.DESCRIPTOR.fields]
 
-Snapshot = namedtuple('Snapshot', get_fields(quote_struct.Stock))
-Transaction = namedtuple('Transaction', get_fields(quote_struct.Transaction))
-MarketOrder = namedtuple('MarketOrder', get_fields(quote_struct.Order))
-Index = namedtuple('Index', get_fields(quote_struct.Index))
-OrderQueue = namedtuple('OrderQueue', get_fields(quote_struct.OrderQueue))
+Snapshot = namedtuple('Snapshot',
+                      get_pb_fields(quote_struct.Stock))
+
+Transaction = namedtuple('Transaction',
+                         get_pb_fields(quote_struct.Transaction))
+
+MarketOrder = namedtuple('MarketOrder',
+                         get_pb_fields(quote_struct.Order))
+
+Index = namedtuple('Index',
+                   get_pb_fields(quote_struct.Index))
+
+OrderQueue = namedtuple('OrderQueue',
+                        get_pb_fields(quote_struct.OrderQueue))
 
 if __name__ == '__main__':
-    
 
+    l0 = []
     class QuoteFeed_(QuoteFeed):
-        
+
         def on_data(self, data):
-            print(data)
+            l0.append(data)
 
     md = QuoteFeed_('tick_feed')
     md.subscribe(['002230', '300014'])

@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='quotation.stock',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x0fquotation.proto\x12\x0fquotation.stock\"\xa9\n\n\x05Stock\x12\x12\n\nszWindCode\x18\x01 \x01(\t\x12\x0e\n\x06szCode\x18\x02 \x01(\t\x12\x12\n\nnActionDay\x18\x03 \x01(\x05\x12\x13\n\x0bnTradingDay\x18\x04 \x01(\x05\x12\r\n\x05nTime\x18\x05 \x01(\x05\x12\x0f\n\x07nStatus\x18\x06 \x01(\x05\x12\x11\n\tnPreClose\x18\x07 \x01(\x03\x12\r\n\x05nOpen\x18\x08 \x01(\x03\x12\r\n\x05nHigh\x18\t \x01(\x03\x12\x0c\n\x04nLow\x18\n \x01(\x03\x12\x0e\n\x06nMatch\x18\x0b \x01(\x03\x12\x13\n\x0bnAskPrice_0\x18\x0c \x01(\x03\x12\x13\n\x0bnAskPrice_1\x18\r \x01(\x03\x12\x13\n\x0bnAskPrice_2\x18\x0e \x01(\x03\x12\x13\n\x0bnAskPrice_3\x18\x0f \x01(\x03\x12\x13\n\x0bnAskPrice_4\x18\x10 \x01(\x03\x12\x13\n\x0bnAskPrice_5\x18\x11 \x01(\x03\x12\x13\n\x0bnAskPrice_6\x18\x12 \x01(\x03\x12\x13\n\x0bnAskPrice_7\x18\x13 \x01(\x03\x12\x13\n\x0bnAskPrice_8\x18\x14 \x01(\x03\x12\x13\n\x0bnAskPrice_9\x18\x15 \x01(\x03\x12\x11\n\tnAskVol_0\x18\x16 \x01(\x03\x12\x11\n\tnAskVol_1\x18\x17 \x01(\x03\x12\x11\n\tnAskVol_2\x18\x18 \x01(\x03\x12\x11\n\tnAskVol_3\x18\x19 \x01(\x03\x12\x11\n\tnAskVol_4\x18\x1a \x01(\x03\x12\x11\n\tnAskVol_5\x18\x1b \x01(\x03\x12\x11\n\tnAskVol_6\x18\x1c \x01(\x03\x12\x11\n\tnAskVol_7\x18\x1d \x01(\x03\x12\x11\n\tnAskVol_8\x18\x1e \x01(\x03\x12\x11\n\tnAskVol_9\x18\x1f \x01(\x03\x12\x13\n\x0bnBidPrice_0\x18  \x01(\x03\x12\x13\n\x0bnBidPrice_1\x18! \x01(\x03\x12\x13\n\x0bnBidPrice_2\x18\" \x01(\x03\x12\x13\n\x0bnBidPrice_3\x18# \x01(\x03\x12\x13\n\x0bnBidPrice_4\x18$ \x01(\x03\x12\x13\n\x0bnBidPrice_5\x18% \x01(\x03\x12\x13\n\x0bnBidPrice_6\x18& \x01(\x03\x12\x13\n\x0bnBidPrice_7\x18\' \x01(\x03\x12\x13\n\x0bnBidPrice_8\x18( \x01(\x03\x12\x13\n\x0bnBidPrice_9\x18) \x01(\x03\x12\x11\n\tnBidVol_0\x18* \x01(\x03\x12\x11\n\tnBidVol_1\x18+ \x01(\x03\x12\x11\n\tnBidVol_2\x18, \x01(\x03\x12\x11\n\tnBidVol_3\x18- \x01(\x03\x12\x11\n\tnBidVol_4\x18. \x01(\x03\x12\x11\n\tnBidVol_5\x18/ \x01(\x03\x12\x11\n\tnBidVol_6\x18\x30 \x01(\x03\x12\x11\n\tnBidVol_7\x18\x31 \x01(\x03\x12\x11\n\tnBidVol_8\x18\x32 \x01(\x03\x12\x11\n\tnBidVol_9\x18\x33 \x01(\x03\x12\x12\n\nnNumTrades\x18\x34 \x01(\x05\x12\x0f\n\x07iVolume\x18\x35 \x01(\x03\x12\x11\n\tiTurnover\x18\x36 \x01(\x03\x12\x14\n\x0cnTotalBidVol\x18\x37 \x01(\x03\x12\x14\n\x0cnTotalAskVol\x18\x38 \x01(\x03\x12\x1c\n\x14nWeightedAvgBidPrice\x18\x39 \x01(\x03\x12\x1c\n\x14nWeightedAvgAskPrice\x18: \x01(\x03\x12\r\n\x05nIOPV\x18; \x01(\x05\x12\x18\n\x10nYieldToMaturity\x18< \x01(\x05\x12\x14\n\x0cnHighLimited\x18= \x01(\x03\x12\x13\n\x0bnLowLimited\x18> \x01(\x03\x12\x10\n\x08\x63hPrefix\x18? \x01(\t\x12\r\n\x05nSyl1\x18@ \x01(\x05\x12\r\n\x05nSyl2\x18\x41 \x01(\x05\x12\x0c\n\x04nSD2\x18\x42 \x01(\x05\x12\x12\n\nnLocalTime\x18\x43 \x01(\x05\"\xb2\x06\n\x06\x46uture\x12\x0c\n\x04\x63ode\x18\x01 \x01(\t\x12\x10\n\x08\x65xchange\x18\x02 \x01(\t\x12\x10\n\x08tradeDay\x18\x03 \x01(\t\x12\x12\n\nupdateTime\x18\x04 \x01(\t\x12\x19\n\x11updateMilliSecond\x18\x05 \x01(\x05\x12\x11\n\tlastPrice\x18\x06 \x01(\x01\x12\x0e\n\x06volume\x18\x07 \x01(\x05\x12\x11\n\topenPrice\x18\x08 \x01(\x01\x12\x14\n\x0chighestPrice\x18\t \x01(\x01\x12\x13\n\x0blowestPrice\x18\n \x01(\x01\x12\x12\n\nclosePrice\x18\x0b \x01(\x01\x12\x17\n\x0fsuttlementPrice\x18\x0c \x01(\x01\x12\x14\n\x0climitUpPrice\x18\r \x01(\x01\x12\x16\n\x0elimitDownPrice\x18\x0e \x01(\x01\x12\x10\n\x08turnover\x18\x0f \x01(\x01\x12\x14\n\x0copenInterest\x18\x10 \x01(\x03\x12\x15\n\rpreClosePrice\x18\x11 \x01(\x01\x12\x1a\n\x12preSettlementPrice\x18\x12 \x01(\x01\x12\x17\n\x0fpreOpenInterest\x18\x13 \x01(\x03\x12\x11\n\tactionDay\x18\x14 \x01(\t\x12\x11\n\taskPrice1\x18\x15 \x01(\x01\x12\x11\n\taskPrice2\x18\x16 \x01(\x01\x12\x11\n\taskPrice3\x18\x17 \x01(\x01\x12\x11\n\taskPrice4\x18\x18 \x01(\x01\x12\x11\n\taskPrice5\x18\x19 \x01(\x01\x12\x12\n\naskVolume1\x18\x1a \x01(\x05\x12\x12\n\naskVolume2\x18\x1b \x01(\x05\x12\x12\n\naskVolume3\x18\x1c \x01(\x05\x12\x12\n\naskVolume4\x18\x1d \x01(\x05\x12\x12\n\naskVolume5\x18\x1e \x01(\x05\x12\x11\n\tbidPrice1\x18\x1f \x01(\x01\x12\x11\n\tbidPrice2\x18  \x01(\x01\x12\x11\n\tbidPrice3\x18! \x01(\x01\x12\x11\n\tbidPrice4\x18\" \x01(\x01\x12\x11\n\tbidPrice5\x18# \x01(\x01\x12\x12\n\nbidVolume1\x18$ \x01(\x05\x12\x12\n\nbidVolume2\x18% \x01(\x05\x12\x12\n\nbidVolume3\x18& \x01(\x05\x12\x12\n\nbidVolume4\x18\' \x01(\x05\x12\x12\n\nbidVolume5\x18( \x01(\x05\"\x87\x02\n\x05Index\x12\x12\n\nszWindCode\x18\x01 \x01(\t\x12\x0e\n\x06szCode\x18\x02 \x01(\t\x12\x12\n\nnActionDay\x18\x03 \x01(\x05\x12\x13\n\x0bnTradingDay\x18\x04 \x01(\x05\x12\r\n\x05nTime\x18\x05 \x01(\x05\x12\x12\n\nnOpenIndex\x18\x06 \x01(\x03\x12\x12\n\nnHighIndex\x18\x07 \x01(\x03\x12\x11\n\tnLowIndex\x18\x08 \x01(\x03\x12\x12\n\nnLastIndex\x18\t \x01(\x03\x12\x14\n\x0ciTotalVolume\x18\n \x01(\x03\x12\x11\n\tiTurnover\x18\x0b \x01(\x03\x12\x16\n\x0enPreCloseIndex\x18\x0c \x01(\x03\x12\x12\n\nnLocalTime\x18\r \x01(\x05\"\x90\x02\n\x0bTransaction\x12\x12\n\nszWindCode\x18\x01 \x01(\t\x12\x0e\n\x06szCode\x18\x02 \x01(\t\x12\x12\n\nnActionDay\x18\x03 \x01(\x05\x12\r\n\x05nTime\x18\x04 \x01(\x05\x12\x0e\n\x06nIndex\x18\x05 \x01(\x05\x12\x0e\n\x06nPrice\x18\x06 \x01(\x03\x12\x0f\n\x07nVolume\x18\x07 \x01(\x05\x12\x11\n\tnTurnover\x18\x08 \x01(\x03\x12\x0f\n\x07nBSFlag\x18\t \x01(\x05\x12\x13\n\x0b\x63hOrderKind\x18\n \x01(\x0c\x12\x16\n\x0e\x63hFunctionCode\x18\x0b \x01(\t\x12\x11\n\tnAskOrder\x18\x0c \x01(\x05\x12\x11\n\tnBidOrder\x18\r \x01(\x05\x12\x12\n\nnLocalTime\x18\x0e \x01(\x05\"\xf3\x01\n\x05Order\x12\x12\n\nszWindCode\x18\x01 \x01(\t\x12\x0e\n\x06szCode\x18\x02 \x01(\t\x12\x12\n\nnActionDay\x18\x03 \x01(\x05\x12\r\n\x05nTime\x18\x04 \x01(\x05\x12\x0e\n\x06nOrder\x18\x05 \x01(\x05\x12\x0e\n\x06nPrice\x18\x06 \x01(\x03\x12\x0f\n\x07nVolume\x18\x07 \x01(\x05\x12\x13\n\x0b\x63hOrderKind\x18\x08 \x01(\x0c\x12\x16\n\x0e\x63hFunctionCode\x18\t \x01(\t\x12\x0f\n\x07nBroker\x18\n \x01(\x05\x12\x10\n\x08\x63hStatus\x18\x0b \x01(\t\x12\x0e\n\x06\x63hFlag\x18\x0c \x01(\t\x12\x12\n\nnLocalTime\x18\r \x01(\x05\"\xbc\x01\n\nOrderQueue\x12\x12\n\nszWindCode\x18\x01 \x01(\t\x12\x0e\n\x06szCode\x18\x02 \x01(\t\x12\x12\n\nnActionDay\x18\x03 \x01(\x05\x12\r\n\x05nTime\x18\x04 \x01(\x05\x12\r\n\x05nSide\x18\x05 \x01(\x05\x12\x0e\n\x06nPrice\x18\x06 \x01(\x03\x12\x0f\n\x07nOrders\x18\x07 \x01(\x05\x12\x10\n\x08nABItems\x18\x08 \x01(\x05\x12\x11\n\tnABVolume\x18\t \x03(\x05\x12\x12\n\nnLocalTime\x18\n \x01(\x05\"\x9e\x03\n\nMarketData\x12\'\n\x05stock\x18\x01 \x01(\x0b\x32\x16.quotation.stock.StockH\x00\x12)\n\x06\x66uture\x18\x02 \x01(\x0b\x32\x17.quotation.stock.FutureH\x00\x12\'\n\x05index\x18\x03 \x01(\x0b\x32\x16.quotation.stock.IndexH\x00\x12\x33\n\x0btransaction\x18\x04 \x01(\x0b\x32\x1c.quotation.stock.TransactionH\x00\x12\'\n\x05order\x18\x05 \x01(\x0b\x32\x16.quotation.stock.OrderH\x00\x12,\n\x05queue\x18\x06 \x01(\x0b\x32\x1b.quotation.stock.OrderQueueH\x00\x12.\n\x04type\x18\x07 \x01(\x0e\x32 .quotation.stock.MarketData.Type\"O\n\x04Type\x12\t\n\x05STOCK\x10\x00\x12\t\n\x05INDEX\x10\x01\x12\n\n\x06\x46UTURE\x10\x02\x12\x0f\n\x0bTRANSACTION\x10\x03\x12\t\n\x05ORDER\x10\x04\x12\t\n\x05QUEUE\x10\x05\x42\x06\n\x04\x64\x61tab\x06proto3')
+  serialized_pb=_b('\n\x0fquotation.proto\x12\x0fquotation.stock\"\xa9\n\n\x05Stock\x12\x12\n\nszWindCode\x18\x01 \x01(\t\x12\x0e\n\x06szCode\x18\x02 \x01(\t\x12\x12\n\nnActionDay\x18\x03 \x01(\x05\x12\x13\n\x0bnTradingDay\x18\x04 \x01(\x05\x12\r\n\x05nTime\x18\x05 \x01(\x05\x12\x0f\n\x07nStatus\x18\x06 \x01(\x05\x12\x11\n\tnPreClose\x18\x07 \x01(\x03\x12\r\n\x05nOpen\x18\x08 \x01(\x03\x12\r\n\x05nHigh\x18\t \x01(\x03\x12\x0c\n\x04nLow\x18\n \x01(\x03\x12\x0e\n\x06nMatch\x18\x0b \x01(\x03\x12\x13\n\x0bnAskPrice_0\x18\x0c \x01(\x03\x12\x13\n\x0bnAskPrice_1\x18\r \x01(\x03\x12\x13\n\x0bnAskPrice_2\x18\x0e \x01(\x03\x12\x13\n\x0bnAskPrice_3\x18\x0f \x01(\x03\x12\x13\n\x0bnAskPrice_4\x18\x10 \x01(\x03\x12\x13\n\x0bnAskPrice_5\x18\x11 \x01(\x03\x12\x13\n\x0bnAskPrice_6\x18\x12 \x01(\x03\x12\x13\n\x0bnAskPrice_7\x18\x13 \x01(\x03\x12\x13\n\x0bnAskPrice_8\x18\x14 \x01(\x03\x12\x13\n\x0bnAskPrice_9\x18\x15 \x01(\x03\x12\x11\n\tnAskVol_0\x18\x16 \x01(\x03\x12\x11\n\tnAskVol_1\x18\x17 \x01(\x03\x12\x11\n\tnAskVol_2\x18\x18 \x01(\x03\x12\x11\n\tnAskVol_3\x18\x19 \x01(\x03\x12\x11\n\tnAskVol_4\x18\x1a \x01(\x03\x12\x11\n\tnAskVol_5\x18\x1b \x01(\x03\x12\x11\n\tnAskVol_6\x18\x1c \x01(\x03\x12\x11\n\tnAskVol_7\x18\x1d \x01(\x03\x12\x11\n\tnAskVol_8\x18\x1e \x01(\x03\x12\x11\n\tnAskVol_9\x18\x1f \x01(\x03\x12\x13\n\x0bnBidPrice_0\x18  \x01(\x03\x12\x13\n\x0bnBidPrice_1\x18! \x01(\x03\x12\x13\n\x0bnBidPrice_2\x18\" \x01(\x03\x12\x13\n\x0bnBidPrice_3\x18# \x01(\x03\x12\x13\n\x0bnBidPrice_4\x18$ \x01(\x03\x12\x13\n\x0bnBidPrice_5\x18% \x01(\x03\x12\x13\n\x0bnBidPrice_6\x18& \x01(\x03\x12\x13\n\x0bnBidPrice_7\x18\' \x01(\x03\x12\x13\n\x0bnBidPrice_8\x18( \x01(\x03\x12\x13\n\x0bnBidPrice_9\x18) \x01(\x03\x12\x11\n\tnBidVol_0\x18* \x01(\x03\x12\x11\n\tnBidVol_1\x18+ \x01(\x03\x12\x11\n\tnBidVol_2\x18, \x01(\x03\x12\x11\n\tnBidVol_3\x18- \x01(\x03\x12\x11\n\tnBidVol_4\x18. \x01(\x03\x12\x11\n\tnBidVol_5\x18/ \x01(\x03\x12\x11\n\tnBidVol_6\x18\x30 \x01(\x03\x12\x11\n\tnBidVol_7\x18\x31 \x01(\x03\x12\x11\n\tnBidVol_8\x18\x32 \x01(\x03\x12\x11\n\tnBidVol_9\x18\x33 \x01(\x03\x12\x12\n\nnNumTrades\x18\x34 \x01(\x05\x12\x0f\n\x07iVolume\x18\x35 \x01(\x03\x12\x11\n\tiTurnover\x18\x36 \x01(\x03\x12\x14\n\x0cnTotalBidVol\x18\x37 \x01(\x03\x12\x14\n\x0cnTotalAskVol\x18\x38 \x01(\x03\x12\x1c\n\x14nWeightedAvgBidPrice\x18\x39 \x01(\x03\x12\x1c\n\x14nWeightedAvgAskPrice\x18: \x01(\x03\x12\r\n\x05nIOPV\x18; \x01(\x05\x12\x18\n\x10nYieldToMaturity\x18< \x01(\x05\x12\x14\n\x0cnHighLimited\x18= \x01(\x03\x12\x13\n\x0bnLowLimited\x18> \x01(\x03\x12\x10\n\x08\x63hPrefix\x18? \x01(\t\x12\r\n\x05nSyl1\x18@ \x01(\x05\x12\r\n\x05nSyl2\x18\x41 \x01(\x05\x12\x0c\n\x04nSD2\x18\x42 \x01(\x05\x12\x12\n\nnLocalTime\x18\x43 \x01(\x05\"\xb2\x06\n\x06\x46uture\x12\x0c\n\x04\x63ode\x18\x01 \x01(\t\x12\x10\n\x08\x65xchange\x18\x02 \x01(\t\x12\x10\n\x08tradeDay\x18\x03 \x01(\t\x12\x12\n\nupdateTime\x18\x04 \x01(\t\x12\x19\n\x11updateMilliSecond\x18\x05 \x01(\x05\x12\x11\n\tlastPrice\x18\x06 \x01(\x01\x12\x0e\n\x06volume\x18\x07 \x01(\x05\x12\x11\n\topenPrice\x18\x08 \x01(\x01\x12\x14\n\x0chighestPrice\x18\t \x01(\x01\x12\x13\n\x0blowestPrice\x18\n \x01(\x01\x12\x12\n\nclosePrice\x18\x0b \x01(\x01\x12\x17\n\x0fsuttlementPrice\x18\x0c \x01(\x01\x12\x14\n\x0climitUpPrice\x18\r \x01(\x01\x12\x16\n\x0elimitDownPrice\x18\x0e \x01(\x01\x12\x10\n\x08turnover\x18\x0f \x01(\x01\x12\x14\n\x0copenInterest\x18\x10 \x01(\x03\x12\x15\n\rpreClosePrice\x18\x11 \x01(\x01\x12\x1a\n\x12preSettlementPrice\x18\x12 \x01(\x01\x12\x17\n\x0fpreOpenInterest\x18\x13 \x01(\x03\x12\x11\n\tactionDay\x18\x14 \x01(\t\x12\x11\n\taskPrice1\x18\x15 \x01(\x01\x12\x11\n\taskPrice2\x18\x16 \x01(\x01\x12\x11\n\taskPrice3\x18\x17 \x01(\x01\x12\x11\n\taskPrice4\x18\x18 \x01(\x01\x12\x11\n\taskPrice5\x18\x19 \x01(\x01\x12\x12\n\naskVolume1\x18\x1a \x01(\x05\x12\x12\n\naskVolume2\x18\x1b \x01(\x05\x12\x12\n\naskVolume3\x18\x1c \x01(\x05\x12\x12\n\naskVolume4\x18\x1d \x01(\x05\x12\x12\n\naskVolume5\x18\x1e \x01(\x05\x12\x11\n\tbidPrice1\x18\x1f \x01(\x01\x12\x11\n\tbidPrice2\x18  \x01(\x01\x12\x11\n\tbidPrice3\x18! \x01(\x01\x12\x11\n\tbidPrice4\x18\" \x01(\x01\x12\x11\n\tbidPrice5\x18# \x01(\x01\x12\x12\n\nbidVolume1\x18$ \x01(\x05\x12\x12\n\nbidVolume2\x18% \x01(\x05\x12\x12\n\nbidVolume3\x18& \x01(\x05\x12\x12\n\nbidVolume4\x18\' \x01(\x05\x12\x12\n\nbidVolume5\x18( \x01(\x05\"\xb2\x06\n\x06Option\x12\x0c\n\x04\x63ode\x18\x01 \x01(\t\x12\x10\n\x08\x65xchange\x18\x02 \x01(\t\x12\x10\n\x08tradeDay\x18\x03 \x01(\t\x12\x12\n\nupdateTime\x18\x04 \x01(\t\x12\x19\n\x11updateMilliSecond\x18\x05 \x01(\x05\x12\x11\n\tlastPrice\x18\x06 \x01(\x01\x12\x0e\n\x06volume\x18\x07 \x01(\x05\x12\x11\n\topenPrice\x18\x08 \x01(\x01\x12\x14\n\x0chighestPrice\x18\t \x01(\x01\x12\x13\n\x0blowestPrice\x18\n \x01(\x01\x12\x12\n\nclosePrice\x18\x0b \x01(\x01\x12\x17\n\x0fsuttlementPrice\x18\x0c \x01(\x01\x12\x14\n\x0climitUpPrice\x18\r \x01(\x01\x12\x16\n\x0elimitDownPrice\x18\x0e \x01(\x01\x12\x10\n\x08turnover\x18\x0f \x01(\x01\x12\x14\n\x0copenInterest\x18\x10 \x01(\x03\x12\x15\n\rpreClosePrice\x18\x11 \x01(\x01\x12\x1a\n\x12preSettlementPrice\x18\x12 \x01(\x01\x12\x17\n\x0fpreOpenInterest\x18\x13 \x01(\x03\x12\x11\n\tactionDay\x18\x14 \x01(\t\x12\x11\n\taskPrice1\x18\x15 \x01(\x01\x12\x11\n\taskPrice2\x18\x16 \x01(\x01\x12\x11\n\taskPrice3\x18\x17 \x01(\x01\x12\x11\n\taskPrice4\x18\x18 \x01(\x01\x12\x11\n\taskPrice5\x18\x19 \x01(\x01\x12\x12\n\naskVolume1\x18\x1a \x01(\x05\x12\x12\n\naskVolume2\x18\x1b \x01(\x05\x12\x12\n\naskVolume3\x18\x1c \x01(\x05\x12\x12\n\naskVolume4\x18\x1d \x01(\x05\x12\x12\n\naskVolume5\x18\x1e \x01(\x05\x12\x11\n\tbidPrice1\x18\x1f \x01(\x01\x12\x11\n\tbidPrice2\x18  \x01(\x01\x12\x11\n\tbidPrice3\x18! \x01(\x01\x12\x11\n\tbidPrice4\x18\" \x01(\x01\x12\x11\n\tbidPrice5\x18# \x01(\x01\x12\x12\n\nbidVolume1\x18$ \x01(\x05\x12\x12\n\nbidVolume2\x18% \x01(\x05\x12\x12\n\nbidVolume3\x18& \x01(\x05\x12\x12\n\nbidVolume4\x18\' \x01(\x05\x12\x12\n\nbidVolume5\x18( \x01(\x05\"\x87\x02\n\x05Index\x12\x12\n\nszWindCode\x18\x01 \x01(\t\x12\x0e\n\x06szCode\x18\x02 \x01(\t\x12\x12\n\nnActionDay\x18\x03 \x01(\x05\x12\x13\n\x0bnTradingDay\x18\x04 \x01(\x05\x12\r\n\x05nTime\x18\x05 \x01(\x05\x12\x12\n\nnOpenIndex\x18\x06 \x01(\x03\x12\x12\n\nnHighIndex\x18\x07 \x01(\x03\x12\x11\n\tnLowIndex\x18\x08 \x01(\x03\x12\x12\n\nnLastIndex\x18\t \x01(\x03\x12\x14\n\x0ciTotalVolume\x18\n \x01(\x03\x12\x11\n\tiTurnover\x18\x0b \x01(\x03\x12\x16\n\x0enPreCloseIndex\x18\x0c \x01(\x03\x12\x12\n\nnLocalTime\x18\r \x01(\x05\"\x90\x02\n\x0bTransaction\x12\x12\n\nszWindCode\x18\x01 \x01(\t\x12\x0e\n\x06szCode\x18\x02 \x01(\t\x12\x12\n\nnActionDay\x18\x03 \x01(\x05\x12\r\n\x05nTime\x18\x04 \x01(\x05\x12\x0e\n\x06nIndex\x18\x05 \x01(\x05\x12\x0e\n\x06nPrice\x18\x06 \x01(\x03\x12\x0f\n\x07nVolume\x18\x07 \x01(\x05\x12\x11\n\tnTurnover\x18\x08 \x01(\x03\x12\x0f\n\x07nBSFlag\x18\t \x01(\x05\x12\x13\n\x0b\x63hOrderKind\x18\n \x01(\x0c\x12\x16\n\x0e\x63hFunctionCode\x18\x0b \x01(\t\x12\x11\n\tnAskOrder\x18\x0c \x01(\x05\x12\x11\n\tnBidOrder\x18\r \x01(\x05\x12\x12\n\nnLocalTime\x18\x0e \x01(\x05\"\xf3\x01\n\x05Order\x12\x12\n\nszWindCode\x18\x01 \x01(\t\x12\x0e\n\x06szCode\x18\x02 \x01(\t\x12\x12\n\nnActionDay\x18\x03 \x01(\x05\x12\r\n\x05nTime\x18\x04 \x01(\x05\x12\x0e\n\x06nOrder\x18\x05 \x01(\x05\x12\x0e\n\x06nPrice\x18\x06 \x01(\x03\x12\x0f\n\x07nVolume\x18\x07 \x01(\x05\x12\x13\n\x0b\x63hOrderKind\x18\x08 \x01(\x0c\x12\x16\n\x0e\x63hFunctionCode\x18\t \x01(\t\x12\x0f\n\x07nBroker\x18\n \x01(\x05\x12\x10\n\x08\x63hStatus\x18\x0b \x01(\t\x12\x0e\n\x06\x63hFlag\x18\x0c \x01(\t\x12\x12\n\nnLocalTime\x18\r \x01(\x05\"\xbc\x01\n\nOrderQueue\x12\x12\n\nszWindCode\x18\x01 \x01(\t\x12\x0e\n\x06szCode\x18\x02 \x01(\t\x12\x12\n\nnActionDay\x18\x03 \x01(\x05\x12\r\n\x05nTime\x18\x04 \x01(\x05\x12\r\n\x05nSide\x18\x05 \x01(\x05\x12\x0e\n\x06nPrice\x18\x06 \x01(\x03\x12\x0f\n\x07nOrders\x18\x07 \x01(\x05\x12\x10\n\x08nABItems\x18\x08 \x01(\x05\x12\x11\n\tnABVolume\x18\t \x03(\x05\x12\x12\n\nnLocalTime\x18\n \x01(\x05\"\xd5\x03\n\nMarketData\x12\'\n\x05stock\x18\x01 \x01(\x0b\x32\x16.quotation.stock.StockH\x00\x12)\n\x06\x66uture\x18\x02 \x01(\x0b\x32\x17.quotation.stock.FutureH\x00\x12\'\n\x05index\x18\x03 \x01(\x0b\x32\x16.quotation.stock.IndexH\x00\x12\x33\n\x0btransaction\x18\x04 \x01(\x0b\x32\x1c.quotation.stock.TransactionH\x00\x12\'\n\x05order\x18\x05 \x01(\x0b\x32\x16.quotation.stock.OrderH\x00\x12,\n\x05queue\x18\x06 \x01(\x0b\x32\x1b.quotation.stock.OrderQueueH\x00\x12)\n\x06option\x18\x07 \x01(\x0b\x32\x17.quotation.stock.OptionH\x00\x12.\n\x04type\x18\x08 \x01(\x0e\x32 .quotation.stock.MarketData.Type\"[\n\x04Type\x12\t\n\x05STOCK\x10\x00\x12\t\n\x05INDEX\x10\x01\x12\n\n\x06\x46UTURE\x10\x02\x12\x0f\n\x0bTRANSACTION\x10\x03\x12\t\n\x05ORDER\x10\x04\x12\t\n\x05QUEUE\x10\x05\x12\n\n\x06OPTION\x10\x06\x42\x06\n\x04\x64\x61tab\x06proto3')
 )
 
 
@@ -54,11 +54,15 @@ _MARKETDATA_TYPE = _descriptor.EnumDescriptor(
       name='QUEUE', index=5, number=5,
       serialized_options=None,
       type=None),
+    _descriptor.EnumValueDescriptor(
+      name='OPTION', index=6, number=6,
+      serialized_options=None,
+      type=None),
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=3487,
-  serialized_end=3566,
+  serialized_start=4351,
+  serialized_end=4442,
 )
 _sym_db.RegisterEnumDescriptor(_MARKETDATA_TYPE)
 
@@ -860,6 +864,310 @@ _FUTURE = _descriptor.Descriptor(
 )
 
 
+_OPTION = _descriptor.Descriptor(
+  name='Option',
+  full_name='quotation.stock.Option',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='code', full_name='quotation.stock.Option.code', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='exchange', full_name='quotation.stock.Option.exchange', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='tradeDay', full_name='quotation.stock.Option.tradeDay', index=2,
+      number=3, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='updateTime', full_name='quotation.stock.Option.updateTime', index=3,
+      number=4, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='updateMilliSecond', full_name='quotation.stock.Option.updateMilliSecond', index=4,
+      number=5, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='lastPrice', full_name='quotation.stock.Option.lastPrice', index=5,
+      number=6, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='volume', full_name='quotation.stock.Option.volume', index=6,
+      number=7, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='openPrice', full_name='quotation.stock.Option.openPrice', index=7,
+      number=8, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='highestPrice', full_name='quotation.stock.Option.highestPrice', index=8,
+      number=9, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='lowestPrice', full_name='quotation.stock.Option.lowestPrice', index=9,
+      number=10, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='closePrice', full_name='quotation.stock.Option.closePrice', index=10,
+      number=11, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='suttlementPrice', full_name='quotation.stock.Option.suttlementPrice', index=11,
+      number=12, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='limitUpPrice', full_name='quotation.stock.Option.limitUpPrice', index=12,
+      number=13, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='limitDownPrice', full_name='quotation.stock.Option.limitDownPrice', index=13,
+      number=14, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='turnover', full_name='quotation.stock.Option.turnover', index=14,
+      number=15, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='openInterest', full_name='quotation.stock.Option.openInterest', index=15,
+      number=16, type=3, cpp_type=2, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='preClosePrice', full_name='quotation.stock.Option.preClosePrice', index=16,
+      number=17, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='preSettlementPrice', full_name='quotation.stock.Option.preSettlementPrice', index=17,
+      number=18, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='preOpenInterest', full_name='quotation.stock.Option.preOpenInterest', index=18,
+      number=19, type=3, cpp_type=2, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='actionDay', full_name='quotation.stock.Option.actionDay', index=19,
+      number=20, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='askPrice1', full_name='quotation.stock.Option.askPrice1', index=20,
+      number=21, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='askPrice2', full_name='quotation.stock.Option.askPrice2', index=21,
+      number=22, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='askPrice3', full_name='quotation.stock.Option.askPrice3', index=22,
+      number=23, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='askPrice4', full_name='quotation.stock.Option.askPrice4', index=23,
+      number=24, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='askPrice5', full_name='quotation.stock.Option.askPrice5', index=24,
+      number=25, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='askVolume1', full_name='quotation.stock.Option.askVolume1', index=25,
+      number=26, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='askVolume2', full_name='quotation.stock.Option.askVolume2', index=26,
+      number=27, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='askVolume3', full_name='quotation.stock.Option.askVolume3', index=27,
+      number=28, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='askVolume4', full_name='quotation.stock.Option.askVolume4', index=28,
+      number=29, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='askVolume5', full_name='quotation.stock.Option.askVolume5', index=29,
+      number=30, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='bidPrice1', full_name='quotation.stock.Option.bidPrice1', index=30,
+      number=31, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='bidPrice2', full_name='quotation.stock.Option.bidPrice2', index=31,
+      number=32, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='bidPrice3', full_name='quotation.stock.Option.bidPrice3', index=32,
+      number=33, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='bidPrice4', full_name='quotation.stock.Option.bidPrice4', index=33,
+      number=34, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='bidPrice5', full_name='quotation.stock.Option.bidPrice5', index=34,
+      number=35, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='bidVolume1', full_name='quotation.stock.Option.bidVolume1', index=35,
+      number=36, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='bidVolume2', full_name='quotation.stock.Option.bidVolume2', index=36,
+      number=37, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='bidVolume3', full_name='quotation.stock.Option.bidVolume3', index=37,
+      number=38, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='bidVolume4', full_name='quotation.stock.Option.bidVolume4', index=38,
+      number=39, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='bidVolume5', full_name='quotation.stock.Option.bidVolume5', index=39,
+      number=40, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=2182,
+  serialized_end=3000,
+)
+
+
 _INDEX = _descriptor.Descriptor(
   name='Index',
   full_name='quotation.stock.Index',
@@ -970,8 +1278,8 @@ _INDEX = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=2182,
-  serialized_end=2445,
+  serialized_start=3003,
+  serialized_end=3266,
 )
 
 
@@ -1092,8 +1400,8 @@ _TRANSACTION = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=2448,
-  serialized_end=2720,
+  serialized_start=3269,
+  serialized_end=3541,
 )
 
 
@@ -1207,8 +1515,8 @@ _ORDER = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=2723,
-  serialized_end=2966,
+  serialized_start=3544,
+  serialized_end=3787,
 )
 
 
@@ -1301,8 +1609,8 @@ _ORDERQUEUE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=2969,
-  serialized_end=3157,
+  serialized_start=3790,
+  serialized_end=3978,
 )
 
 
@@ -1356,8 +1664,15 @@ _MARKETDATA = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='type', full_name='quotation.stock.MarketData.type', index=6,
-      number=7, type=14, cpp_type=8, label=1,
+      name='option', full_name='quotation.stock.MarketData.option', index=6,
+      number=7, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='type', full_name='quotation.stock.MarketData.type', index=7,
+      number=8, type=14, cpp_type=8, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -1378,8 +1693,8 @@ _MARKETDATA = _descriptor.Descriptor(
       name='data', full_name='quotation.stock.MarketData.data',
       index=0, containing_type=None, fields=[]),
   ],
-  serialized_start=3160,
-  serialized_end=3574,
+  serialized_start=3981,
+  serialized_end=4450,
 )
 
 _MARKETDATA.fields_by_name['stock'].message_type = _STOCK
@@ -1388,6 +1703,7 @@ _MARKETDATA.fields_by_name['index'].message_type = _INDEX
 _MARKETDATA.fields_by_name['transaction'].message_type = _TRANSACTION
 _MARKETDATA.fields_by_name['order'].message_type = _ORDER
 _MARKETDATA.fields_by_name['queue'].message_type = _ORDERQUEUE
+_MARKETDATA.fields_by_name['option'].message_type = _OPTION
 _MARKETDATA.fields_by_name['type'].enum_type = _MARKETDATA_TYPE
 _MARKETDATA_TYPE.containing_type = _MARKETDATA
 _MARKETDATA.oneofs_by_name['data'].fields.append(
@@ -1408,8 +1724,12 @@ _MARKETDATA.fields_by_name['order'].containing_oneof = _MARKETDATA.oneofs_by_nam
 _MARKETDATA.oneofs_by_name['data'].fields.append(
   _MARKETDATA.fields_by_name['queue'])
 _MARKETDATA.fields_by_name['queue'].containing_oneof = _MARKETDATA.oneofs_by_name['data']
+_MARKETDATA.oneofs_by_name['data'].fields.append(
+  _MARKETDATA.fields_by_name['option'])
+_MARKETDATA.fields_by_name['option'].containing_oneof = _MARKETDATA.oneofs_by_name['data']
 DESCRIPTOR.message_types_by_name['Stock'] = _STOCK
 DESCRIPTOR.message_types_by_name['Future'] = _FUTURE
+DESCRIPTOR.message_types_by_name['Option'] = _OPTION
 DESCRIPTOR.message_types_by_name['Index'] = _INDEX
 DESCRIPTOR.message_types_by_name['Transaction'] = _TRANSACTION
 DESCRIPTOR.message_types_by_name['Order'] = _ORDER
@@ -1430,6 +1750,13 @@ Future = _reflection.GeneratedProtocolMessageType('Future', (_message.Message,),
   # @@protoc_insertion_point(class_scope:quotation.stock.Future)
   ))
 _sym_db.RegisterMessage(Future)
+
+Option = _reflection.GeneratedProtocolMessageType('Option', (_message.Message,), dict(
+  DESCRIPTOR = _OPTION,
+  __module__ = 'quotation_pb2'
+  # @@protoc_insertion_point(class_scope:quotation.stock.Option)
+  ))
+_sym_db.RegisterMessage(Option)
 
 Index = _reflection.GeneratedProtocolMessageType('Index', (_message.Message,), dict(
   DESCRIPTOR = _INDEX,

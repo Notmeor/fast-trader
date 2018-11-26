@@ -82,7 +82,7 @@ class Dispatcher(object):
                 mail = self._market_queue.get(block=False)
                 self.dispatch(mail)
             except queue.Empty:
-                pass
+                time.sleep(0.0001)
 
     def bind(self, handler_id, handler, override=False):
         if not override and handler_id in self._handlers:
@@ -244,16 +244,9 @@ class DTP(object):
                 report_body = self._sync_req_resp_channel.recv(
                     flags=zmq.NOBLOCK)
 
-                try:
-                    ss = self._sync_req_resp_channel.recv(
-                        flags=zmq.NOBLOCK)
-                    print('ss:', ss)
-                except:
-                    pass
-
             except zmq.ZMQError as e:
-                time.sleep(0.1)
-                waited_time += 0.1
+                time.sleep(0.0001)
+                waited_time += 0.0001
 
             else:
                 header = dtp_struct.ResponseHeader()
@@ -292,7 +285,7 @@ class DTP(object):
         if sync:
             return mail
         return self.dispatcher.put(mail)
-
+    
     def handle_async_request(self, mail):
 
         header = dtp_struct.RequestHeader()

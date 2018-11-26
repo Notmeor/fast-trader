@@ -116,6 +116,48 @@ message Future{
     int32  bidVolume5 = 40;                             //买五量
 }
 
+message Option{
+    string code = 1;                                    //合约代码
+    string exchange = 2;                                //交易所代码
+    string tradeDay = 3;                                //交易日
+    string updateTime = 4;                              //行情更新时间
+    int32  updateMilliSecond = 5;                       //行情更新毫秒
+    double lastPrice = 6;                               //成交价格
+    int32  volume = 7;                                  //成交量
+    double openPrice = 8;                               //开盘价格
+    double highestPrice = 9 ;                           //交易日最高价格
+    double lowestPrice  = 10;                           //交易日最低价格
+    double closePrice = 11;                             //收盘价，盘中无效
+    double suttlementPrice = 12;                        //交易日结算价格，盘中无效
+    double limitUpPrice = 13;                           //交易日合约涨停价格
+    double limitDownPrice = 14;                         //交易日合约跌停价格
+    double turnover = 15;                               //成交额
+    int64  openInterest = 16;                           //持仓量
+    double preClosePrice = 17;                          //昨收盘价格
+    double preSettlementPrice = 18;                     //昨结算价格
+    int64  preOpenInterest = 19;                        //昨持仓量
+    string actionDay = 20;                              //业务日期
+    double askPrice1 = 21;                              //卖一价
+    double askPrice2 = 22;                              //卖二价
+    double askPrice3 = 23;                              //卖三价
+    double askPrice4 = 24;                              //卖四价
+    double askPrice5 = 25;                              //卖五价
+    int32  askVolume1 = 26;                             //卖一量
+    int32  askVolume2 = 27;                             //卖二量
+    int32  askVolume3 = 28;                             //卖三量
+    int32  askVolume4 = 29;                             //卖四量
+    int32  askVolume5 = 30;                             //卖五量
+    double bidPrice1 = 31;                              //买一价
+    double bidPrice2 = 32;                              //买二价
+    double bidPrice3 = 33;                              //买三价
+    double bidPrice4 = 34;                              //买四价
+    double bidPrice5 = 35;                              //买五价
+    int32  bidVolume1 = 36;                             //买一量
+    int32  bidVolume2 = 37;                             //买二量
+    int32  bidVolume3 = 38;                             //买三量
+    int32  bidVolume4 = 39;                             //买四量
+    int32  bidVolume5 = 40;                             //买五量
+}
 
 message Index
 {
@@ -194,6 +236,7 @@ message MarketData
 		Transaction transaction	= 4;
 		Order order            	= 5;
 		OrderQueue queue     	= 6;
+		Option option			= 7;
 	}
 	enum Type{
 		STOCK       = 0;
@@ -202,6 +245,7 @@ message MarketData
 		TRANSACTION = 3;
 		ORDER       = 4;
 		QUEUE       = 5;
+		OPTION		= 6;
 	}
-	Type type = 7;
+	Type type = 8;
 }
