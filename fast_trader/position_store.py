@@ -4,6 +4,7 @@
 策略历史仓位记录
 """
 
+import os
 import threading
 import sqlite3
 
@@ -105,12 +106,14 @@ class SqliteStore(object):
 
         cursor = self._conn.cursor()
         return cursor.execute(statement).fetchall()
-    
+
     def read_latest(self, query):
         query_str = self._format_condition(query)
-        statement = ("SELECT {fields} FROM {table} WHERE ID in" +
-                    "(SELECT MAX(ID) FROM {table} WHERE {con} GROUP BY code)").format(
-            fields=','.join(self.fields), 
+        statement = (
+            "SELECT {fields} FROM {table} WHERE ID in" +
+            "(SELECT MAX(ID) FROM {table} WHERE {con} GROUP BY code)"
+        ).format(
+            fields=','.join(self.fields),
             con=query_str,
             table=self.table_name)
 
@@ -167,9 +170,11 @@ class SqlitePositionStore(PositionStore):
         use differenct sqlite connection for each thread
         """
         tid = threading.get_ident()
+        # use absolute path
+        db_path = os.path.join(os.path.dirname(__file__), 'sqlite3')
         if tid not in self._stores:
             self._stores[tid] = SqliteStore(
-                db_name='sqlite3',
+                db_name=db_path,
                 table_name='positions',
                 fields=self.fields)
         return self._stores[tid]
