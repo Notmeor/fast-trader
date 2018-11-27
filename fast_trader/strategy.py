@@ -371,7 +371,7 @@ class Strategy(object):
         """
         pass
 
-    def on_trade(self, msg):
+    def _on_trade(self, msg):
         """
         成交回报
         """
@@ -387,9 +387,15 @@ class Strategy(object):
             # 更新本地持仓记录
             self.update_position(trade)
 
-            self.on_trade_tmp(trade)
+            self.on_trade(trade)
 
-    def on_order(self, msg):
+    def on_trade(self, data):
+        """
+        用户策略覆盖此方法以处理成交回报
+        """
+        pass
+
+    def _on_order(self, msg):
         """
         订单回报
         """
@@ -399,33 +405,42 @@ class Strategy(object):
             order_detail = self._orders[original_id]
             order_detail.update(order)
 
-        self.on_order_tmp(order)
+        self.on_order(order)
 
-    def on_batch_order_submission(self, msg):
+    def on_order(self, data):
+        """
+        用户策略覆盖此方法以处理委托回报
+        """
+        pass
+
+    def _on_batch_order_submission(self, msg):
         """
         批量委托响应
         """
         pass
 
-    def on_order_query(self, orders):
+    def _on_order_query(self, orders):
         """
         报单查询
         """
         pass
 
-    def on_order_cancelation_submission(self, msg):
+    def _on_order_cancelation_submission(self, msg):
         """
         撤单提交响应
         """
         pass
 
-    def on_order_cancelation(self, msg):
+    def _on_order_cancelation(self, msg):
         """
         撤单确认回报
         """
+        self.on_order_cancellation(msg)
+
+    def on_order_cancelation(self, msg):
         pass
 
-    def on_compliance_report(self, report):
+    def _on_compliance_report(self, report):
         """
         风控回报
         """
@@ -538,7 +553,9 @@ class Strategy(object):
 
 
 class StrategyFactory:
-
+    """
+    演示策略实例化流程
+    """
     def __init__(self):
         # 用于 trader 与 dtp通道 以及 策略实例 间的消息分发
         # 将所有行情数据与柜台回报在同一个线程中进行分发，实现策略的同步执行（无需加锁）
@@ -562,30 +579,3 @@ class StrategyFactory:
         strategy.set_market(self.market)
 
         return strategy
-
-def get_strategy_instance(MyStrategyCls, trader_id, strategy_id):
-    """
-    策略实例化流程演示
-    """
-
-    # 用于 trader 与 dtp通道 以及 策略实例 间的消息分发
-    # 将所有行情数据与柜台回报在同一个线程中进行分发，实现策略的同步执行（无需加锁）
-    dispatcher = Dispatcher()
-
-    # dtp通道
-    dtp = DTP(dispatcher)
-
-    # 提供交易接口
-    trader = Trader(dispatcher, dtp, trader_id=trader_id)
-
-    market = Market()
-
-    # 策略实例
-    strategy = MyStrategyCls(number)
-
-    strategy.set_dispatcher(dispatcher)
-    strategy.set_trader(trader)
-
-    strategy.set_market(market)
-
-    return strategy
