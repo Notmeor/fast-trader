@@ -126,18 +126,18 @@ def int2datetime(n_date=None, n_time=None, utc=False):
 
 class _IDPool:
     """
-    为每个不同的trader与strategy实例组合分配不同的id段
+    为每个不同的strategy与trader实例组合分配不同的id段
     """
     def __init__(self, max_int=2147483647,
-                 max_traders=10,
-                 max_strategies_per_trader=10):
+                 max_strategies=10,
+                 max_traders_per_strategy=10):
         self.max_int = max_int
-        self.max_traders = max_traders
-        self.max_strategies_per_trader = max_strategies_per_trader
+        self.max_strategies = max_strategies
+        self.max_traders_per_strategy = max_traders_per_strategy
 
+        self.trader_ranges = {}
         self.trader_reserves = {}
         self.strategy_reserves = {}
-        self.strategy_ranges = {}
         self.slice()
 
     def time_trim(func):
@@ -181,55 +181,54 @@ class _IDPool:
 
     def slice(self):
 
-        trader_ranges, sys_reserve = self.slice_range(
-            range(1, self.max_int + 1), self.max_traders)
+        strategy_ranges, sys_reserve = self.slice_range(
+            range(1, self.max_int + 1), self.max_strategies)
 
-        self.trader_ranges = {i: v for i, v in enumerate(trader_ranges)}
+        self.strategy_ranges = {i: v for i, v in enumerate(strategy_ranges)}
         self.sys_reserve = sys_reserve
 
-    def get_strategy_ranges_and_reserves(self, trader_id):
-        trader_range = self.trader_ranges[trader_id]
+    def get_trader_ranges_and_reserves(self, strategy_id):
+        strategy_range = self.strategy_ranges[strategy_id]
+        print('strategy_range', strategy_range)
 
         ranges, reserve = self.slice_range(
-            trader_range, self.max_strategies_per_trader)
+            strategy_range, self.max_traders_per_strategy)
+        print('ranges', ranges)
 
-        strategy_ranges = {(trader_id, i): v[:-1000]
+        trader_ranges = {(strategy_id, i): v[:-1000]
                            for i, v in enumerate(ranges)}
-        strategy_reserves = {(trader_id, i): v[-1000:]
+        trader_reserves = {(strategy_id, i): v[-1000:]
                              for i, v in enumerate(ranges)}
 
-        self.strategy_ranges.update(strategy_ranges)
-        self.strategy_reserves.update(strategy_reserves)
-        self.trader_reserves[trader_id] = reserve
+        self.trader_ranges.update(trader_ranges)
+        self.trader_reserves.update(trader_reserves)
+        self.strategy_reserves[strategy_id] = reserve
 
-        return strategy_ranges, strategy_reserves
+        return trader_ranges, trader_reserves
 
-    def get_strategy_whole_ranges(self, trader_id):
-        return self.get_strategy_ranges_and_reserves(trader_id)[0]
+    def get_strategy_whole_range(self, strategy_id):
+        return self.strategy_ranges[strategy_id]
 
-    @time_trim
-    def get_strategy_ranges(self, trader_id):
-        return self.get_strategy_ranges_and_reserves(trader_id)[0]
+    # @time_trim
+    def get_strategy_range_per_trader(self, strategy_id, trader_id):
+        if (strategy_id, trader_id) not in self.trader_ranges:
+            self.get_trader_ranges_and_reserves(strategy_id)
+        print('trader_ranges', self.trader_ranges)
+        return self.trader_ranges[strategy_id, trader_id]
 
-    @time_trim
-    def get_strategy_range(self, trader_id, strategy_id):
-        if (trader_id, strategy_id) not in self.strategy_ranges:
-            self.get_strategy_ranges_and_reserves(trader_id)
-        return self.strategy_ranges[trader_id, strategy_id]
+    # @time_trim
+    def get_strategy_reserve_per_trader(self, strategy_id, trader_id):
+        if (strategy_id, trader_id) not in self.trader_ranges:
+            self.get_trader_ranges_and_reserves(strategy_id)
+        return self.trader_reserves[strategy_id, trader_id]
 
-    @time_trim
-    def get_strategy_reserve(self, trader_id, strategy_id):
-        if (trader_id, strategy_id) not in self.strategy_reserves:
-            self.get_strategy_ranges_and_reserves(trader_id)
-        return self.strategy_reserves[trader_id, strategy_id]
+    # @time_trim
+    def get_strategy_reserve(self, strategy_id):
+        if strategy_id not in self.strategy_reserves:
+            self.get_trader_ranges_and_reserves(strategy_id)
+        return self.strategy_reserves[strategy_id]
 
-    @time_trim
-    def get_trader_reserve(self, trader_id):
-        if trader_id not in self.trader_reserves:
-            self.get_strategy_ranges_and_reserves(trader_id)
-        return self.trader_reserves[trader_id]
-
-    @time_trim
+    # @time_trim
     def get_sys_reserve(self):
         return self.sys_reserve
 

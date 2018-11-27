@@ -388,11 +388,6 @@ class Trader(object):
         self.trader_id = trader_id
 
         self._started = False
-        self._request_id = 0
-        self._order_original_id = 0
-        self._id_ranges = _id_pool.get_strategy_ranges(self.trader_id)
-        self._id_whole_ranges = _id_pool.get_strategy_whole_ranges(
-            self.trader_id)
 
         self._account = ''
         self._token = ''
@@ -447,13 +442,18 @@ class Trader(object):
         if max_number:
             self._max_number = max_number
 
-    def _generate_initial_id(self, strategy_id):
+    def _generate_initial_id(self, strategy):
         """
         计算初始编号
         """
+        strategy_id = strategy.strategy_id
+        id_range = _id_pool.get_strategy_range_per_trader(
+            strategy_id, self.trader_id)
 
-        # initial_id = self._id_ranges(self.trader_id, strategy_id)[0]
-        id_range = self._id_ranges[self.trader_id, strategy_id]
+        strategy._id_range = id_range
+        strategy._id_whole_range = _id_pool.get_strategy_whole_range(
+            strategy_id)
+
         initial_id = id_range[0]
         self.logger.warning('初始请求编号 策略={} {}'.format(
             strategy_id, initial_id))
@@ -484,11 +484,11 @@ class Trader(object):
     def add_strategy(self, strategy):
         self._strategies.append(strategy)
         self._strategy_dict[strategy.strategy_id] = strategy
-        self._generate_initial_id(strategy.strategy_id)
+        self._generate_initial_id(strategy)
 
     def _check_owner(self, strategy, mail):
 
-        id_range = self._id_whole_ranges[self.trader_id, strategy.strategy_id]
+        id_range = strategy._id_whole_range
 
         if mail.header.request_id != '':
 
