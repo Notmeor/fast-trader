@@ -204,6 +204,9 @@ class _IDPool:
 
         return strategy_ranges, strategy_reserves
 
+    def get_strategy_whole_ranges(self, trader_id):
+        return self.get_strategy_ranges_and_reserves(trader_id)[0]
+
     @time_trim
     def get_strategy_ranges(self, trader_id):
         return self.get_strategy_ranges_and_reserves(trader_id)[0]

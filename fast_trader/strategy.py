@@ -117,12 +117,12 @@ class Strategy(object):
     def generate_request_id(self):
         return self.trader.generate_request_id(self._strategy_id)
 
-    def check_owner(self, obj):
+    def _check_owner(self, obj):
         """
         判断该查询响应数据是否属于当前策略
         """
-        id_range = self.trader._id_ranges[self.trader.trader_id,
-                                          self.strategy_id]
+        id_range = self.trader._id_whole_ranges[self.trader.trader_id,
+                                                self.strategy_id]
         return int(obj.order_original_id) in id_range
 
     def _get_all_pages(self, handle):
@@ -158,7 +158,7 @@ class Strategy(object):
         查询报单（同步）
         """
         orders = self._get_all_pages(self.trader.query_orders)
-        orders = [order for order in orders if self.check_owner(order)]
+        orders = [order for order in orders if self._check_owner(order)]
         return orders
 
     def get_trades(self):
@@ -166,7 +166,7 @@ class Strategy(object):
         查询成交（同步）
         """
         trades = self._get_all_pages(self.trader.query_trades)
-        trades = [trade for trade in trades if self.check_owner(trade)]
+        trades = [trade for trade in trades if self._check_owner(trade)]
         return trades
 
     def get_account_positions(self):
@@ -537,23 +537,48 @@ class Strategy(object):
             self.cancel_order(**order)
 
 
-# 用于 trader 与 dtp通道 以及 策略实例 间的消息分发
-# 将所有行情数据与柜台回报压入同一个队列进行分发，实现策略的同步执行（无需加锁）
-dispatcher = Dispatcher()
+class StrategyFactory:
 
-# dtp通道
-dtp = DTP(dispatcher)
+    def __init__(self):
+        # 用于 trader 与 dtp通道 以及 策略实例 间的消息分发
+        # 将所有行情数据与柜台回报在同一个线程中进行分发，实现策略的同步执行（无需加锁）
+        self.dispatcher = Dispatcher()
 
-# 提供交易接口
-trader = Trader(dispatcher, dtp)
+        # dtp通道
+        self.dtp = DTP(self.dispatcher)
 
-market = Market()
+        # 行情通道
+        self.market = Market()
 
+    def generate_strategy(self, StrategyCls, trader_id, strategy_id):
 
-def get_strategy_instance(MyStrategyCls, number):
+        strategy = StrategyCls(strategy_id)
+
+        trader = Trader(self.dispatcher, self.dtp, trader_id)
+        strategy.set_trader(trader)
+
+        strategy.set_dispatcher(self.dispatcher)
+
+        strategy.set_market(self.market)
+
+        return strategy
+
+def get_strategy_instance(MyStrategyCls, trader_id, strategy_id):
     """
     策略实例化流程演示
     """
+
+    # 用于 trader 与 dtp通道 以及 策略实例 间的消息分发
+    # 将所有行情数据与柜台回报在同一个线程中进行分发，实现策略的同步执行（无需加锁）
+    dispatcher = Dispatcher()
+
+    # dtp通道
+    dtp = DTP(dispatcher)
+
+    # 提供交易接口
+    trader = Trader(dispatcher, dtp, trader_id=trader_id)
+
+    market = Market()
 
     # 策略实例
     strategy = MyStrategyCls(number)

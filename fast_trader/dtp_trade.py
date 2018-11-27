@@ -391,6 +391,8 @@ class Trader(object):
         self._request_id = 0
         self._order_original_id = 0
         self._id_ranges = _id_pool.get_strategy_ranges(self.trader_id)
+        self._id_whole_ranges = _id_pool.get_strategy_whole_ranges(
+            self.trader_id)
 
         self._account = ''
         self._token = ''
@@ -484,9 +486,9 @@ class Trader(object):
         self._strategy_dict[strategy.strategy_id] = strategy
         self._generate_initial_id(strategy.strategy_id)
 
-    def _is_assignee(self, strategy, mail):
+    def _check_owner(self, strategy, mail):
 
-        id_range = self._id_ranges[self.trader_id, strategy.strategy_id]
+        id_range = self._id_whole_ranges[self.trader_id, strategy.strategy_id]
 
         if mail.header.request_id != '':
 
@@ -512,7 +514,7 @@ class Trader(object):
             self.on_logout(mail)
         else:
             for ea in self._strategies:
-                if self._is_assignee(ea, mail):
+                if self._check_owner(ea, mail):
                     getattr(ea, dtp_api_id.RSP_API_NAMES[api_id])(mail)
 
     @property
