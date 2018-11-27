@@ -121,7 +121,8 @@ class Strategy(object):
         """
         判断该查询响应数据是否属于当前策略
         """
-        id_range = self.trader._id_ranges[self.strategy_id]
+        id_range = self.trader._id_ranges[self.trader.trader_id,
+                                          self.strategy_id]
         return int(obj.order_original_id) in id_range
 
     def _get_all_pages(self, handle):

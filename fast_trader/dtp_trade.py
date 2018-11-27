@@ -390,6 +390,7 @@ class Trader(object):
         self._started = False
         self._request_id = 0
         self._order_original_id = 0
+        self._id_ranges = _id_pool.get_strategy_ranges(self.trader_id)
 
         self._account = ''
         self._token = ''
@@ -450,7 +451,7 @@ class Trader(object):
         """
 
         # initial_id = self._id_ranges(self.trader_id, strategy_id)[0]
-        id_range = _id_pool.get_range(self.trader_id, strategy_id)
+        id_range = self._id_ranges[self.trader_id, strategy_id]
         initial_id = id_range[0]
         self.logger.warning('初始请求编号 策略={} {}'.format(
             strategy_id, initial_id))
@@ -485,8 +486,7 @@ class Trader(object):
 
     def _is_assignee(self, strategy, mail):
 
-        id_range = _id_pool.get_range(self.trader_id,
-                                           strategy.strategy_id)
+        id_range = self._id_ranges[self.trader_id, strategy.strategy_id]
 
         if mail.header.request_id != '':
 
