@@ -4,6 +4,7 @@ import os
 import time
 import datetime
 import functools
+import math
 
 from google.protobuf.message import Message
 from google.protobuf.pyext._message import RepeatedCompositeContainer
@@ -121,3 +122,100 @@ def int2datetime(n_date=None, n_time=None, utc=False):
     if utc:
         return dt.astimezone(datetime.timezone.utc)
     return dt
+
+
+class _IDPool:
+    """
+    为每个不同的trader与strategy实例组合分配不同的id段
+    """
+    def __init__(self, max_int=2147483647,
+                 max_traders=10,
+                 max_strategies_per_trader=10):
+        self.max_int = max_int
+        self.max_traders = max_traders
+        self.max_strategies_per_trader = max_strategies_per_trader
+
+        self.trader_reserves = {}
+        self.strategy_reserves = {}
+        self.strategy_ranges = {}
+        self.slice()
+
+    def time_trim(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kw):
+            rng = func(*args, **kw)
+            rng_len = len(rng)
+            now = datetime.datetime.now()
+            midnight = datetime.datetime(*now.timetuple()[:3])
+            checkpoint = (now - midnight).seconds / 86400
+            expired = math.ceil(checkpoint * rng_len)
+            return rng[expired+1:]
+        return wrapper
+
+    @staticmethod
+    def slice_range(rng, n):
+        # reserve some values
+        reserve_cnt = 1000 + len(rng) % n
+        new_rng = rng[:-reserve_cnt]
+        reserve = rng[-reserve_cnt:]
+        range_len = int(len(new_rng) / n)
+
+        if range_len < reserve_cnt:
+            raise ValueError('Range to narrow')
+
+        ranges = []
+        i = 0
+        for _ in new_rng[::range_len]:
+            j = i + range_len
+            ranges.append(new_rng[i:j])
+            i = j
+
+        return ranges, reserve
+
+    def slice(self):
+
+        trader_ranges, sys_reserve = self.slice_range(
+            range(1, self.max_int + 1), self.max_traders)
+
+        self.trader_ranges = {i: v for i, v in enumerate(trader_ranges)}
+        self.sys_reserve = sys_reserve
+
+    def _get_range_and_reserve(self, trader_id, strategy_id):
+        trader_range = self.trader_ranges[trader_id]
+
+        if (trader_id, strategy_id) not in self.strategy_ranges:
+            ranges, reserve = self.slice_range(
+                trader_range, self.max_strategies_per_trader)
+
+            strategy_ranges = {(trader_id, i): v[:-1000]
+                               for i, v in enumerate(ranges)}
+            strategy_reserves = {(trader_id, i): v[-1000:]
+                                 for i, v in enumerate(ranges)}
+
+            self.strategy_ranges.update(strategy_ranges)
+            self.strategy_reserves.update(strategy_reserves)
+            self.trader_reserves[trader_id] = reserve
+
+        return (self.strategy_ranges[trader_id, strategy_id],
+                self.strategy_reserves[trader_id, strategy_id])
+
+    @time_trim
+    def get_range(self, trader_id, strategy_id):
+        return self._get_range_and_reserve(trader_id, strategy_id)[0]
+
+    @time_trim
+    def get_reserve(self, trader_id, strategy_id):
+        return self._get_range_and_reserve(trader_id, strategy_id)[1]
+
+    @time_trim
+    def get_trader_reserve(self, trader_id):
+        if trader_id not in self.trader_reserves:
+            self._get_range_and_reserve(trader_id, 0)
+        return self.trader_reserves[trader_id]
+
+    @time_trim
+    def get_sys_reserve(self):
+        return self.sys_reserve
+
+# TODO: configurable
+_id_pool = _IDPool()

@@ -19,7 +19,7 @@ from fast_trader.dtp import type_pb2 as dtp_type
 from fast_trader.dtp import ext_api_pb2 as dtp_struct_
 from fast_trader.dtp import ext_type_pb2 as dtp_type_
 
-from fast_trader.utils import timeit, message2dict, load_config, Mail
+from fast_trader.utils import timeit, message2dict, load_config, Mail, _id_pool
 from fast_trader.logging import setup_logging
 
 from concurrent.futures import ProcessPoolExecutor
@@ -285,7 +285,7 @@ class DTP(object):
         if sync:
             return mail
         return self.dispatcher.put(mail)
-    
+
     def handle_async_request(self, mail):
 
         header = dtp_struct.RequestHeader()
@@ -380,10 +380,12 @@ class Order(object):
 
 class Trader(object):
 
-    def __init__(self, dispatcher=None, broker=None):
+    def __init__(self, dispatcher=None, broker=None, trader_id=0):
 
         self.dispatcher = dispatcher
         self.broker = broker
+
+        self.trader_id = trader_id
 
         self._started = False
         self._request_id = 0
@@ -392,10 +394,6 @@ class Trader(object):
         self._account = ''
         self._token = ''
         self._logined = False
-
-        self._number = 1
-        self._max_number = 10
-        self._id_ranges = {}
 
         self._position_results = []
         self._trade_results = []
@@ -420,8 +418,6 @@ class Trader(object):
             self.broker = DTP(self.dispatcher)
 
         self._bind()
-
-        self._generate_initial_id()
 
         self._started = True
 
@@ -448,34 +444,19 @@ class Trader(object):
         if max_number:
             self._max_number = max_number
 
-    def _generate_initial_id(self):
+    def _generate_initial_id(self, strategy_id):
         """
         计算初始编号
         """
-        max_int = 2147483647
-        total_range = range(1, max_int + 1)
-        range_len = int(max_int / self._max_number)
 
-        for strategy in self._strategies:
-            number = strategy.strategy_id
+        # initial_id = self._id_ranges(self.trader_id, strategy_id)[0]
+        id_range = _id_pool.get_range(self.trader_id, strategy_id)
+        initial_id = id_range[0]
+        self.logger.warning('初始请求编号 策略={} {}'.format(
+            strategy_id, initial_id))
 
-            if number > self._max_number:
-                raise Exception('Expect {} strategies at most.'
-                                .format(self._max_number))
-
-            no = number - 1
-            cur_range = total_range[no * range_len: (no + 1) * range_len]
-
-            self._id_ranges[number] = cur_range
-
-            now = datetime.datetime.now()
-            midnight = datetime.datetime(*now.timetuple()[:3])
-            checkpoint = (now - midnight).seconds
-            initial_id = int(checkpoint / 86400 * range_len + cur_range[0])
-            self.logger.warning('初始请求编号 策略={} {}'.format(number, initial_id))
-
-            setattr(self, '_order_id_{}'.format(number), initial_id)
-            setattr(self, '_request_id_{}'.format(number), initial_id)
+        setattr(self, '_order_id_{}'.format(strategy_id), initial_id)
+        setattr(self, '_request_id_{}'.format(strategy_id), initial_id)
 
     def generate_request_id(self, number=1):
         """
@@ -500,10 +481,12 @@ class Trader(object):
     def add_strategy(self, strategy):
         self._strategies.append(strategy)
         self._strategy_dict[strategy.strategy_id] = strategy
+        self._generate_initial_id(strategy.strategy_id)
 
     def _is_assignee(self, strategy, mail):
 
-        id_range = self._id_ranges[strategy.strategy_id]
+        id_range = _id_pool.get_range(self.trader_id,
+                                           strategy.strategy_id)
 
         if mail.header.request_id != '':
 

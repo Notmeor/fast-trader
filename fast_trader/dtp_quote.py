@@ -96,7 +96,7 @@ class QuoteFeed(MarketFeed):
             self.logger.warning('当前订阅列表为空!')
             return
 
-        if self.is_running:
+        if self.is_running():
             return
 
         threading.Thread(target=self._start).start()
@@ -167,6 +167,7 @@ if __name__ == '__main__':
     class QuoteFeed_(QuoteFeed):
 
         def on_data(self, data):
+            print(data)
             l0.append(data)
 
     md = QuoteFeed_('tick_feed')

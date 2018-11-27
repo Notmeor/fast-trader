@@ -304,7 +304,7 @@ class Strategy(object):
         try:
             dispatcher.bind('{}_rsp'.format(name),
                             self.market.on_quote_message)
-            
+
             datasource.add_listener(dispatcher)
 
         except Exception as e:
