@@ -54,7 +54,6 @@ class MarketFeed(object):
 
         while self._running:
             ret = self._socket.recv()
-
             data = self._parse_data(ret)
             if not isinstance(data, str):
                 self.on_data(data)
@@ -66,35 +65,29 @@ class MarketFeed(object):
 
 class QuoteFeed(MarketFeed):
 
-    # 逐笔成交
-    TradeFeed = 'trade_feed'
-    # 指数行情
-    IndexFeed = 'index_feed'
-    # 快照
-    TickFeed = 'tick_feed'
-    # 逐笔报单
-    OrderFeed = 'order_feed'
-    # 成交队列
-    QueueFeed = 'queue_feed'
+    name = 'undefined'
 
-    def __init__(self, name, *args, **kw):
+    def __init__(self, *args, **kw):
 
         super().__init__(*args, **kw)
 
-        self.name = name
-        self.url = conf['{}_channel'.format(name)]
+        self.url = conf['{}_channel'.format(self.name)]
         self.subscribed_codes = []
+        self.subscribed_all = False
         self._listeners = []
         self._handlers = []
 
         self.logger = logging.getLogger(
-            'fast_trader.dtp_quote.{}'.format(name))
+            'fast_trader.dtp_quote.{}'.format(self.name))
 
     def start(self):
 
         if not self.subscribed_codes:
-            self.logger.warning('当前订阅列表为空!')
-            return
+            if self.subscribed_all:
+                self.logger.warning('已订阅全市场{}行情!'.format(self.name))
+            else:
+                self.logger.warning('当前订阅列表为空!')
+                return
 
         if self.is_running():
             return
@@ -107,7 +100,8 @@ class QuoteFeed(MarketFeed):
             'index_feed': 'index',
             'tick_feed': 'snapshot',
             'order_feed': 'order',
-            'queue_feed': 'order_queue'
+            'queue_feed': 'order_queue',
+            'options_feed': 'snapshot',
         }[self.name]
         topic = '{}({})'.format(kind, code)
         return topic
@@ -129,6 +123,7 @@ class QuoteFeed(MarketFeed):
 
     def subscribe_all(self):
         self.sub('')
+        self.subscribed_all = True
 
     def add_listener(self, listener):
         self._listeners.append(listener)
@@ -141,6 +136,48 @@ class QuoteFeed(MarketFeed):
                 api_type='rsp',
                 content=data
             ))
+
+
+class TradeFeed(QuoteFeed):
+    """
+    逐笔成交
+    """
+    name = 'trade_feed'
+
+
+class IndexFeed(QuoteFeed):
+    """
+    指数行情
+    """
+    name = 'index_feed'
+
+
+class TickFeed(QuoteFeed):
+    """
+    快照行情
+    """
+    name = 'tick_feed'
+
+
+class OrderFeed(QuoteFeed):
+    """
+    逐笔报单
+    """
+    name = 'order_feed'
+
+
+class QueueFeed(QuoteFeed):
+    """
+    成交队列
+    """
+    name = 'queue_feed'
+
+
+class OptionsFeed(QuoteFeed):
+    """
+    期权行情
+    """
+    name = 'options_feed'
 
 
 def get_pb_fields(proto_type):
@@ -165,11 +202,11 @@ if __name__ == '__main__':
 
     l0 = []
     class QuoteFeed_(QuoteFeed):
-
+        name = 'options_feed'
         def on_data(self, data):
-            print(data)
             l0.append(data)
 
-    md = QuoteFeed_('tick_feed')
-    md.subscribe(['002230', '300014'])
+    md = QuoteFeed_()
+    md.subscribe(['10001313'])
+    md.subscribe_all()
     md.start()
