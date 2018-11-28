@@ -267,7 +267,7 @@ class DTP(object):
                 mail['header'] = message2dict(header)
                 mail['body'] = message2dict(body)
 
-                self.logger.info(mail)
+                self.logger.info(mail.header)
 
                 if sync:
                     return mail
