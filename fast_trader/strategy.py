@@ -433,7 +433,7 @@ class Strategy(object):
         """
         撤单确认回报
         """
-        self.on_order_cancellation(msg)
+        self.on_order_cancelation(msg)
 
     def on_order_cancelation(self, msg):
         pass
