@@ -196,11 +196,17 @@ class Strategy(object):
         last_pos = self.get_position_by_code(code)
 
         last_quantity = last_pos['quantity']
+        available_quantity = last_pos['available_quantity']
         last_cost_price = last_pos['cost_price'] or 0.
 
         _sign = 1 if order_side == dtp_type.ORDER_SIDE_BUY else -1
 
         quantity = fill_quantity * _sign + last_quantity
+
+        # calc available quantity
+        if order_side == dtp_type.ORDER_SIDE_SELL:
+            available_quantity -= fill_quantity
+
         if order_side == dtp_type.ORDER_SIDE_BUY:
             tot_value = (last_quantity * last_cost_price +
                          fill_quantity * float(trade.price))
@@ -215,6 +221,7 @@ class Strategy(object):
                 'exchange': trade.exchange,
                 'code': trade.code,
                 'quantity': quantity,
+                'available_quantity': available_quantity,
                 'cost_price': cost_price,
                 'date': datetime.datetime.now().strftime('%Y%m%d'),
                 'time': trade.fill_time

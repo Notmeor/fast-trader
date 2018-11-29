@@ -189,11 +189,9 @@ class _IDPool:
 
     def get_trader_ranges_and_reserves(self, strategy_id):
         strategy_range = self.strategy_ranges[strategy_id]
-        print('strategy_range', strategy_range)
 
         ranges, reserve = self.slice_range(
             strategy_range, self.max_traders_per_strategy)
-        print('ranges', ranges)
 
         trader_ranges = {(strategy_id, i): v[:-1000]
                          for i, v in enumerate(ranges)}
@@ -213,7 +211,6 @@ class _IDPool:
     def get_strategy_range_per_trader(self, strategy_id, trader_id):
         if (strategy_id, trader_id) not in self.trader_ranges:
             self.get_trader_ranges_and_reserves(strategy_id)
-        print('trader_ranges', self.trader_ranges)
         return self.trader_ranges[strategy_id, trader_id]
 
     @time_trim

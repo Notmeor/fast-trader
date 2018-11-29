@@ -6,6 +6,7 @@
 
 import os
 import threading
+import datetime
 import sqlite3
 
 
@@ -67,6 +68,7 @@ class SqliteStore(object):
         self._conn.close()
 
     def __del__(self):
+        # FIXME: use context manager
         self.close()
 
     def assure_table(self, name):
@@ -120,6 +122,12 @@ class SqliteStore(object):
         cursor = self._conn.cursor()
         return cursor.execute(statement).fetchall()
 
+    def read_distinct(self, fields):
+        cursor = self._conn.cursor()
+        ret = cursor.execute("SELECT DISTINCT {} FROM {}".format(
+                ','.join(fields), self.table_name))
+        return ret
+
     @staticmethod
     def _format_assignment(doc):
         s = str(doc)
@@ -160,9 +168,12 @@ class SqlitePositionStore(PositionStore):
     def __init__(self):
 
         self.fields = ['strategy_id', 'exchange', 'code', 'name',
-                       'quantity', 'cost_price', 'date', 'time']
+                       'quantity', 'available_quantity',
+                       'cost_price', 'date', 'time']
 
         self._stores = {}
+
+        self.update_available_quantity()
 
     @property
     def store(self):
@@ -171,7 +182,10 @@ class SqlitePositionStore(PositionStore):
         """
         tid = threading.get_ident()
         # use absolute path
-        db_path = os.path.join(os.path.dirname(__file__), 'sqlite3')
+        try:
+            db_path = os.path.join(os.path.dirname(__file__), 'sqlite3')
+        except NameError:  # so it would work in python shell
+            db_path = os.path.join(os.path.dirname('__file__'), 'sqlite3')
         if tid not in self._stores:
             self._stores[tid] = SqliteStore(
                 db_name=db_path,
@@ -196,6 +210,32 @@ class SqlitePositionStore(PositionStore):
         ret = self.store.read(query, limit=1)
         if ret:
             return ret[-1]
-        failover = {'code': code, 'exchange': exchange, 'cost_price': None,
-                    'quantity': 0, 'date': '19700101', 'time': '00:00:00'}
+        failover = {'code': code, 'exchange': exchange,
+                    'cost_price': None, 'quantity': 0,
+                    'available_quantity': 0, 'date': '19700101',
+                    'time': '00:00:00'}
         return failover
+
+    def get_all_strategies(self):
+        docs = self.store.read_distinct(
+            ['strategy_id']).fetchall()
+        strategies = [doc['strategy_id'] for doc in docs]
+        return strategies
+
+    def update_available_quantity(self, today=None):
+        """
+        根据日期变更刷新当日可卖出仓位,
+        须在每日交易之前刷新
+        """
+        if today is None:
+            today = datetime.date.today().strftime('%Y%m%d')
+
+        for strategy in self.get_all_strategies():
+            positions = self.get_positions(strategy)
+            for pos in positions:
+                if pos['date'] < today:
+                    pos['available_quantity'] = pos['quantity']
+                    pos['date'] = today
+                    pos['time'] = datetime.datetime.now().strftime('%H:%M:%S')
+            print(positions)
+            self.set_positions(positions)
