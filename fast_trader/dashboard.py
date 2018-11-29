@@ -2,11 +2,15 @@ import decimal
 import collections
 import threading
 import time
+import datetime
 
 from ipywidgets import interact, Layout
 import ipywidgets as widgets
+from IPython.display import display, HTML
 
 from data_provider.datafeed.universe import Universe
+
+from fast_trader.utils import timeit
 
 def get_stock_name(code):
     if not hasattr(get_stock_name, '_pairs'):
@@ -25,77 +29,7 @@ def get_stock_name(code):
     except KeyError:
         return '未知代码'
 
-def create_trading_panel(ea):
-    stock_code = widgets.Text(description='股票代码', continuous_update=True)
-    stock_name = widgets.Text(description='股票名称', continuous_update=False)
-    order_price = widgets.BoundedFloatText(description='价格', min=0.01, max=100000,
-                                           step=0.01, continuous_update=False)
-    stock_quantity = widgets.BoundedIntText(description='数量', min=100, max=1000000000000,
-                                            step=100, continuous_update=False)
-    order_side = widgets.Dropdown(description='买卖方向', continuous_update=False)
-    order_side.options = [('买入', 1), ('卖出', 2)]
 
-    confirm_btn = widgets.Button(description='下单')
-
-    out = widgets.Output()
-
-    panel = box = widgets.Box([stock_code, stock_name, order_price,
-                       stock_quantity, order_side, confirm_btn, out])
-
-    def fill_stock_name(change):
-        try:
-            value = change['new']
-            if len(value) >= 6:
-                name = get_stock_name(value)
-                stock_name.value = name
-        except Exception as e:
-            with out:
-                print(e)
-
-    def insert_order(b):
-        with out:
-            try:
-                code = box.children[0].value
-                price = box.children[2].value
-                quantity = box.children[3].value
-                order_side = box.children[4].value
-
-                err_msg = None
-                if price:
-                    if decimal.Decimal(str(price)).as_tuple().exponent < -2:
-                        err_msg = '最多保留小数点后两位！'
-
-                if err_msg is not None:
-                    raise Exception(err_msg)
-
-                if order_side == 1:
-                    ret = ea.buy(code, price, quantity)
-                else:
-                    ret = ea.sell(code, price, quantity)
-
-            except Exception as e:
-                with out:
-                    display(HTML('<p style=color:red>{}<p>'.format(e)))
-
-            else:
-                pass
-
-    confirm_btn.on_click(insert_order)
-
-    stock_code.observe(fill_stock_name, names='value')
-
-    confirm_btn.layout = Layout(
-        width='212px',
-        margin='10px 0px 10px 90px')
-
-    panel.layout = Layout(
-        display='flex',
-        flex_flow='column',
-        align_items='stretch',
-        border=None,
-        width='40%')
-
-    return panel
 
 account_label_dict = collections.OrderedDict([
     ('账户', 'account_no'),
@@ -170,20 +104,34 @@ def apply_style(**kwargs):
     def decorator(func):
         def wrapper(*args, **kw):
             obj = func(*args, **kw)
-            for k, v in kwargs.items():
-                setattr(obj.layout, k, v)
+
+            def _dec(w, params):
+                for k, v in params.items():
+                    setattr(w.layout, k, v)
+
+            if 'header_style' in kwargs:
+                 header_style = kwargs.pop('header_style')
+                 _dec(obj.children[0], header_style)
+            
+            if 'body_style' in kwargs:
+                body_style = kwargs.pop('body_style')
+                obj.children[1].add_class('panel-body')
+                _dec(obj.children[1], body_style)
+
+            _dec(obj, kwargs)
+
             return obj
         return wrapper
     return decorator
 
 class Dashboard(object):
     
-
-
     def __init__(self, ea):
         
         self._running = False
         self.ea = ea
+
+        self.refresh_interval = 2
         
         self.trading_panel = None
         self.account_panel = None
@@ -193,6 +141,9 @@ class Dashboard(object):
 
     def is_alive(self):
         return self._running
+
+    def stop(self):
+        self._running = False
 
     @staticmethod
     def has_item(panel, ident):
@@ -209,17 +160,23 @@ class Dashboard(object):
         return None
 
     @staticmethod
+    def _add_class_on_children(w, class_name):
+        for child in w.children:
+            child.add_class(class_name)
+    
+    @staticmethod
     def create_panel(label_dict):
         headers = [unit_cls(**{ATTR: label, 'button_style': ''})
                    for label in label_dict]
-        [setattr(el.style, 'font_weight', 'bold') for el in headers]
+
+        [setattr(el.style, 'font_weight', 'normal') for el in headers]
         header_box = widgets.HBox(headers)
         header_box.ident = 'header'
-#         placeholder = widgets.HTML('<hr>')
-#         placeholder.ident = 'placeholder'
-#         panel = widgets.VBox([header_box, placeholder])
-        panel = widgets.VBox([header_box])
-        return panel
+        header_box.add_class('panel-header')
+        Dashboard._add_class_on_children(header_box, 'panel-header-item')
+
+        panel = widgets.VBox([])
+        return header_box, panel
 
     @staticmethod
     def add_panel_entry(panel, label_dict, entry, ident):
@@ -230,7 +187,7 @@ class Dashboard(object):
             return item
         item = to_widget(entry)
         item.ident = ident
-        panel.children = (*panel.children[:1], item, *panel.children[1:])
+        panel.children = (item, *panel.children)
 
     @staticmethod
     def update_panel_entry(panel, label_dict, entry, ident, upsert=True):
@@ -248,11 +205,83 @@ class Dashboard(object):
                     if key in entry:
                         setattr(el, ATTR, str(entry[key]))
                 break
-    
-    @apply_style(width='fit-content')
+
+    def create_trading_panel(self):
+        stock_code = widgets.Text(description='股票代码', continuous_update=True)
+        stock_name = widgets.Text(description='股票名称', continuous_update=False)
+        order_price = widgets.BoundedFloatText(description='价格', min=0.01, max=100000,
+                                            step=0.01, continuous_update=False)
+        stock_quantity = widgets.BoundedIntText(description='数量', min=100, max=1000000000000,
+                                                step=100, continuous_update=False)
+        order_side = widgets.Dropdown(description='买卖方向', continuous_update=False)
+        order_side.options = [('买入', 1), ('卖出', 2)]
+
+        confirm_btn = widgets.Button(description='下单')
+
+        out = widgets.Output()
+
+        panel = box = widgets.Box([stock_code, stock_name, order_price,
+                        stock_quantity, order_side, confirm_btn, out])
+
+        def fill_stock_name(change):
+            try:
+                value = change['new']
+                if len(value) >= 6:
+                    name = get_stock_name(value)
+                    stock_name.value = name
+            except Exception as e:
+                with out:
+                    print(e)
+
+        def insert_order(b):
+            with out:
+                try:
+                    code = box.children[0].value
+                    price = box.children[2].value
+                    quantity = box.children[3].value
+                    order_side = box.children[4].value
+
+                    err_msg = None
+                    if price:
+                        if decimal.Decimal(str(price)).as_tuple().exponent < -2:
+                            err_msg = '最多保留小数点后两位！'
+
+                    if err_msg is not None:
+                        raise Exception(err_msg)
+
+                    if order_side == 1:
+                        ret = self.ea.buy(code, price, quantity)
+                    else:
+                        ret = self.ea.sell(code, price, quantity)
+
+                except Exception as e:
+                    with out:
+                        display(HTML('<p style=color:red>{}<p>'.format(e)))
+
+                else:
+                    pass
+
+        confirm_btn.on_click(insert_order)
+
+        stock_code.observe(fill_stock_name, names='value')
+
+        confirm_btn.layout = Layout(
+            width='212px',
+            margin='10px 0px 10px 90px')
+
+        panel.layout = Layout(
+            display='flex',
+            flex_flow='column',
+            align_items='stretch',
+            border=None,
+            width='40%')
+
+        return panel
+
+    @apply_style(width='auto')
     def create_account_panel(self):
-        self.account_panel = self.create_panel(account_label_dict)
-        return self.account_panel
+        self.account_header, self.account_panel = self.create_panel(account_label_dict)
+        return widgets.VBox([self.account_header, self.account_panel])
     
     def update_account_panel(self, entry):
         ident = entry['account_no']
@@ -266,10 +295,11 @@ class Dashboard(object):
         capital = self.ea.get_capital()
         self.update_account_panel(capital)
     
-    @apply_style(width='fit-content')
+    @apply_style(width='auto',
+                 body_style={'max_height': '150px', 'display': 'inline-block'})
     def create_trade_panel(self):
-        self.trade_panel = self.create_panel(trade_label_dict)
-        return self.trade_panel
+        self.trade_header, self.trade_panel = self.create_panel(trade_label_dict)
+        return widgets.VBox([self.trade_header, self.trade_panel])
 
     def update_trade_panel(self, entry):
         ident = entry['order_original_id']
@@ -278,7 +308,8 @@ class Dashboard(object):
             trade_label_dict,
             entry=entry,
             ident=ident)
-        
+    
+    # @timeit
     def refresh_trade_panel(self, keep=20):
         trades = self.ea.get_trades()[-keep:]
         for trade in trades:
@@ -288,13 +319,13 @@ class Dashboard(object):
             self.update_trade_panel(trade)
         
         if keep > 0 and len(self.trade_panel.children) - 1 > keep:
-            self.trade_panel.children = self.trade_panel.children[:1] +\
-                self.trade_panel.children[-20:] 
+            self.trade_panel.children = self.trade_panel.children[:keep+1]
 
-    @apply_style(width='fit-content')
+    @apply_style(width='auto',
+                 body_style={'max_height': '150px', 'display': 'inline-block'})
     def create_position_panel(self):
-        self.position_panel = self.create_panel(position_label_dict)
-        return self.position_panel
+        self.position_header, self.position_panel = self.create_panel(position_label_dict)
+        return widgets.VBox([self.position_header, self.position_panel])
 
     def update_position_panel(self, entry):
         ident = entry['code']
@@ -303,7 +334,8 @@ class Dashboard(object):
             position_label_dict,
             entry=entry,
             ident=ident)
-        
+    
+    @timeit
     def refresh_position_panel(self):
         positions = self.ea.get_positions()
         for pos in positions:
@@ -312,10 +344,11 @@ class Dashboard(object):
 #                 continue
             self.update_position_panel(pos)
     
-    @apply_style(width='fit-content')
+    @apply_style(width='auto',
+                 body_style={'max_height': '150px', 'display': 'inline-block'})
     def create_order_panel(self):
-        self.order_panel = self.create_panel(order_label_dict)
-        return self.order_panel
+        self.order_header, self.order_panel = self.create_panel(order_label_dict)
+        return widgets.VBox([self.order_header, self.order_panel])
 
     def update_order_panel(self, entry):
         ident = entry['order_original_id']
@@ -324,10 +357,11 @@ class Dashboard(object):
             order_label_dict,
             entry=entry,
             ident=ident)
-        
+    
+    @timeit
     def refresh_order_panel(self):
         orders = self.ea.get_open_orders()[-20:]
-        valid_idents = ['header']
+        valid_idents = []
         for order in orders:
             ident = order['order_original_id']
             valid_idents.append(ident)
@@ -345,19 +379,21 @@ class Dashboard(object):
         self.order_panel.children = [child for child in self.order_panel.children 
                                      if child.ident in valid_idents]
 
+    def refresh_all(self):
+        if self.account_panel:
+            self.refresh_capital()
+        if self.trade_panel:
+            self.refresh_trade_panel()
+        if self.position_panel:
+            self.refresh_position_panel()
+        if self.order_panel:
+            self.refresh_order_panel()
+
     def run(self):
         self._running = True
         while self._running:
-
-            time.sleep(0.5)
-            if self.account_panel:
-                self.refresh_capital()
-            if self.trade_panel:
-                self.refresh_trade_panel()
-            if self.position_panel:
-                self.refresh_position_panel()
-            if self.order_panel:
-                self.refresh_order_panel()
+            self.refresh_all()
+            time.sleep(self.refresh_interval)
     
     def refresh_dashboard(self):
         self._thread = threading.Thread(target=self.run)
