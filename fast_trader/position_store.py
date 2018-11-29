@@ -185,7 +185,7 @@ class SqlitePositionStore(PositionStore):
         try:
             db_path = os.path.join(os.path.dirname(__file__), 'sqlite3')
         except NameError:  # so it would work in python shell
-            db_path = os.path.join(os.path.dirname('__file__'), 'sqlite3')
+            db_path = os.path.join(os.path.realpath(''), 'sqlite3')
         if tid not in self._stores:
             self._stores[tid] = SqliteStore(
                 db_name=db_path,
