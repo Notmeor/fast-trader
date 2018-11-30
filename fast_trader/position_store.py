@@ -237,5 +237,4 @@ class SqlitePositionStore(PositionStore):
                     pos['available_quantity'] = pos['quantity']
                     pos['date'] = today
                     pos['time'] = datetime.datetime.now().strftime('%H:%M:%S')
-            print(positions)
             self.set_positions(positions)
