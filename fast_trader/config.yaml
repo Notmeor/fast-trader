@@ -16,13 +16,13 @@
   
 
   # 同步查询
-  sync_channel_port: 'tcp://192.168.221.52:9003'
+  sync_channel_port: 'tcp://192.168.221.52:19005'
   # 异步查询
-  async_channel_port: 'tcp://192.168.221.91:9101'
+  async_channel_port: 'tcp://192.168.221.91:19001'
   # 异步查询响应
-  rsp_channel_port: 'tcp://192.168.221.52:9002'
+  rsp_channel_port: 'tcp://192.168.221.52:19004'
   # 风控消息
-  risk_channel_port: 'tcp://192.168.221.91:9102'
+  risk_channel_port: 'tcp://192.168.221.91:19002'
 
 
   # 账号
