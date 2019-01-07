@@ -79,6 +79,8 @@ class QuoteFeed(MarketFeed):
 
         self.logger = logging.getLogger(
             'fast_trader.dtp_quote.{}'.format(self.name))
+        
+        self.as_raw_message = True
 
     def start(self):
 
@@ -128,7 +130,14 @@ class QuoteFeed(MarketFeed):
     def add_listener(self, listener):
         self._listeners.append(listener)
 
+    def format(self, data):
+        pass
+        return data
+
     def on_data(self, data):
+
+        if not self.as_raw_message:
+            data = self.format(data)
 
         for listener in self._listeners:
             listener.put(Mail(
@@ -157,6 +166,23 @@ class TickFeed(QuoteFeed):
     快照行情
     """
     name = 'tick_feed'
+
+    def format(self, data):
+        ret = message2dict(data)
+        price_fields = [
+            'nAskPrice_0', 'nAskPrice_1', 'nAskPrice_2',
+            'nAskPrice_3', 'nAskPrice_4', 'nAskPrice_5',
+            'nAskPrice_6', 'nAskPrice_7', 'nAskPrice_8',
+            'nAskPrice_9', 'nBidPrice_0', 'nBidPrice_1',
+            'nBidPrice_2', 'nBidPrice_3', 'nBidPrice_4',
+            'nBidPrice_5', 'nBidPrice_6', 'nBidPrice_7',
+            'nBidPrice_8', 'nBidPrice_9', 'nHigh',
+            'nHighLimited', 'nLow', 'nLowLimited',
+            'nMatch', 'nOpen', 'nPreClose',
+            'nWeightedAvgAskPrice', 'nWeightedAvgBidPrice']
+        for field in price_fields:
+            ret[field] = ret[field] / 10000
+        return ret
 
 
 class OrderFeed(QuoteFeed):
