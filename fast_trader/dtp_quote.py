@@ -79,8 +79,9 @@ class QuoteFeed(MarketFeed):
 
         self.logger = logging.getLogger(
             'fast_trader.dtp_quote.{}'.format(self.name))
-        
+
         self.as_raw_message = True
+        self._thread = None
 
     def start(self):
 
@@ -94,7 +95,7 @@ class QuoteFeed(MarketFeed):
         if self.is_running():
             return
 
-        threading.Thread(target=self._start).start()
+        self._thread = threading.Thread(target=self._start).start()
 
     def _to_topic(self, code):
         kind = {
@@ -227,12 +228,11 @@ OrderQueue = namedtuple('OrderQueue',
 if __name__ == '__main__':
 
     l0 = []
-    class QuoteFeed_(QuoteFeed):
-        name = 'options_feed'
+    class QuoteFeed_(TickFeed):
         def on_data(self, data):
             l0.append(data)
 
     md = QuoteFeed_()
-    md.subscribe(['10001313'])
+    # md.subscribe(['10001313'])
     md.subscribe_all()
     md.start()
