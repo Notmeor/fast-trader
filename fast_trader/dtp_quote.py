@@ -105,6 +105,7 @@ class QuoteFeed(MarketFeed):
             'order_feed': 'order',
             'queue_feed': 'order_queue',
             'options_feed': 'snapshot',
+            'ctp_feed': 'snapshot',
         }[self.name]
         topic = '{}({})'.format(kind, code)
         return topic
@@ -207,6 +208,13 @@ class OptionsFeed(QuoteFeed):
     name = 'options_feed'
 
 
+class FuturesFeed(QuoteFeed):
+    """
+    期货ctp行情
+    """
+    name = 'ctp_feed'
+
+
 def get_pb_fields(proto_type):
     return [f.name for f in proto_type.DESCRIPTOR.fields]
 
@@ -225,14 +233,5 @@ Index = namedtuple('Index',
 OrderQueue = namedtuple('OrderQueue',
                         get_pb_fields(quote_struct.OrderQueue))
 
-if __name__ == '__main__':
-
-    l0 = []
-    class QuoteFeed_(TickFeed):
-        def on_data(self, data):
-            l0.append(data)
-
-    md = QuoteFeed_()
-    # md.subscribe(['10001313'])
-    md.subscribe_all()
-    md.start()
+OrderQueue = namedtuple('Future',
+                        get_pb_fields(quote_struct.Future))
