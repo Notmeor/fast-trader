@@ -4,17 +4,10 @@ import os
 import collections
 
 
-class FieldMap:
-    code = 'code'
-    date = 'date'
-    time = 'time'
-    price = 'price'
-
-
 class MemoryStore:
 
-    def __init__(self, field_map=None):
-        self._field_map = field_map
+    def __init__(self):
+        self._field_mapping = None
         self._store = collections.defaultdict(list)
 
     def write(self, key, value):
@@ -36,8 +29,11 @@ class MemoryStore:
     def remove_expired(self):
         pass
 
+    def set_field_mapping(self, mapping):
+        self._field_mapping = mapping
+
     def read_attr(self, item, attr):
-        attr_ = self._field_map[attr]
+        attr_ = self._field_mapping[attr]
         return getattr(item, attr_)
 
 
@@ -56,13 +52,12 @@ class DiskStore:
 class Listener:
 
     def __init__(self, store):
-        self._code_field = None
         self.store = store
         self.callbacks = []
 
     def put(self, msg):
         data = msg['content']
-        code = getattr(data, self._code_field)
+        code = self.store.read_attr(data, 'code')
         self.store.write(code, data)
         for cb in self.callbacks:
             cb(data)
@@ -70,22 +65,30 @@ class Listener:
 
 class FeedStore:
 
-    def __init__(self, datasource):
+    def __init__(self, datasource_cls, store=None):
 
-        self.store_type = 'memory'
+        self.name = datasource_cls.name
         self._keep_seconds = 0
 
-        if self.store_type == 'memory':
+        if store is None:
             self._store = MemoryStore()
         else:
-            self._store = DiskStore()
+            self._store = store
 
         self._listener = Listener(self._store)
-
-        self.datasource = datasource
-        self._set_code_field_name()
-
+        self.datasource = datasource_cls()
+        self.datasource.as_raw_message = False
         self.datasource.add_listener(self._listener)
+
+    def set_field_mapping(self, mapping):
+        self._store.set_field_mapping(mapping)
+
+    def subscribe(self, codes):
+        codes_ = [c.split('.', 1)[0] for c in codes]
+        self.datasource.subscribe(codes_)
+
+    def connect(self):
+        self.datasource.start()
 
     def get_all_codes(self):
         return self._store.list_keys()
@@ -96,20 +99,8 @@ class FeedStore:
         ret = self._store.read_latest(codes)
         return ret
 
-    def _set_code_field_name(self):
-        if self.datasource.name == 'ctp_feed':
-            self._listener._code_field = 'code'
-        else:
-            self._listener._code_field = 'szCode'
-
-    def _get_code_price(self, tick):
-        if self.datasource.name == 'ctp_feed':
-            return tick['code'], tick['lastPrice']
-        return tick['szWindCode'], tick['nMatch']
-
     def get_current_prices(self, codes=None):
         ticks = self.pull(codes)
-        # ret = [self._get_code_price(tick) for tick in ticks]
         ret = []
         for tick in ticks:
             code = self._store.read_attr(tick, 'code')
@@ -147,27 +138,50 @@ class FeedStore:
         self._listener.callbacks.append(cb)
 
 
+class FeedPortal:
+    """
+    行情数据聚合接口
+    """
+
+    def __init__(self):
+        self._stores = {}
+
+    def add_store(self, store):
+        self._stores[store.name] = store
+
+    def connect(self):
+        for store in self._stores.values():
+            store.connect()
+
+    def get_current_prices(self, codes):
+        ret = []
+        for store in self._stores.values():
+            _codes = set(store.get_all_codes()).intersection(codes)
+            ret.extend(store.get_current_prices(_codes))
+        return ret
+
+
 if __name__ == '__main__':
 
     from fast_trader.dtp_quote import TickFeed, FuturesFeed
 
-    l0 = []
-    class QuoteFeed_(TickFeed):
-        def on_data(self, data):
-            l0.append(data)
-
-    # md = QuoteFeed_()
-    ds = FuturesFeed()
-    ds.as_raw_message = False
-    ds.set_field_mapping({
+    ctp_store = FeedStore(FuturesFeed)
+    ctp_store.set_field_mapping({
         'code': 'code',
         'date': 'actionDay',
         'time': 'updateTime',
     })
-    # md.subscribe(['10001313'])
-    # ds.subscribe_all()
-    # ds.subscribe(['002230', '300104'])
-    ds.subscribe(['IF1906', 'IC1906'])
-    ds.start()
+    ctp_store.subscribe(['IF1906', 'IC1906'])
 
-    fs = FeedStore(ds)
+    stock_tick_store = FeedStore(TickFeed)
+    stock_tick_store.set_field_mapping({
+        'code': 'szWindCode',
+        'date': 'nActionDay',
+        'time': 'nTime',
+    })
+    stock_tick_store.subscribe(['000001.SZ', '300014.SZ'])
+
+    fp = FeedPortal()
+    fp.add_store(ctp_store)
+    fp.add_store(stock_tick_store)
+    fp.connect()
