@@ -53,13 +53,13 @@ class Listener:
 
     def __init__(self, store):
         self.store = store
-        self.callbacks = []
+        self.callbacks = collections.OrderedDict()
 
     def put(self, msg):
         data = msg['content']
         code = self.store.read_attr(data, 'code')
         self.store.write(code, data)
-        for cb in self.callbacks:
+        for cb in self.callbacks.values():
             cb(data)
 
 
@@ -134,8 +134,26 @@ class FeedStore:
                     ret[code] = data
         return ret
 
-    def add_callback(self, cb):
-        self._listener.callbacks.append(cb)
+    @property
+    def callbacks(self):
+        return self._listener.callbacks
+
+    def add_callback(self, cb, name=None):
+        """
+        添加回调
+
+        同名函数会相互覆盖
+        """
+        if name is None:
+            name = cb.__name__
+        self._listener.callbacks[name] = cb
+
+    def remove_callback(self, cb_or_name):
+        if callable(cb_or_name):
+            name = cb_or_name.__name__
+        else:
+            name = cb_or_name
+        self._listener.callbacks.pop(name)
 
 
 class FeedPortal:
