@@ -86,6 +86,9 @@ class FeedStore:
     def subscribe(self, codes):
         codes_ = [c.split('.', 1)[0] for c in codes]
         self.datasource.subscribe(codes_)
+    
+    def subscribe_all(self):
+        self.datasource.subscribe_all()
 
     def connect(self):
         self.datasource.start()

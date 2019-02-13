@@ -162,6 +162,15 @@ class IndexFeed(QuoteFeed):
     """
     name = 'index_feed'
 
+    def format(self, data):
+        ret = message2dict(data)
+        price_fields = [
+            'nOpenIndex', 'nHighIndex', 'nHighIndex',
+            'nLowIndex', 'nPreCloseIndex']
+        for field in price_fields:
+            ret[field] = ret[field] / 10000
+        return ret
+
 
 class TickFeed(QuoteFeed):
     """
