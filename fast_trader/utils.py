@@ -54,7 +54,7 @@ def timeit(func):
     def wrapper(*args, **kwargs):
         t0_ = time.time()
         ret = func(*args, **kwargs)
-        print('%s in %.6f secs' % (
+        print('Finished %s in %.6f secs' % (
             func.__name__, time.time() - t0_))
         return ret
     return wrapper

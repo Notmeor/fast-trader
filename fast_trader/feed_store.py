@@ -186,6 +186,7 @@ if __name__ == '__main__':
     ctp_store = FeedStore(FuturesFeed)
     ctp_store.set_field_mapping({
         'code': 'code',
+        'price': 'lastPrice',
         'date': 'actionDay',
         'time': 'updateTime',
     })
@@ -194,6 +195,7 @@ if __name__ == '__main__':
     stock_tick_store = FeedStore(TickFeed)
     stock_tick_store.set_field_mapping({
         'code': 'szWindCode',
+        'price': 'nMatch',
         'date': 'nActionDay',
         'time': 'nTime',
     })
