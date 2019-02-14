@@ -66,7 +66,7 @@ class UnqliteStore:
         self._conns = {}
 
         dirname = os.path.dirname(self._uri)
-        db_name = os.path.dirname(self._uri)
+        db_name = os.path.basename(self._uri)
         self._lock = filelock.FileLock(
             os.path.join(dirname, f'{db_name}.lock'))
     
