@@ -9,6 +9,8 @@ import filelock
 import hashlib
 import pickle
 
+from fast_trader.utils import timeit
+
 
 settings = {
     'disk_store_folder': '~/work/share/cache',
@@ -251,7 +253,6 @@ class FeedStore:
         elif store_type == 'disk':
             uri = os.path.expanduser(os.path.join(
                 settings['disk_store_folder'], f'unqlite_{self.name}.db'))
-            print(uri)
             self._store = DiskStore(uri)
 
         self._listener = Listener(self._store)
