@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import datetime
 import collections
 
 import unqlite
@@ -217,6 +218,62 @@ class DiskStore(MemoryStore):
     def batch_commit(self, key):
         if len(self._store[key]) >= self.batch_size:
             self.commit_by_key(key)
+
+
+class DiskStore1(MemoryStore):
+
+    def __init__(self, db_uri):
+        super().__init__()
+
+        self._snapshot = {}
+        # persistent store
+        self._pstore = UnqliteStore(db_uri)
+        # commit interval in seconds
+        self.commit_interval = 60
+
+        self._take_snapshot()
+
+        self._last_time = datetime.datetime.now()
+    
+    @property
+    def seconds_since_last_commit(self):
+        return (datetime.datetime.now() - self._last_time).seconds
+
+    def _take_snapshot(self):
+        keys = self._pstore.list_keys()
+        if keys:
+            last_ts = max(keys)
+            rec = self._pstore.read(last_ts)
+            for k, v in rec.items():
+                self._snapshot[k] = v[-1]
+    
+    def _update_snapshot(self, key, value):
+        self._snapshot[key] = value
+
+    def list_keys(self):
+        return list(self._snapshot.keys())
+
+    def write(self, key, value):
+        super().write(key, value)
+        self._update_snapshot(key, value)
+        self.batch_commit()
+
+    def read(self, key):
+        raise NotImplementedError
+
+    def read_latest(self, keys):
+        ret = [self._snapshot[k] for k in keys]
+        return ret
+
+    def commit(self):
+        ts = datetime.datetime.now().strftime('%Y%m%d %H:%M:%S.%f')
+        rec = self._store
+        self._pstore.write(ts, rec)
+        self._store.clear()
+
+    def batch_commit(self):
+        if self.seconds_since_last_commit >= self.commit_interval:
+            self.commit()
 
 
 class Listener:
