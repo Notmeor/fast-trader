@@ -3,6 +3,135 @@
 import os
 import collections
 
+import unqlite
+import filelock
+
+import hashlib
+import pickle
+
+
+settings = {
+    'disk_store_folder': '~/work/share/cache',
+}
+
+
+class Serializer:
+
+    @staticmethod
+    def serialize(obj):
+        if isinstance(obj, (bytes, str)):
+            return obj
+        if isinstance(obj, str):
+            return obj.encode()
+        return pickle.dumps(obj, pickle.HIGHEST_PROTOCOL)
+
+    @staticmethod
+    def deserialize(b):
+        if not isinstance(b, bytes):
+            return b
+        try:
+            return b.decode()
+        except:
+            return pickle.loads(b)
+
+    @classmethod
+    def gen_md5(cls, b, value=False):
+        bytes_ = cls.serialize(b)
+        md5 = hashlib.md5(bytes_).hexdigest()
+        if value:
+            return md5, bytes_
+        return md5
+
+serializer = Serializer
+
+
+class UnqliteMode:
+
+    UNQLITE_OPEN_READONLY = 0x00000001
+    UNQLITE_OPEN_READWRITE = 0x00000002
+    UNQLITE_OPEN_CREATE = 0x00000004
+    UNQLITE_OPEN_EXCLUSIVE = 0x00000008
+    UNQLITE_OPEN_TEMP_DB = 0x00000010
+    UNQLITE_OPEN_NOMUTEX = 0x00000020
+    UNQLITE_OPEN_OMIT_JOURNALING = 0x00000040
+    UNQLITE_OPEN_IN_MEMORY = 0x00000080
+    UNQLITE_OPEN_MMAP = 0x00000100
+
+
+class UnqliteStore:
+
+    def __init__(self, uri, mode=UnqliteMode.UNQLITE_OPEN_CREATE):
+        self._uri = uri
+        self._mode = mode
+        self._conns = {}
+
+        dirname = os.path.dirname(self._uri)
+        db_name = os.path.dirname(self._uri)
+        self._lock = filelock.FileLock(
+            os.path.join(dirname, f'{db_name}.lock'))
+    
+    @property
+    def _conn(self):
+        conn_id = os.getpid()
+        if conn_id not in self._conns:
+            self._conns[conn_id] = unqlite.UnQLite(
+                self._uri, flags=self._mode)
+        return self._conns[conn_id]
+    
+    def _write(self, key, value):
+        v = serializer.serialize(value)
+        with self._lock, self._conn:
+            with self._conn.transaction():
+                self._conn[key] = v
+    
+    def _read(self, key):
+        with self._lock, self._conn:
+            value = self._conn[key]
+        v = serializer.deserialize(value)
+        return v
+    
+    def _delete(self, key):
+        with self._lock, self._conn:
+            self._conn.delete(key)
+    
+    def _update(self, key, value):
+        v = serializer.serialize(value)
+        with self._lock, self._conn:
+            print('key', key, 'v', len(v))
+            self._conn.update({key: v})
+    
+    def has_key(self, key):
+        with self._lock, self._conn:
+            return self._conn.exists(key)
+    
+    def list_keys(self):
+        with self._lock, self._conn:
+            return list(self._conn.keys())
+    
+    def write(self, key, value):
+        self._write(key, value)
+    
+    def read(self, key):
+        try:
+            return self._read(key)
+        except KeyError:
+            return None
+
+    def delete(self, key):
+        self._delete(key)
+    
+    def update(self, key, value):
+        self._update(key, value)
+
+    def append(self, key, value):
+        old = self.read(key)
+        if old is not None:
+            new = old + value
+        else:
+            new = value
+        print(key, type(new))
+        self.update(key, new)
+
 
 class MemoryStore:
 
@@ -37,16 +166,54 @@ class MemoryStore:
         return getattr(item, attr_)
 
 
-class DiskStore:
+class DiskStore(MemoryStore):
 
-    def __init__(self):
-        raise NotImplementedError
+    def __init__(self, db_uri):
+        super().__init__()
+
+        self._snapshot = {}
+        # persistent store
+        self._pstore = UnqliteStore(db_uri)
+        self.batch_size = 5
+
+        self._take_snapshot()
+
+    def _take_snapshot(self):
+        for key in self._pstore.list_keys():
+            value = self._pstore.read(key)
+            self._snapshot[key] = value[-1]
+    
+    def _update_snapshot(self, key, value):
+        self._snapshot[key] = value
 
     def write(self, key, value):
-        pass
+        super().write(key, value)
+        self._update_snapshot(key, value)
+        self.batch_commit(key)
 
     def read(self, key):
-        pass
+        raise NotImplementedError
+
+    def read_latest(self, keys):
+        ret = [self._snapshot[k] for k in keys]
+        return ret
+
+    def commit(self, key=None):
+        if key is None:
+            for k in self.list_keys():
+                self.commit_by_key(k)
+        else:
+            self.commit_by_key(key)
+    
+    def commit_by_key(self, key):
+        rec = self._store[key][:]
+        if rec:
+            self._pstore.append(key, rec)
+        self._store[key] = []
+
+    def batch_commit(self, key):
+        if len(self._store[key]) >= self.batch_size:
+            self.commit_by_key(key)
 
 
 class Listener:
@@ -65,15 +232,26 @@ class Listener:
 
 class FeedStore:
 
-    def __init__(self, datasource_cls, store=None):
+    def __init__(self, datasource_cls, store_type='memory'):
+        """
 
+        Parameters
+        ----------
+        store_type: str
+            历史数据存储类型
+            - 'memory': store in meory
+            - 'disk': store in disk
+        """
         self.name = datasource_cls.name
         self._keep_seconds = 0
 
-        if store is None:
+        if store_type == 'memory':
             self._store = MemoryStore()
-        else:
-            self._store = store
+        elif store_type == 'disk':
+            uri = os.path.expanduser(os.path.join(
+                settings['disk_store_folder'], f'unqlite_{self.name}.db'))
+            print(uri)
+            self._store = DiskStore(uri)
 
         self._listener = Listener(self._store)
         self.datasource = datasource_cls()

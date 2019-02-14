@@ -223,6 +223,10 @@ class FuturesFeed(QuoteFeed):
     """
     name = 'ctp_feed'
 
+    def format(self, data):
+        ret = message2dict(data)
+        return ret
+
 
 def get_pb_fields(proto_type):
     return [f.name for f in proto_type.DESCRIPTOR.fields]
