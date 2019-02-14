@@ -97,7 +97,6 @@ class UnqliteStore:
     def _update(self, key, value):
         v = serializer.serialize(value)
         with self._lock, self._conn:
-            print('key', key, 'v', len(v))
             self._conn.update({key: v})
     
     def has_key(self, key):
@@ -129,7 +128,6 @@ class UnqliteStore:
             new = old + value
         else:
             new = value
-        print(key, type(new))
         self.update(key, new)
 
 
@@ -185,6 +183,9 @@ class DiskStore(MemoryStore):
     
     def _update_snapshot(self, key, value):
         self._snapshot[key] = value
+
+    def list_keys(self):
+        return list(self._snapshot.keys())
 
     def write(self, key, value):
         super().write(key, value)
@@ -272,11 +273,13 @@ class FeedStore:
         self.datasource.start()
 
     def get_all_codes(self):
-        return self._store.list_keys()
+        if self.datasource.subscribed_all:
+            return self._store.list_keys()
+        return self.datasource.subscribed_codes
 
     def pull(self, codes=None):
         if codes is None:
-            codes = self._store.list_keys()
+            codes = self.get_all_codes()
         ret = self._store.read_latest(codes)
         return ret
 
