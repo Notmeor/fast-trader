@@ -16,7 +16,7 @@ import sqlite3
 import math
 import contextlib
 
-import lz4
+import lz4.block
 
 from fast_trader.utils import timeit
 
