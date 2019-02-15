@@ -250,7 +250,7 @@ class DiskStore(MemoryStore):
 
     @staticmethod
     def ts2dt(ts):
-        return datetime.datetime.strptime('%Y%m%d %H:%M:%S.%f')
+        return datetime.datetime.strptime(ts, '%Y%m%d %H:%M:%S.%f')
 
     def list_keys(self):
         return list(self._snapshot.keys())
