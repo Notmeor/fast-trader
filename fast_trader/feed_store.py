@@ -305,7 +305,7 @@ class SqliteKVStore(object):
 
         if self.use_compression:
             # do not compress metadata
-            if not key.startwith(self._meta_prefix):
+            if not key.startswith(self._meta_prefix):
                 b_value = compress(b_value)
 
         value_len = len(b_value)
