@@ -604,7 +604,9 @@ class Listener:
 class FeedStore:
 
     def __init__(self, datasource_cls,
-                 store_type='memory', writable=False):
+                 store_type='memory',
+                 store_engine='unqlite',
+                 writable=False):
         """
 
         Parameters
@@ -623,6 +625,7 @@ class FeedStore:
         self._keep_seconds = 0
 
         self.store_type = store_type
+        self.store_engine = store_engine
         self.writable = writable
 
         if store_type == 'memory':
@@ -630,7 +633,7 @@ class FeedStore:
         elif store_type == 'disk':
             uri = os.path.expanduser(os.path.join(
                 settings['disk_store_folder'], f'unqlite_{self.name}.db'))
-            self._store = DiskStore(uri, writable=writable)
+            self._store = DiskStore(uri, engine=store_engine, writable=writable)
 
         self._listener = Listener(self._store)
         self.datasource = datasource_cls()
