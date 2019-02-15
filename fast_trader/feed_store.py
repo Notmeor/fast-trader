@@ -16,12 +16,23 @@ import sqlite3
 import math
 import contextlib
 
+import lz4
+
 from fast_trader.utils import timeit
 
 
 settings = {
     'disk_store_folder': '~/work/share/cache',
+    'compress': False
 }
+
+
+def compress(b):
+    return lz4.block.compress(b, mode='fast')
+
+
+def decompress(b):
+    return lz4.block.decompress(b)
 
 
 class Serializer:
@@ -29,19 +40,25 @@ class Serializer:
     @staticmethod
     def serialize(obj):
         if isinstance(obj, bytes):
-            return obj
-        if isinstance(obj, str):
-            return obj.encode()
-        return pickle.dumps(obj, pickle.HIGHEST_PROTOCOL)
+            ret = obj
+        elif isinstance(obj, str):
+            ret = obj.encode()
+        else:
+            ret = pickle.dumps(obj, pickle.HIGHEST_PROTOCOL)
+        return ret
 
     @staticmethod
     def deserialize(b):
         if not isinstance(b, bytes):
             return b
         try:
-            return b.decode()
-        except:
-            return pickle.loads(b)
+            ret = b.decode()
+        except UnicodeDecodeError:
+            try:
+                ret = pickle.loads(b)
+            except pickle.UnpicklingError:
+                ret = b
+        return ret
 
     @classmethod
     def gen_md5(cls, b, value=False):
@@ -264,6 +281,8 @@ class SqliteKVStore(object):
         self._store.add_index('key')
         self._meta_prefix = '__meta_'
 
+        self.use_compression = False
+
     def read(self, key):
         res = self._store.read({'key': key}, limit=1)
         assert len(res) <= 1
@@ -276,10 +295,19 @@ class SqliteKVStore(object):
         if isinstance(b_value, int):  # splited
             b_value = self._read_split_blob(key, b_value)
 
+        if self.use_compression:
+            b_value = decompress(b_value)
+
         return serializer.deserialize(b_value)
 
     def write(self, key, value):
         b_value = serializer.serialize(value)
+
+        if self.use_compression:
+            # do not compress metadata
+            if not key.startwith(self._meta_prefix):
+                b_value = compress(b_value)
+
         value_len = len(b_value)
         if value_len > self._store._max_length:
             self._split_blob_and_save(value, value_len, key)
