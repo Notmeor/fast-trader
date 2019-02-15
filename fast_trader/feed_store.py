@@ -22,7 +22,7 @@ class Serializer:
 
     @staticmethod
     def serialize(obj):
-        if isinstance(obj, (bytes, str)):
+        if isinstance(obj, bytes):
             return obj
         if isinstance(obj, str):
             return obj.encode()
@@ -167,77 +167,75 @@ class MemoryStore:
         return getattr(item, attr_)
 
 
+# class DiskStore_(MemoryStore):
+
+#     def __init__(self, db_uri):
+#         super().__init__()
+
+#         self._snapshot = {}
+#         # persistent store
+#         self._pstore = UnqliteStore(db_uri)
+#         self.batch_size = 5
+
+#         self._take_snapshot()
+
+#     def _take_snapshot(self):
+#         for key in self._pstore.list_keys():
+#             value = self._pstore.read(key)
+#             self._snapshot[key] = value[-1]
+    
+#     def _update_snapshot(self, key, value):
+#         self._snapshot[key] = value
+
+#     def list_keys(self):
+#         return list(self._snapshot.keys())
+
+#     def write(self, key, value):
+#         super().write(key, value)
+#         self._update_snapshot(key, value)
+#         self.batch_commit(key)
+
+#     def read(self, key):
+#         raise NotImplementedError
+
+#     def read_latest(self, keys):
+#         ret = [self._snapshot[k] for k in keys]
+#         return ret
+
+#     def commit(self, key=None):
+#         if key is None:
+#             for k in self.list_keys():
+#                 self.commit_by_key(k)
+#         else:
+#             self.commit_by_key(key)
+    
+#     def commit_by_key(self, key):
+#         rec = self._store[key][:]
+#         if rec:
+#             self._pstore.append(key, rec)
+#         self._store[key] = []
+
+#     def batch_commit(self, key):
+#         if len(self._store[key]) >= self.batch_size:
+#             self.commit_by_key(key)
+
+
 class DiskStore(MemoryStore):
 
-    def __init__(self, db_uri):
+    def __init__(self, db_uri, writable=False):
         super().__init__()
 
-        self._snapshot = {}
-        # persistent store
-        self._pstore = UnqliteStore(db_uri)
-        self.batch_size = 5
-
-        self._take_snapshot()
-
-    def _take_snapshot(self):
-        for key in self._pstore.list_keys():
-            value = self._pstore.read(key)
-            self._snapshot[key] = value[-1]
-    
-    def _update_snapshot(self, key, value):
-        self._snapshot[key] = value
-
-    def list_keys(self):
-        return list(self._snapshot.keys())
-
-    def write(self, key, value):
-        super().write(key, value)
-        self._update_snapshot(key, value)
-        self.batch_commit(key)
-
-    def read(self, key):
-        raise NotImplementedError
-
-    def read_latest(self, keys):
-        ret = [self._snapshot[k] for k in keys]
-        return ret
-
-    def commit(self, key=None):
-        if key is None:
-            for k in self.list_keys():
-                self.commit_by_key(k)
-        else:
-            self.commit_by_key(key)
-    
-    def commit_by_key(self, key):
-        rec = self._store[key][:]
-        if rec:
-            self._pstore.append(key, rec)
-        self._store[key] = []
-
-    def batch_commit(self, key):
-        if len(self._store[key]) >= self.batch_size:
-            self.commit_by_key(key)
-
-
-class DiskStore1(MemoryStore):
-
-    def __init__(self, db_uri):
-        super().__init__()
+        self.writable = writable
 
         self._snapshot = {}
         # persistent store
         self._pstore = UnqliteStore(db_uri)
         # commit interval in seconds
-        self.commit_interval = 60
+        self.commit_interval = 10
 
         self._take_snapshot()
 
         self._last_time = datetime.datetime.now()
-    
-    @property
-    def seconds_since_last_commit(self):
-        return (datetime.datetime.now() - self._last_time).seconds
 
     def _take_snapshot(self):
         keys = self._pstore.list_keys()
@@ -250,6 +248,10 @@ class DiskStore1(MemoryStore):
     def _update_snapshot(self, key, value):
         self._snapshot[key] = value
 
+    @staticmethod
+    def ts2dt(ts):
+        return datetime.datetime.strptime('%Y%m%d %H:%M:%S.%f')
+
     def list_keys(self):
         return list(self._snapshot.keys())
 
@@ -258,22 +260,35 @@ class DiskStore1(MemoryStore):
         self._update_snapshot(key, value)
         self.batch_commit()
 
-    def read(self, key):
+    def read(self, code):
         raise NotImplementedError
+
+    def read_many(self, codes, from_dt=None):
+        keys = sorted(self._pstore.list_keys())
+        ret = collections.defaultdict(list)
+        for k in keys:
+            if from_dt is None or from_dt < self.ts2dt(k):
+                rec = self._pstore.read(k)
+                for code in codes:
+                    ret[code].extend(rec[code])
+        return ret
 
     def read_latest(self, keys):
         ret = [self._snapshot[k] for k in keys]
         return ret
 
     def commit(self):
-        ts = datetime.datetime.now().strftime('%Y%m%d %H:%M:%S.%f')
-        rec = self._store
-        self._pstore.write(ts, rec)
+        if self.writable:
+            ts = datetime.datetime.now().strftime('%Y%m%d %H:%M:%S.%f')
+            rec = self._store
+            self._pstore.write(ts, rec)
         self._store.clear()
 
     def batch_commit(self):
-        if self.seconds_since_last_commit >= self.commit_interval:
+        now = datetime.datetime.now()
+        if (now - self._last_time).seconds >= self.commit_interval:
             self.commit()
+            self._last_time = now
 
 
 class Listener:
@@ -292,25 +307,34 @@ class Listener:
 
 class FeedStore:
 
-    def __init__(self, datasource_cls, store_type='memory'):
+    def __init__(self, datasource_cls,
+                 store_type='memory', writable=False):
         """
 
         Parameters
         ----------
         store_type: str
             历史数据存储类型
-            - 'memory': store in meory
-            - 'disk': store in disk
+                'memory': store in meory
+                'disk': store in disk
+        
+        writable: bool
+            store读写模式，仅对`disk_store`有效
+                False: read only
+                True: read & write
         """
         self.name = datasource_cls.name
         self._keep_seconds = 0
+
+        self.store_type = store_type
+        self.writable = writable
 
         if store_type == 'memory':
             self._store = MemoryStore()
         elif store_type == 'disk':
             uri = os.path.expanduser(os.path.join(
                 settings['disk_store_folder'], f'unqlite_{self.name}.db'))
-            self._store = DiskStore(uri)
+            self._store = DiskStore(uri, writable=writable)
 
         self._listener = Listener(self._store)
         self.datasource = datasource_cls()
@@ -350,7 +374,7 @@ class FeedStore:
             ret.append((code, price))
         return ret
 
-    def get_ticks(self, codes, orient='list'):
+    def get_ticks_(self, codes, from_dt, orient='list'):
         """
         获取历史行情数据
 
@@ -375,6 +399,27 @@ class FeedStore:
                 else:
                     ret[code] = data
         return ret
+
+    def get_ticks(self, codes, from_dt, orient='list'):
+        """
+        获取历史行情数据
+
+        Parameters
+        ----------
+        orient: str
+            返回数据结构类型
+            dict: {code -> [ticks]}
+            list; [ticks]
+        """
+        if self.store_type == 'memory':
+            return self.get_ticks_(codes, from_dt, orient)
+        else:
+            rec = self._store.read_many(codes, from_dt)
+            if orient == 'list':
+                ret = sum(rec.values(), [])
+                return ret
+            else:
+                return rec
 
     @property
     def callbacks(self):
