@@ -10,6 +10,10 @@ import filelock
 import hashlib
 import pickle
 
+import sqlite3
+import math
+import contextlib
+
 from fast_trader.utils import timeit
 
 
@@ -46,6 +50,290 @@ class Serializer:
         return md5
 
 serializer = Serializer
+
+
+class SqliteStore(object):
+
+    # TODO: use sqlalchemy
+
+    def __init__(self, db_name, table_name, fields):
+
+        self._max_length = 1000000000
+
+        self.table_name = table_name
+        self.db_name = db_name
+
+        assert 'id' not in [f.lower() for f in fields]
+        self.fields = fields
+
+        self._indexed_fields = []
+        self._conns = {}
+
+        self._db_initialized = False
+
+    @property
+    def _conn(self):
+
+        if not self._db_initialized:
+            self._db_initialized = True
+            self.assure_table()
+
+        conn_id = (os.getpid(), threading.get_ident())
+
+        if conn_id not in self._conns:
+            self._conns[conn_id] = conn = sqlite3.connect(
+                self.db_name)
+
+            def dict_factory(cursor, row):
+                d = {}
+                for idx, col in enumerate(cursor.description):
+                    d[col[0]] = row[idx]
+                return d
+
+            conn.row_factory = dict_factory
+
+        return self._conns[conn_id]
+
+    def close(self):
+        self._conn.commit()
+        self._conn.close()
+
+    def assure_table(self, name=None):
+        if name is None:
+            name = self.table_name
+
+        with contextlib.closing(self._conn.cursor()) as cursor:
+            try:
+                cursor.execute("SELECT * FROM {} LIMIT 1".format(name))
+            except sqlite3.OperationalError as e:
+                warnings.warn(str(e) + '. Would reset connection')
+                fields_str = ','.join(self.fields)
+                fields_str = 'ID INTEGER PRIMARY KEY,' + fields_str
+                cursor.execute("CREATE TABLE {} ({})".format(name, fields_str))
+                self._conn.commit()
+
+        self.assure_index()
+
+    def reset_table(self, name):
+        with contextlib.closing(self._conn.cursor()) as cursor:
+            fields_str = ','.join(self.fields)
+            fields_str = 'ID INTEGER PRIMARY KEY,' + fields_str
+            cursor.execute("CREATE TABLE {} ({})".format(name, fields_str))
+            self._conn.commit()
+
+        self.delete({})
+
+    def add_index(self, field):
+        if field not in self._indexed_fields:
+            self._indexed_fields.append(field)
+
+    def assure_index(self, fields=None):
+        if fields is not None:
+            for field in fields:
+                self.add_index(field)
+
+        for key in self._indexed_fields:
+            self._add_index(key)
+
+    def _add_index(self, key):
+        with contextlib.closing(self._conn.cursor()) as cursor:
+            name = f'{key}_'
+            stmt = (f"SELECT * FROM sqlite_master WHERE type ="
+                    f" 'index' and tbl_name = '{self.table_name}'"
+                    f" and name = '{name}'")
+
+            if cursor.execute(stmt).fetchone() is None:
+                cursor.execute(
+                    f"CREATE INDEX {name} ON {self.table_name}({key})")
+                self._conn.commit()
+
+    def write(self, doc):
+
+        statement = "INSERT INTO {} ({}) VALUES ({})".format(
+            self.table_name,
+            ','.join(doc.keys()),
+            ','.join(['?'] * len(doc))
+        )
+        try:
+            with contextlib.closing(self._conn.cursor()) as cursor:
+                cursor.execute(statement, list(doc.values()))
+                self._conn.commit()
+        except sqlite3.OperationalError as e:
+            # reset conn if underlying sqlite gets deleted
+            warnings.warn(str(e) + '. Would reset connection')
+            self._conns.pop(os.getpid())
+            self.assure_table()
+            self.write(doc)
+
+    def write_many(self, docs):
+        list(map(self.write, docs))
+
+    def read(self, query=None, limit=None):
+
+        statement = "SELECT {} FROM {}".format(
+            ','.join(self.fields), self.table_name)
+        if query:
+            query_str = self._format_condition(query)
+            statement += " WHERE {}".format(query_str)
+
+        if limit:
+            statement += " ORDER BY ID DESC LIMIT {}".format(limit)
+
+        with contextlib.closing(self._conn.cursor()) as cursor:
+            ret = cursor.execute(statement).fetchall()
+
+        return ret
+
+    def read_latest(self, query, by):
+        query_str = self._format_condition(query)
+        statement = (
+            "SELECT {fields} FROM {table} WHERE ID in" +
+            "(SELECT MAX(ID) FROM {table} WHERE {con} GROUP BY {by})"
+        ).format(
+            fields=','.join(self.fields),
+            con=query_str,
+            table=self.table_name,
+            by=by)
+
+        with contextlib.closing(self._conn.cursor()) as cursor:
+            ret = cursor.execute(statement).fetchall()
+
+        return ret
+
+    def read_distinct(self, fields):
+        with contextlib.closing(self._conn.cursor()) as cursor:
+            ret = cursor.execute("SELECT DISTINCT {} FROM {}".format(
+                ','.join(fields), self.table_name)).fetchall()
+        return ret
+
+    @staticmethod
+    def _format_assignment(doc):
+        s = str(doc)
+        formatted = s[2:-1].replace(
+            "': ", '=').replace(", '", ',')
+        return formatted
+
+    @staticmethod
+    def _format_condition(doc):
+        if not doc:
+            return 'TRUE'
+        s = str(doc)
+        formatted = s[2:-1].replace(
+            "': ", ' = ').replace(
+            ", '", ',').replace(
+            "= {'$like =", 'like').replace(
+            '}', '')
+        return formatted
+
+    def update(self, query, document):
+
+        query_str = self._format_condition(query)
+        document_str = self._format_assignment(document)
+
+        statement = "UPDATE {} SET {} WHERE {}".format(
+            self.table_name,
+            document_str,
+            query_str
+        )
+
+        with contextlib.closing(self._conn.cursor()) as cursor:
+            cursor.execute(statement)
+            self._conn.commit()
+
+    def delete(self, query):
+        query_str = self._format_condition(query)
+        if query_str:
+            query_str = f'WHERE {query_str} '
+        with contextlib.closing(self._conn.cursor()) as cursor:
+            cursor.execute("DELETE FROM {} {}".format(
+                self.table_name,
+                query_str
+            ))
+            self._conn.commit()
+
+
+class SqliteKVStore(object):
+
+    def __init__(self, table_name, sqlite_uri=None):
+        self.db_path = sqlite_uri or settings['sqlite-uri']
+        self.table_name = table_name
+        self._store = SqliteStore(
+            self.db_path, table_name, ['key', 'value'])
+        self._store.add_index('key')
+        self._meta_prefix = '__meta_'
+
+    def read(self, key):
+        res = self._store.read({'key': key}, limit=1)
+        assert len(res) <= 1
+
+        if len(res) == 0:
+            return None
+
+        b_value = res[0]['value']
+
+        if isinstance(b_value, int):  # splited
+            b_value = self._read_split_blob(key, b_value)
+
+        return serializer.deserialize(b_value)
+
+    def write(self, key, value):
+        b_value = serializer.serialize(value)
+        value_len = len(b_value)
+        if value_len > self._store._max_length:
+            self._split_blob_and_save(value, value_len, key)
+        else:
+            self._store.write({'key': key, 'value': b_value})
+
+    def _split_blob_and_save(self, blob, length, key):
+        number = math.ceil(length / self._store._max_length)
+        step = math.ceil(length / number)
+        for idx, i in enumerate(range(0, length, step)):
+            sub = blob[i:i+step]
+            sub_key = f'{key}_{idx}'
+            self._store.write({'key': sub_key, 'value': sub})
+
+        self._store.write({'key': key, 'value': number})
+
+    def _read_split_blob(self, key, number):
+        sub_keys = [f'{key}_{i}' for i in range(number)]
+
+        def _get_sub(k):
+            res = self._store.read({'key': k}, limit=1)
+            return res[0]['value']
+
+        blob = b''.join([_get_sub(k) for k in sub_keys])
+        return blob
+
+    def has_key(self, key):
+        with contextlib.closing(self._store._conn.cursor()) as cursor:
+            ret = cursor.execute(f"SELECT key FROM {self.table_name} "
+                                 f"WHERE key = '{key}' LIMIT 1").fetchone()
+        return ret is not None
+
+    def list_keys(self):
+        return sorted([i['key'] for i in self._store.read_distinct(['key'])])
+
+    def delete(self, key):
+        self._store.delete({'key': key})
+
+    def read_meta(self, key):
+        meta_key = self._meta_prefix + key
+        return self.read(meta_key)
+
+    def read_all_meta(self):
+        res = self._store.read_latest(
+            query={'key': {'$like': '__meta%'}},
+            by='key')
+        meta = {i['key']: serializer.deserialize(i['value']) for i in res}
+        return meta
+
+    def write_meta(self, key, meta):
+        meta_key = self._meta_prefix + key
+        self.write(meta_key, meta)
+
+    def delete_meta(self, key):
+        meta_key = self._meta_prefix + key
+        self.delete(meta_key)
 
 
 class UnqliteMode:
@@ -222,14 +510,22 @@ class MemoryStore:
 
 class DiskStore(MemoryStore):
 
-    def __init__(self, db_uri, writable=False):
+    def __init__(self, db_uri, writable=False, engine='sqlite'):
         super().__init__()
 
         self.writable = writable
+        self.engine = engine
 
         self._snapshot = {}
         # persistent store
-        self._pstore = UnqliteStore(db_uri)
+        if engine == 'unqlite':
+            self._pstore = UnqliteStore(db_uri)
+        elif engine == 'sqlite':
+            self._pstore = SqliteKVStore(
+                'quote_feed', db_uri + '.' + engine)
+        else:
+            raise TypeError(f'Unsupported db engine `{engine}`')
+
         # commit interval in seconds
         self.commit_interval = 10
 
