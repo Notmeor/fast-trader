@@ -4,6 +4,7 @@ import os
 import datetime
 import collections
 import threading
+import warnings
 
 import unqlite
 import filelock
