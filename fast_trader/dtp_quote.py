@@ -95,7 +95,8 @@ class QuoteFeed(MarketFeed):
         if self.is_running():
             return
 
-        self._thread = threading.Thread(target=self._start).start()
+        self._thread = threading.Thread(target=self._start)
+        self._thread.start()
 
     def _to_topic(self, code):
         kind = {
