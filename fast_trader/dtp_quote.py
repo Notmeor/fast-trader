@@ -43,6 +43,11 @@ class MarketFeed(object):
         _type = data.Type.Name(data.type).lower()
 
         return getattr(data, _type)
+    
+    def _on_message(self, msg):
+        data = self._parse_data(msg)
+        if not isinstance(data, str):
+            self.on_data(data)
 
     def sub(self, topic):
         self._socket.subscribe(topic)
@@ -53,10 +58,9 @@ class MarketFeed(object):
         self._running = True
 
         while self._running:
-            ret = self._socket.recv()
-            data = self._parse_data(ret)
-            if not isinstance(data, str):
-                self.on_data(data)
+            msg = self._socket.recv()
+            self._on_message(msg)
+
 
     def on_data(self, data):
 
