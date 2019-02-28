@@ -62,6 +62,8 @@ def timeit(func):
 
 def load_config(path=None):
     if path is None:
+        path = os.getenv('FAST_TRADER_CONFIG')
+    if path is None:
         dirname = os.path.dirname(__file__)
         path = os.path.join(dirname, 'config.yaml')
     with open(path, 'r') as f:
