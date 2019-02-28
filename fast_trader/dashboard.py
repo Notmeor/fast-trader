@@ -111,12 +111,12 @@ def apply_style(**kwargs):
 
             if 'header_style' in kwargs:
                  header_style = kwargs.pop('header_style')
-                 _dec(obj.children[0], header_style)
+                 _dec(obj.children[1], header_style)
             
             if 'body_style' in kwargs:
                 body_style = kwargs.pop('body_style')
                 obj.children[1].add_class('panel-body')
-                _dec(obj.children[1], body_style)
+                _dec(obj.children[2], body_style)
 
             _dec(obj, kwargs)
 
@@ -138,6 +138,12 @@ class Dashboard(object):
         self.trade_panel = None
         self.order_panel = None
         self.position_panel = None
+
+        self.ordering_out = widgets.Output()
+        self.ordering_out.add_class('ordering-out')
+
+        self.ordering_msg = widgets.Label()
+        self.ordering_msg.add_class('ordering-msg')
 
     def is_alive(self):
         return self._running
@@ -165,7 +171,11 @@ class Dashboard(object):
             child.add_class(class_name)
     
     @staticmethod
-    def create_panel(label_dict):
+    def create_panel(title, label_dict):
+
+        title = widgets.Label(title)
+        title.add_class('panel-title')
+
         headers = [unit_cls(**{ATTR: label, 'button_style': ''})
                    for label in label_dict]
 
@@ -176,7 +186,7 @@ class Dashboard(object):
         Dashboard._add_class_on_children(header_box, 'panel-header-item')
 
         panel = widgets.VBox([])
-        return header_box, panel
+        return title, header_box, panel
 
     @staticmethod
     def add_panel_entry(panel, label_dict, entry, ident):
@@ -218,10 +228,8 @@ class Dashboard(object):
 
         confirm_btn = widgets.Button(description='下单')
 
-        out = widgets.Output()
-
         panel = box = widgets.Box([stock_code, stock_name, order_price,
-                        stock_quantity, order_side, confirm_btn, out])
+                        stock_quantity, order_side, confirm_btn, self.ordering_msg])
 
         def fill_stock_name(change):
             try:
@@ -230,11 +238,10 @@ class Dashboard(object):
                     name = get_stock_name(value)
                     stock_name.value = name
             except Exception as e:
-                with out:
+                with self.ordering_out:
                     print(e)
 
         def insert_order(b):
-            with out:
                 try:
                     code = box.children[0].value
                     price = box.children[2].value
@@ -255,11 +262,12 @@ class Dashboard(object):
                         ret = self.ea.sell(code, price, quantity)
 
                 except Exception as e:
-                    with out:
-                        display(HTML('<p style=color:red>{}<p>'.format(e)))
+                    self.ordering_msg.value = str(e)
 
                 else:
-                    pass
+                    self.ordering_msg.value = '...'
+                    time.sleep(0.2)
+                    self.ordering_msg.value = '委托已发送!'
 
         confirm_btn.on_click(insert_order)
 
@@ -280,8 +288,11 @@ class Dashboard(object):
 
     @apply_style(width='auto')
     def create_account_panel(self):
-        self.account_header, self.account_panel = self.create_panel(account_label_dict)
-        return widgets.VBox([self.account_header, self.account_panel])
+        self.account_title, self.account_header, self.account_panel =\
+            self.create_panel('账户详情', account_label_dict)
+        return widgets.VBox([self.account_title, 
+                             self.account_header,
+                             self.account_panel])
     
     def update_account_panel(self, entry):
         ident = entry['account_no']
@@ -298,8 +309,11 @@ class Dashboard(object):
     @apply_style(width='auto',
                  body_style={'max_height': '150px', 'display': 'inline-block'})
     def create_trade_panel(self):
-        self.trade_header, self.trade_panel = self.create_panel(trade_label_dict)
-        return widgets.VBox([self.trade_header, self.trade_panel])
+        self.trade_title, self.trade_header, self.trade_panel =\
+            self.create_panel('成交列表', trade_label_dict)
+        return widgets.VBox([self.trade_title, 
+                             self.trade_header,
+                             self.trade_panel])
 
     def update_trade_panel(self, entry):
         ident = entry['order_original_id']
@@ -324,8 +338,11 @@ class Dashboard(object):
     @apply_style(width='auto',
                  body_style={'max_height': '150px', 'display': 'inline-block'})
     def create_position_panel(self):
-        self.position_header, self.position_panel = self.create_panel(position_label_dict)
-        return widgets.VBox([self.position_header, self.position_panel])
+        self.position_title, self.position_header, self.position_panel =\
+            self.create_panel('持仓列表', position_label_dict)
+        return widgets.VBox([self.position_title,
+                             self.position_header, 
+                             self.position_panel])
 
     def update_position_panel(self, entry):
         ident = entry['code']
@@ -347,8 +364,11 @@ class Dashboard(object):
     @apply_style(width='auto',
                  body_style={'max_height': '150px', 'display': 'inline-block'})
     def create_order_panel(self):
-        self.order_header, self.order_panel = self.create_panel(order_label_dict)
-        return widgets.VBox([self.order_header, self.order_panel])
+        self.order_title, self.order_header, self.order_panel =\
+            self.create_panel('委托列表', order_label_dict)
+        return widgets.VBox([self.order_title,
+                             self.order_header,
+                             self.order_panel])
 
     def update_order_panel(self, entry):
         ident = entry['order_original_id']
