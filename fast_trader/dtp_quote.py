@@ -159,9 +159,10 @@ class TradeFeed(QuoteFeed):
     逐笔成交
     """
     name = 'trade_feed'
+
     def format(self, data):
         ret = message2dict(data)
-        price_fields = []
+        price_fields = ['nPrice']
         for field in price_fields:
             ret[field] = ret[field] / 10000
         return ret
@@ -215,7 +216,7 @@ class OrderFeed(QuoteFeed):
     
     def format(self, data):
         ret = message2dict(data)
-        price_fields = []
+        price_fields = ['nPrice']
         for field in price_fields:
             ret[field] = ret[field] / 10000
         return ret
@@ -229,7 +230,7 @@ class QueueFeed(QuoteFeed):
 
     def format(self, data):
         ret = message2dict(data)
-        price_fields = []
+        price_fields = ['nPrice']
         for field in price_fields:
             ret[field] = ret[field] / 10000
         return ret
