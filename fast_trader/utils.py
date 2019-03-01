@@ -8,6 +8,7 @@ import math
 
 from google.protobuf.message import Message
 from google.protobuf.pyext._message import RepeatedCompositeContainer
+from google.protobuf.pyext._message import RepeatedScalarContainer
 import yaml
 
 
@@ -88,6 +89,9 @@ def message2dict(msg, including_default_value_fields=True):
 
     elif isinstance(msg, RepeatedCompositeContainer):
         return list(map(message2dict, msg))
+
+    elif isinstance(msg, RepeatedScalarContainer):
+        return list(msg)
 
     else:
         return msg
