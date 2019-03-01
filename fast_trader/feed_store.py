@@ -331,7 +331,7 @@ class _SaveQuote:
     def put(self, msg):
         data = msg['content']
         code = getattr(data, self._field_mapping['code'])
-        date = getattr(data, self)
+        date = getattr(data, self._field_mapping['date'])
         key = f'{self.source_name};{code};{date}'
         self.store.push(key, data)
 
@@ -357,6 +357,7 @@ class QuoteCollector:
     
     def add_datasource(self, ds):
         self._datasources.append(ds)
+        ds.as_raw_message = False
 
         handler = _SaveQuote(self._store, ds.name)
         if ds.name in ['ctp_feed', 'options_feed']:
