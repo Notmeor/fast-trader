@@ -30,6 +30,8 @@ class MarketFeed(object):
         self._queue = queue.Queue()
         self._running = False
 
+        self._consumer = threading.Thread(target=self._retrieve)
+
     def is_running(self):
         return self._running
 
@@ -51,6 +53,11 @@ class MarketFeed(object):
 
     def sub(self, topic):
         self._socket.subscribe(topic)
+    
+    def _retrieve(self):
+        while True:
+            msg = self._queue.get()
+            self._on_message(msg)
 
     def _start(self):
 
@@ -59,7 +66,7 @@ class MarketFeed(object):
 
         while self._running:
             msg = self._socket.recv()
-            self._on_message(msg)
+            self._queue.put(msg)
 
 
     def on_data(self, data):
@@ -101,6 +108,8 @@ class QuoteFeed(MarketFeed):
 
         self._thread = threading.Thread(target=self._start)
         self._thread.start()
+
+        self._consumer.start()
 
     def _to_topic(self, code):
         kind = {

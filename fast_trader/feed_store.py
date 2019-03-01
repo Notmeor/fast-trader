@@ -348,6 +348,8 @@ class QuoteCollector:
         self._store = SSDBListStore()
         self.__ds_sock_mapping = {}
         self._working_thread = None
+
+        self._consumer = None
     
     @property
     def store(self):
@@ -377,13 +379,15 @@ class QuoteCollector:
 
             for sock in events:
                 msg = sock.recv()
-                self.__ds_sock_mapping[sock]._on_message(msg)
+                self.__ds_sock_mapping[sock]._queue.put(msg)
 
     def start(self):
         for ds in self._datasources:
             ds._socket.connect(ds.url)
             self._poller.register(ds._socket)
             self.__ds_sock_mapping[ds._socket] = ds
+
+            ds._consumer.start()
         
         self._working_thread = threading.Thread(target=self._receive)
         self._working_thread.start()
