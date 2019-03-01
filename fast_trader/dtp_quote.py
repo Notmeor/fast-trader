@@ -58,6 +58,10 @@ class MarketFeed(object):
         while True:
             msg = self._queue.get()
             self._on_message(msg)
+    
+    def _recv(self):
+        msg = self._socket.recv()
+        self._queue.put(msg)
 
     def _start(self):
 
@@ -65,8 +69,9 @@ class MarketFeed(object):
         self._running = True
 
         while self._running:
-            msg = self._socket.recv()
-            self._queue.put(msg)
+            self._recv()
+            while self._socket.getsockopt(zmq.RCVMORE):
+                self._recv()
 
 
     def on_data(self, data):

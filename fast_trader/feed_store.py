@@ -379,8 +379,10 @@ class QuoteCollector:
                 break
 
             for sock in events:
-                msg = sock.recv()
-                self.__ds_sock_mapping[sock]._queue.put(msg)
+                ds = self.__ds_sock_mapping[sock]
+                ds._recv()
+                while ds._socket.getsockopt(zmq.RCVMORE):
+                    ds._recv()
 
     def start(self):
         for ds in self._datasources:
