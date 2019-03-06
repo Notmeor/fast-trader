@@ -25,7 +25,8 @@ class MarketFeed(object):
     url = None
 
     def __init__(self):
-        self._ctx = zmq_context.CONTEXT
+        # self._ctx = zmq_context.CONTEXT
+        self._ctx = zmq_context.manager.context
         self._socket = self._ctx.socket(zmq.SUB)
         self._socket.setsockopt(zmq.RCVHWM, 0)
         self._socket.setsockopt(zmq.RCVBUF, 102400)
