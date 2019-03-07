@@ -25,10 +25,15 @@ class MarketFeed(object):
     url = None
 
     def __init__(self):
-        self._ctx = zmq_context.CONTEXT
+        # self._ctx = zmq_context.CONTEXT
+        self._ctx = zmq_context.manager.context
         self._socket = self._ctx.socket(zmq.SUB)
+        self._socket.setsockopt(zmq.RCVHWM, 0)
+        self._socket.setsockopt(zmq.RCVBUF, 102400)
         self._queue = queue.Queue()
         self._running = False
+
+        self._consumer = threading.Thread(target=self._retrieve)
 
     def is_running(self):
         return self._running
@@ -51,6 +56,15 @@ class MarketFeed(object):
 
     def sub(self, topic):
         self._socket.subscribe(topic)
+    
+    def _retrieve(self):
+        while True:
+            msg = self._queue.get()
+            self._on_message(msg)
+    
+    def _recv(self):
+        msg = self._socket.recv()
+        self._queue.put(msg)
 
     def _start(self):
 
@@ -58,8 +72,9 @@ class MarketFeed(object):
         self._running = True
 
         while self._running:
-            msg = self._socket.recv()
-            self._on_message(msg)
+            self._recv()
+            while self._socket.getsockopt(zmq.RCVMORE):
+                self._recv()
 
 
     def on_data(self, data):
@@ -101,6 +116,8 @@ class QuoteFeed(MarketFeed):
 
         self._thread = threading.Thread(target=self._start)
         self._thread.start()
+
+        self._consumer.start()
 
     def _to_topic(self, code):
         kind = {
@@ -159,9 +176,10 @@ class TradeFeed(QuoteFeed):
     逐笔成交
     """
     name = 'trade_feed'
+
     def format(self, data):
         ret = message2dict(data)
-        price_fields = []
+        price_fields = ['nPrice']
         for field in price_fields:
             ret[field] = ret[field] / 10000
         return ret
@@ -215,7 +233,7 @@ class OrderFeed(QuoteFeed):
     
     def format(self, data):
         ret = message2dict(data)
-        price_fields = []
+        price_fields = ['nPrice']
         for field in price_fields:
             ret[field] = ret[field] / 10000
         return ret
@@ -229,7 +247,7 @@ class QueueFeed(QuoteFeed):
 
     def format(self, data):
         ret = message2dict(data)
-        price_fields = []
+        price_fields = ['nPrice']
         for field in price_fields:
             ret[field] = ret[field] / 10000
         return ret

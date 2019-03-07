@@ -8,6 +8,7 @@ import math
 
 from google.protobuf.message import Message
 from google.protobuf.pyext._message import RepeatedCompositeContainer
+from google.protobuf.pyext._message import RepeatedScalarContainer
 import yaml
 
 
@@ -62,6 +63,8 @@ def timeit(func):
 
 def load_config(path=None):
     if path is None:
+        path = os.getenv('FAST_TRADER_CONFIG')
+    if path is None:
         dirname = os.path.dirname(__file__)
         path = os.path.join(dirname, 'config.yaml')
     with open(path, 'r') as f:
@@ -86,6 +89,9 @@ def message2dict(msg, including_default_value_fields=True):
 
     elif isinstance(msg, RepeatedCompositeContainer):
         return list(map(message2dict, msg))
+
+    elif isinstance(msg, RepeatedScalarContainer):
+        return list(msg)
 
     else:
         return msg

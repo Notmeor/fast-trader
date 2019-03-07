@@ -6,460 +6,28 @@ import collections
 import threading
 import warnings
 
-import unqlite
-import filelock
-
-import hashlib
-import pickle
-
 import sqlite3
 import math
 import contextlib
-
-import lz4.block
+import zmq
 
 from fast_trader.utils import timeit
-
-
-settings = {
-    'disk_store_folder': '~/work/share/cache',
-    'compress': False
-}
-
-
-def compress(b):
-    return lz4.block.compress(b, mode='fast')
-
-
-def decompress(b):
-    return lz4.block.decompress(b)
-
-
-class Serializer:
-
-    @staticmethod
-    def serialize(obj):
-        if isinstance(obj, bytes):
-            ret = obj
-        elif isinstance(obj, str):
-            ret = obj.encode()
-        else:
-            ret = pickle.dumps(obj, pickle.HIGHEST_PROTOCOL)
-        return ret
-
-    @staticmethod
-    def deserialize(b):
-        if not isinstance(b, bytes):
-            return b
-        try:
-            ret = b.decode()
-        except UnicodeDecodeError:
-            try:
-                ret = pickle.loads(b)
-            except pickle.UnpicklingError:
-                ret = b
-        return ret
-
-    @classmethod
-    def gen_md5(cls, b, value=False):
-        bytes_ = cls.serialize(b)
-        md5 = hashlib.md5(bytes_).hexdigest()
-        if value:
-            return md5, bytes_
-        return md5
-
-serializer = Serializer
-
-
-class SqliteStore(object):
-
-    # TODO: use sqlalchemy
-
-    def __init__(self, db_name, table_name, fields):
-
-        self._max_length = 1000000000
-
-        self.table_name = table_name
-        self.db_name = db_name
-
-        assert 'id' not in [f.lower() for f in fields]
-        self.fields = fields
-
-        self._indexed_fields = []
-        self._conns = {}
-
-        self._db_initialized = False
-
-    @property
-    def _conn(self):
-
-        if not self._db_initialized:
-            self._db_initialized = True
-            self.assure_table()
-
-        conn_id = (os.getpid(), threading.get_ident())
-
-        if conn_id not in self._conns:
-            self._conns[conn_id] = conn = sqlite3.connect(
-                self.db_name)
-
-            def dict_factory(cursor, row):
-                d = {}
-                for idx, col in enumerate(cursor.description):
-                    d[col[0]] = row[idx]
-                return d
-
-            conn.row_factory = dict_factory
-
-        return self._conns[conn_id]
-
-    def close(self):
-        self._conn.commit()
-        self._conn.close()
-
-    def assure_table(self, name=None):
-        if name is None:
-            name = self.table_name
-
-        with contextlib.closing(self._conn.cursor()) as cursor:
-            try:
-                cursor.execute("SELECT * FROM {} LIMIT 1".format(name))
-            except sqlite3.OperationalError as e:
-                warnings.warn(str(e) + '. Would reset connection')
-                fields_str = ','.join(self.fields)
-                fields_str = 'ID INTEGER PRIMARY KEY,' + fields_str
-                cursor.execute("CREATE TABLE {} ({})".format(name, fields_str))
-                self._conn.commit()
-
-        self.assure_index()
-
-    def reset_table(self, name):
-        with contextlib.closing(self._conn.cursor()) as cursor:
-            fields_str = ','.join(self.fields)
-            fields_str = 'ID INTEGER PRIMARY KEY,' + fields_str
-            cursor.execute("CREATE TABLE {} ({})".format(name, fields_str))
-            self._conn.commit()
-
-        self.delete({})
-
-    def add_index(self, field):
-        if field not in self._indexed_fields:
-            self._indexed_fields.append(field)
-
-    def assure_index(self, fields=None):
-        if fields is not None:
-            for field in fields:
-                self.add_index(field)
-
-        for key in self._indexed_fields:
-            self._add_index(key)
-
-    def _add_index(self, key):
-        with contextlib.closing(self._conn.cursor()) as cursor:
-            name = f'{key}_'
-            stmt = (f"SELECT * FROM sqlite_master WHERE type ="
-                    f" 'index' and tbl_name = '{self.table_name}'"
-                    f" and name = '{name}'")
-
-            if cursor.execute(stmt).fetchone() is None:
-                cursor.execute(
-                    f"CREATE INDEX {name} ON {self.table_name}({key})")
-                self._conn.commit()
-
-    def write(self, doc):
-
-        statement = "INSERT INTO {} ({}) VALUES ({})".format(
-            self.table_name,
-            ','.join(doc.keys()),
-            ','.join(['?'] * len(doc))
-        )
-        try:
-            with contextlib.closing(self._conn.cursor()) as cursor:
-                cursor.execute(statement, list(doc.values()))
-                self._conn.commit()
-        except sqlite3.OperationalError as e:
-            # reset conn if underlying sqlite gets deleted
-            warnings.warn(str(e) + '. Would reset connection')
-            self._conns.pop(os.getpid())
-            self.assure_table()
-            self.write(doc)
-
-    def write_many(self, docs):
-        list(map(self.write, docs))
-
-    def read(self, query=None, limit=None):
-
-        statement = "SELECT {} FROM {}".format(
-            ','.join(self.fields), self.table_name)
-        if query:
-            query_str = self._format_condition(query)
-            statement += " WHERE {}".format(query_str)
-
-        if limit:
-            statement += " ORDER BY ID DESC LIMIT {}".format(limit)
-
-        with contextlib.closing(self._conn.cursor()) as cursor:
-            ret = cursor.execute(statement).fetchall()
-
-        return ret
-
-    def read_latest(self, query, by):
-        query_str = self._format_condition(query)
-        statement = (
-            "SELECT {fields} FROM {table} WHERE ID in" +
-            "(SELECT MAX(ID) FROM {table} WHERE {con} GROUP BY {by})"
-        ).format(
-            fields=','.join(self.fields),
-            con=query_str,
-            table=self.table_name,
-            by=by)
-
-        with contextlib.closing(self._conn.cursor()) as cursor:
-            ret = cursor.execute(statement).fetchall()
-
-        return ret
-
-    def read_distinct(self, fields):
-        with contextlib.closing(self._conn.cursor()) as cursor:
-            ret = cursor.execute("SELECT DISTINCT {} FROM {}".format(
-                ','.join(fields), self.table_name)).fetchall()
-        return ret
-
-    @staticmethod
-    def _format_assignment(doc):
-        s = str(doc)
-        formatted = s[2:-1].replace(
-            "': ", '=').replace(", '", ',')
-        return formatted
-
-    @staticmethod
-    def _format_condition(doc):
-        if not doc:
-            return 'TRUE'
-        s = str(doc)
-        formatted = s[2:-1].replace(
-            "': ", ' = ').replace(
-            ", '", ',').replace(
-            "= {'$like =", 'like').replace(
-            '}', '')
-        return formatted
-
-    def update(self, query, document):
-
-        query_str = self._format_condition(query)
-        document_str = self._format_assignment(document)
-
-        statement = "UPDATE {} SET {} WHERE {}".format(
-            self.table_name,
-            document_str,
-            query_str
-        )
-
-        with contextlib.closing(self._conn.cursor()) as cursor:
-            cursor.execute(statement)
-            self._conn.commit()
-
-    def delete(self, query):
-        query_str = self._format_condition(query)
-        if query_str:
-            query_str = f'WHERE {query_str} '
-        with contextlib.closing(self._conn.cursor()) as cursor:
-            cursor.execute("DELETE FROM {} {}".format(
-                self.table_name,
-                query_str
-            ))
-            self._conn.commit()
-
-
-class SqliteKVStore(object):
-
-    def __init__(self, table_name, sqlite_uri=None):
-        self.db_path = sqlite_uri or settings['sqlite-uri']
-        self.table_name = table_name
-        self._store = SqliteStore(
-            self.db_path, table_name, ['key', 'value'])
-        self._store.add_index('key')
-        self._meta_prefix = '__meta_'
-
-        self.use_compression = False
-
-    def read(self, key):
-        res = self._store.read({'key': key}, limit=1)
-        assert len(res) <= 1
-
-        if len(res) == 0:
-            return None
-
-        b_value = res[0]['value']
-
-        if isinstance(b_value, int):  # splited
-            b_value = self._read_split_blob(key, b_value)
-
-        if self.use_compression:
-            b_value = decompress(b_value)
-
-        return serializer.deserialize(b_value)
-
-    def write(self, key, value):
-        b_value = serializer.serialize(value)
-
-        if self.use_compression:
-            # do not compress metadata
-            if not key.startswith(self._meta_prefix):
-                b_value = compress(b_value)
-
-        value_len = len(b_value)
-        if value_len > self._store._max_length:
-            self._split_blob_and_save(value, value_len, key)
-        else:
-            self._store.write({'key': key, 'value': b_value})
-
-    def _split_blob_and_save(self, blob, length, key):
-        number = math.ceil(length / self._store._max_length)
-        step = math.ceil(length / number)
-        for idx, i in enumerate(range(0, length, step)):
-            sub = blob[i:i+step]
-            sub_key = f'{key}_{idx}'
-            self._store.write({'key': sub_key, 'value': sub})
-
-        self._store.write({'key': key, 'value': number})
-
-    def _read_split_blob(self, key, number):
-        sub_keys = [f'{key}_{i}' for i in range(number)]
-
-        def _get_sub(k):
-            res = self._store.read({'key': k}, limit=1)
-            return res[0]['value']
-
-        blob = b''.join([_get_sub(k) for k in sub_keys])
-        return blob
-
-    def has_key(self, key):
-        with contextlib.closing(self._store._conn.cursor()) as cursor:
-            ret = cursor.execute(f"SELECT key FROM {self.table_name} "
-                                 f"WHERE key = '{key}' LIMIT 1").fetchone()
-        return ret is not None
-
-    def list_keys(self):
-        return sorted([i['key'] for i in self._store.read_distinct(['key'])])
-
-    def delete(self, key):
-        self._store.delete({'key': key})
-
-    def read_meta(self, key):
-        meta_key = self._meta_prefix + key
-        return self.read(meta_key)
-
-    def read_all_meta(self):
-        res = self._store.read_latest(
-            query={'key': {'$like': '__meta%'}},
-            by='key')
-        meta = {i['key']: serializer.deserialize(i['value']) for i in res}
-        return meta
-
-    def write_meta(self, key, meta):
-        meta_key = self._meta_prefix + key
-        self.write(meta_key, meta)
-
-    def delete_meta(self, key):
-        meta_key = self._meta_prefix + key
-        self.delete(meta_key)
-
-
-class UnqliteMode:
-
-    UNQLITE_OPEN_READONLY = 0x00000001
-    UNQLITE_OPEN_READWRITE = 0x00000002
-    UNQLITE_OPEN_CREATE = 0x00000004
-    UNQLITE_OPEN_EXCLUSIVE = 0x00000008
-    UNQLITE_OPEN_TEMP_DB = 0x00000010
-    UNQLITE_OPEN_NOMUTEX = 0x00000020
-    UNQLITE_OPEN_OMIT_JOURNALING = 0x00000040
-    UNQLITE_OPEN_IN_MEMORY = 0x00000080
-    UNQLITE_OPEN_MMAP = 0x00000100
-
-
-class UnqliteStore:
-
-    def __init__(self, uri, mode=UnqliteMode.UNQLITE_OPEN_CREATE):
-        self._uri = uri
-        self._mode = mode
-        self._conns = {}
-
-        dirname = os.path.dirname(self._uri)
-        db_name = os.path.basename(self._uri)
-        self._lock = filelock.FileLock(
-            os.path.join(dirname, f'{db_name}.lock'))
-    
-    @property
-    def _conn(self):
-        conn_id = os.getpid()
-        if conn_id not in self._conns:
-            self._conns[conn_id] = unqlite.UnQLite(
-                self._uri, flags=self._mode)
-        return self._conns[conn_id]
-    
-    def _write(self, key, value):
-        v = serializer.serialize(value)
-        with self._lock, self._conn:
-            with self._conn.transaction():
-                self._conn[key] = v
-    
-    def _read(self, key):
-        with self._lock, self._conn:
-            value = self._conn[key]
-        v = serializer.deserialize(value)
-        return v
-    
-    def _delete(self, key):
-        with self._lock, self._conn:
-            self._conn.delete(key)
-    
-    def _update(self, key, value):
-        v = serializer.serialize(value)
-        with self._lock, self._conn:
-            self._conn.update({key: v})
-    
-    def has_key(self, key):
-        with self._lock, self._conn:
-            return self._conn.exists(key)
-    
-    def list_keys(self):
-        with self._lock, self._conn:
-            return list(self._conn.keys())
-    
-    def write(self, key, value):
-        self._write(key, value)
-    
-    def read(self, key):
-        try:
-            return self._read(key)
-        except KeyError:
-            return None
-
-    def delete(self, key):
-        self._delete(key)
-    
-    def update(self, key, value):
-        self._update(key, value)
-
-    def append(self, key, value):
-        old = self.read(key)
-        if old is not None:
-            new = old + value
-        else:
-            new = value
-        self.update(key, new)
+from fast_trader.dtp_quote import conf
+from fast_trader.sqlite import SqliteKVStore
 
 
 class MemoryStore:
 
     def __init__(self):
+        self._keep_history = False
         self._field_mapping = None
         self._store = collections.defaultdict(list)
 
     def write(self, key, value):
-        self._store[key].append(value)
+        if self._keep_history:
+            self._store[key].append(value)
+        else:
+            self._store[key][0] = value
 
     def read(self, key):
         return self._store[key]
@@ -485,74 +53,20 @@ class MemoryStore:
         return getattr(item, attr_)
 
 
-# class DiskStore_(MemoryStore):
-
-#     def __init__(self, db_uri):
-#         super().__init__()
-
-#         self._snapshot = {}
-#         # persistent store
-#         self._pstore = UnqliteStore(db_uri)
-#         self.batch_size = 5
-
-#         self._take_snapshot()
-
-#     def _take_snapshot(self):
-#         for key in self._pstore.list_keys():
-#             value = self._pstore.read(key)
-#             self._snapshot[key] = value[-1]
-    
-#     def _update_snapshot(self, key, value):
-#         self._snapshot[key] = value
-
-#     def list_keys(self):
-#         return list(self._snapshot.keys())
-
-#     def write(self, key, value):
-#         super().write(key, value)
-#         self._update_snapshot(key, value)
-#         self.batch_commit(key)
-
-#     def read(self, key):
-#         raise NotImplementedError
-
-#     def read_latest(self, keys):
-#         ret = [self._snapshot[k] for k in keys]
-#         return ret
-
-#     def commit(self, key=None):
-#         if key is None:
-#             for k in self.list_keys():
-#                 self.commit_by_key(k)
-#         else:
-#             self.commit_by_key(key)
-    
-#     def commit_by_key(self, key):
-#         rec = self._store[key][:]
-#         if rec:
-#             self._pstore.append(key, rec)
-#         self._store[key] = []
-
-#     def batch_commit(self, key):
-#         if len(self._store[key]) >= self.batch_size:
-#             self.commit_by_key(key)
-
-
 class DiskStore(MemoryStore):
 
     def __init__(self, db_uri, writable=False, engine='sqlite'):
         super().__init__()
 
+        self._keep_history = True
+
         self.writable = writable
         self.engine = engine
 
         self._snapshot = {}
-        # persistent store
-        if engine == 'unqlite':
-            self._pstore = UnqliteStore(db_uri)
-        elif engine == 'sqlite':
-            self._pstore = SqliteKVStore(
-                'quote_feed', db_uri + '.' + engine)
+
+        if engine == 'sqlite':
+            self._pstore = SqliteKVStore('quote_feed', db_uri)
         else:
             raise TypeError(f'Unsupported db engine `{engine}`')
 
@@ -662,8 +176,11 @@ class FeedStore:
             self._store = MemoryStore()
         elif store_type == 'disk':
             uri = os.path.expanduser(os.path.join(
-                settings['disk_store_folder'], f'unqlite_{self.name}.db'))
+                conf['quote_feed_store']['disk_store_folder'],
+                f'{self.name}.{store_engine}'))
             self._store = DiskStore(uri, engine=store_engine, writable=writable)
+        elif store_type == 'ssdb':
+            raise NotImplementedError
 
         self._listener = Listener(self._store)
         self.datasource = datasource_cls()
@@ -689,6 +206,9 @@ class FeedStore:
         return self.datasource.subscribed_codes
 
     def pull(self, codes=None):
+        """
+        获取已订阅标的最新数据
+        """
         if codes is None:
             codes = self.get_all_codes()
         ret = self._store.read_latest(codes)
@@ -774,7 +294,7 @@ class FeedStore:
 
 class FeedPortal:
     """
-    行情数据聚合接口
+    行情数据聚合接口 
     """
 
     def __init__(self):
@@ -793,6 +313,87 @@ class FeedPortal:
             _codes = set(store.get_all_codes()).intersection(codes)
             ret.extend(store.get_current_prices(_codes))
         return ret
+
+
+class _SaveQuote:
+
+    def __init__(self, store, source_name):
+        self.source_name = source_name
+        self.store = store
+        self._field_mapping = {
+            'code': 'szWindCode',
+            'date': 'nActionDay',
+        }
+    
+    def set_field_mapping(self, mapping):
+        self._field_mapping.update(mapping)
+
+    def put(self, msg):
+        data = msg['content']
+        code = getattr(data, self._field_mapping['code'])
+        date = getattr(data, self._field_mapping['date'])
+        key = f'{self.source_name};{code};{date}'
+        self.store.push(key, data)
+
+
+class QuoteCollector:
+    """
+    实时行情存储
+    """
+
+    def __init__(self):
+        self._datasources = []
+        self._poller = zmq.Poller()
+        from fast_trader.ssdb import SSDBListStore
+        self._store = SSDBListStore()
+        self.__ds_sock_mapping = {}
+        self._working_thread = None
+
+        self._consumer = None
+    
+    @property
+    def store(self):
+        return self._store
+    
+    def add_datasource(self, ds):
+        self._datasources.append(ds)
+        ds.as_raw_message = False
+
+        handler = _SaveQuote(self._store, ds.name)
+        if ds.name in ['ctp_feed', 'options_feed']:
+            handler.set_field_mapping({
+                'code': 'code',
+                'date': 'actionDay'
+            })
+        ds.add_listener(handler)
+    
+    def is_running(self):
+        return self._working_thread.is_alive()
+    
+    def _receive(self):
+        while True:
+            try:
+                events = dict(self._poller.poll())
+            except zmq.ZMQError as e:
+                print(e)
+                break
+
+            for sock in events:
+                ds = self.__ds_sock_mapping[sock]
+                ds._recv()
+                while ds._socket.getsockopt(zmq.RCVMORE):
+                    ds._recv()
+
+    def start(self):
+        for ds in self._datasources:
+            ds._socket.connect(ds.url)
+            self._poller.register(ds._socket)
+            self.__ds_sock_mapping[ds._socket] = ds
+
+            ds._consumer.start()
+        
+        self._working_thread = threading.Thread(target=self._receive)
+        self._working_thread.start()
 
 
 if __name__ == '__main__':

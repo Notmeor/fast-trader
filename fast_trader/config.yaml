@@ -1,34 +1,42 @@
 
 
 
-  # 指数行情
-  index_feed_channel: 'tcp://192.168.211.194:7778'
-  # 快照行情
-  tick_feed_channel: 'tcp://192.168.211.194:7779'
-  # 逐笔成交
-  trade_feed_channel: 'tcp://192.168.211.194:7781'
-  # 逐笔报单
-  order_feed_channel: 'tcp://192.168.211.194:7782'
-  # 交易队列
-  queue_feed_channel: 'tcp://192.168.211.194:7783'
-  # 期权行情
-  options_feed_channel: 'tcp://192.168.211.194:7784'
-  # ctp期货行情
-  ctp_feed_channel: 'tcp://192.168.221.82:9504'
-  
-
-  # 同步查询
-  sync_channel_port: 'tcp://192.168.221.52:19005'
-  # 异步查询
-  async_channel_port: 'tcp://192.168.221.91:19001'
-  # 异步查询响应
-  rsp_channel_port: 'tcp://192.168.221.52:19004'
-  # 风控消息
-  risk_channel_port: 'tcp://192.168.221.91:19002'
+# 指数行情
+index_feed_channel: 'tcp://192.168.211.194:7778'
+# 快照行情
+tick_feed_channel: 'tcp://192.168.211.194:7779'
+# 逐笔成交
+trade_feed_channel: 'tcp://192.168.211.194:7781'
+# 逐笔报单
+order_feed_channel: 'tcp://192.168.211.194:7782'
+# 交易队列
+queue_feed_channel: 'tcp://192.168.211.194:7783'
+# 期权行情
+options_feed_channel: 'tcp://192.168.211.194:7784'
+# ctp期货行情
+ctp_feed_channel: 'tcp://192.168.221.82:9504'
 
 
-  # 账号
-  account: '021000062436'
-  # 密码
-  password: '111111'
+# 同步查询
+sync_channel_port: 'tcp://192.168.221.52:19005'
+# 异步查询
+async_channel_port: 'tcp://192.168.221.91:19001'
+# 异步查询响应
+rsp_channel_port: 'tcp://192.168.221.52:19004'
+# 风控消息
+risk_channel_port: 'tcp://192.168.221.91:19002'
+
+
+# 账号
+account: '021000062436'
+# 密码
+password: '111111'
+
+
+quote_feed_store:
+  disk_store_folder: '~/work/share/cache'
+  compress: False
+
+
+
   
