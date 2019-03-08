@@ -15,9 +15,8 @@ import pandas as pd
 from fast_trader import zmq_context
 from fast_trader.dtp import quotation_pb2 as quote_struct
 
-from fast_trader.utils import timeit, message2dict, load_config, Mail
-
-conf = load_config()
+from fast_trader.utils import timeit, message2dict, Mail
+from fast_trader.settings import settings as conf
 
 
 class MarketFeed(object):
@@ -99,7 +98,7 @@ class QuoteFeed(MarketFeed):
         self.logger = logging.getLogger(
             'fast_trader.dtp_quote.{}'.format(self.name))
 
-        self.as_raw_message = True
+        self.as_raw_message = False
         self._thread = None
 
     def start(self):

@@ -10,6 +10,8 @@ from google.protobuf.message import Message
 from google.protobuf.pyext._message import RepeatedCompositeContainer
 from google.protobuf.pyext._message import RepeatedScalarContainer
 import yaml
+import uuid
+import socket
 
 
 class attrdict(dict):
@@ -19,7 +21,7 @@ class attrdict(dict):
     def __getattr__(self, key):
         try:
             return self[key]
-        except KeyError as e:
+        except KeyError:
             raise AttributeError(key)
 
     def __setattr__(self, key, value):
@@ -31,7 +33,7 @@ class Mail(attrdict):
     def __init__(self, api_type, api_id, **kw):
 
         if api_type == 'req':
-            assert 'request_id' in kw
+            kw['request_id'] = str(uuid.uuid1())
 
         if 'handler_id' not in kw:
             kw['handler_id'] = '{}_{}'.format(api_id, api_type)
@@ -50,6 +52,16 @@ class Mail(attrdict):
         self.update(kw)
 
 
+def get_mac_address():
+    mac = uuid.getnode()
+    ret = '-'.join(("%012X" % mac)[i:i+2] for i in range(0, 12, 2))
+    return ret
+
+
+def get_local_ip():
+    raise NotImplementedError
+
+
 def timeit(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
@@ -59,17 +71,6 @@ def timeit(func):
             func.__name__, time.time() - t0_))
         return ret
     return wrapper
-
-
-def load_config(path=None):
-    if path is None:
-        path = os.getenv('FAST_TRADER_CONFIG')
-    if path is None:
-        dirname = os.path.dirname(__file__)
-        path = os.path.join(dirname, 'config.yaml')
-    with open(path, 'r') as f:
-        conf = yaml.load(f)
-    return conf
 
 
 def message2dict(msg, including_default_value_fields=True):

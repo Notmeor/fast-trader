@@ -5,8 +5,8 @@ from collections import defaultdict
 
 from fast_trader.dtp import dtp_api_id
 from fast_trader.dtp import type_pb2 as dtp_type
-from fast_trader.dtp_quote import QuoteFeed
-from fast_trader.strategy import Strategy, get_strategy_instance
+from fast_trader.dtp_quote import TradeFeed, TickFeed
+from fast_trader.strategy import Strategy, StrategyFactory
 from fast_trader.utils import timeit, message2dict, int2datetime
 
 
@@ -108,6 +108,8 @@ class MyStrategy(Strategy):
         if len(self.market_trades[data.szCode]) < 1:
             return
 
+        return
+    
         self.cur_period = int2datetime(n_date=data.nActionDay,
                                        n_time=data.nTime)
         self.market_quantity += data.nVolume
@@ -155,12 +157,13 @@ class MyStrategy(Strategy):
 
 if __name__ == '__main__':
 
-    strategy = get_strategy_instance(MyStrategy, 1)
+    factory = StrategyFactory()
+    strategy = factory.generate_strategy(MyStrategy, 1, 1)
 
-    datasource_0 = QuoteFeed('trade_feed')
+    datasource_0 = TradeFeed()
     datasource_0.subscribe(['300104', '002230', '000001'])
 
-    datasource_1 = QuoteFeed('tick_feed')
+    datasource_1 = TickFeed()
     datasource_1.subscribe(['300104', '002230'])
 
     strategy.add_datasource(datasource_0)

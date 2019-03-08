@@ -17,18 +17,27 @@ options_feed_channel: 'tcp://192.168.211.194:7784'
 ctp_feed_channel: 'tcp://192.168.221.82:9504'
 
 
-# 同步查询
-sync_channel_port: 'tcp://192.168.221.52:19005'
-# 异步查询
-async_channel_port: 'tcp://192.168.221.91:19001'
-# 异步查询响应
-rsp_channel_port: 'tcp://192.168.221.52:19004'
+## 同步请求
+#sync_channel_port: 'tcp://192.168.221.52:19005'
+## 异步请求
+#async_channel_port: 'tcp://192.168.221.91:19001'
+## 异步响应
+#rsp_channel_port: 'tcp://192.168.221.52:19004'
+## 风控消息
+#risk_channel_port: 'tcp://192.168.221.91:19002'
+
+# 同步请求
+sync_channel_port: 'tcp://192.168.221.37:9833'
+# 异步请求
+async_channel_port: 'tcp://192.168.221.37:9831'
+# 异步响应推送
+rsp_channel_port: 'tcp://192.168.221.37:9832'
 # 风控消息
-risk_channel_port: 'tcp://192.168.221.91:19002'
+risk_channel_port: ''
 
 
 # 账号
-account: '021000062436'
+account: '011000106328'
 # 密码
 password: '111111'
 
@@ -40,3 +49,11 @@ quote_feed_store:
 
 
   
+#账户：011000106328  密码：111111
+#用户：test03  密码：t123456
+#通道：192.168.221.34:18021
+#需要连接的AC：
+#SYNC_CHANNEL_PORT = "tcp://192.168.221.37:9833"   #query and login
+#ASYNC_CHANNEL_PORT = "tcp://192.168.221.37:9831"     # order
+#SUB_COUNTER_PORT = "tcp://192.168.221.37:9832"     # report
+#AC服务端口：8131

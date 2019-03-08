@@ -11,10 +11,8 @@ from fast_trader.dtp_quote import (Transaction, Snapshot,
 from fast_trader.dtp import type_pb2 as dtp_type
 
 from fast_trader.position_store import SqlitePositionStore as PositionStore
-from fast_trader.utils import (timeit, load_config, message2tuple)
-
-
-config = load_config()
+from fast_trader.utils import timeit, message2tuple
+from fast_trader.settings import settings
 
 
 class Market(object):
@@ -64,6 +62,12 @@ class Strategy(object):
         if store is None:
             store = PositionStore()
         self._position_store = store
+    
+    def set_initial_positions(self, positions):
+        """
+        设置策略初始持仓
+        """
+        raise NotImplementedError
 
     def start(self):
 
@@ -74,10 +78,10 @@ class Strategy(object):
 
         self.trader.start()
 
-        self._account = config['account']
+        self._account = settings['account']
         self.trader.login(
-            account=config['account'],
-            password=config['password'],
+            account=settings['account'],
+            password=settings['password'],
             request_id=self.generate_request_id(),
             sync=True)
 
@@ -290,16 +294,6 @@ class Strategy(object):
     def add_datasource(self, datasource):
         """
         添加行情数据源
-
-        Parameters
-        ----------
-        datasource: QuoteFeed
-            可选的数据源包括：
-                trade_feed # 逐笔成交
-                order_feed # 逐笔报单
-                tick_feed  # 快照行情
-                queue_feed # 委托队列
-                index_feed # 指数行情
         """
 
         name = datasource.name
@@ -339,6 +333,7 @@ class Strategy(object):
             self.on_market_order(data)
 
         elif api_id == 'queue_feed':
+            # FIXME: RepeatedScalarContainer
             data = data = message2tuple(message['content'], OrderQueue)
             self.on_market_queue(data)
 

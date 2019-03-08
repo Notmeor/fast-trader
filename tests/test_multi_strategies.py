@@ -3,11 +3,16 @@
 import time, datetime
 from collections import defaultdict
 
+import numpy as np
+import pandas as pd
+
 from fast_trader.dtp import dtp_api_id
 from fast_trader.dtp import type_pb2 as dtp_type
 from fast_trader.dtp_quote import QuoteFeed
 from fast_trader.strategy import Strategy, get_strategy_instance
 from fast_trader.utils import timeit, message2dict, int2datetime
+
+from fast_trader.position_store import SqlitePositionStore as PositionStore
 
 
 def show_title(msg, width=30):
@@ -26,56 +31,26 @@ class MyStrategy(Strategy):
         return [p['code'] for p in positions]
 
     def set_params(self, **kw):
-        """
-        约定参数均以 `p_` 开头，避免与其它变量冲突
-        """
         self.params = kw
 
     def on_start(self):
-        
+
+        self._orders = {}
+
+        self.date_str = datetime.date.today().strftime('%Y%m%d')
+        self.position_store = PositionStore()
+        self.order_all_filled = True
+        self.max_holding_quantity = 100000
+
+        self.allow_trading = False
+        self.bought_quantity = 0
+
         self.market_trades = defaultdict(list)
         self.market_snapshots = defaultdict(list)
+        self.market_queues = defaultdict(list)
 
         self.on_order_list = []
         self.on_trade_list = []
-
-        # 起始报单时间
-        self.ordering_start = datetime.datetime.combine(
-                datetime.date.today(), datetime.time(8, 50))
-        self.ordering_interval = datetime.timedelta(seconds=5)
-        self.cur_period = self.ordering_start
-        # 报单比率
-        self.ordering_ratio = 0.01
-        # 报单总量
-        self.ordering_quota = 10000
-        # 完成周期
-        self.order_range = datetime.timedelta(minutes=1)
-        # 总交易量
-        self.market_quantity = 0
-
-    def subscribe(self):
-        ds = self.subscribed_datasources[0]
-        ds.subscribe(self.holdings)
-
-    def clear_holdings(self):
-
-        positions = self.get_positions()
-
-        for pos in positions:
-
-            code = pos['code']
-            quantity = pos.get('available_quantity', 0)
-
-            if quantity == 0:
-                continue
-
-            try:
-                price = self.get_last_price(code)
-            except Exception as e:
-                self.logger.warning('未取到 {} 最新价格'.format(code))
-                continue
-
-            self.sell(code=code, price=price, quantity=quantity)
 
     def get_last_price(self, code, log=False):
 
@@ -92,7 +67,7 @@ class MyStrategy(Strategy):
 
     @timeit
     def get_position_detail_by_code(self, code):
-        positions = self.get_positions()
+        positions = self.get_account_positions()
         for p in positions:
             if p['code'] == code:
                 return p
@@ -102,33 +77,47 @@ class MyStrategy(Strategy):
         if data.nPrice > 0:
             self.market_trades[data.szCode].append(data)
 
-        return 
-
         if not data.szCode == '002230':
             return
-        
-        if len(self.market_trades[data.szCode]) < 1:
+
+        time.sleep(0.2)
+        if len(self.market_trades[data.szCode]) < 100:
             return
 
-        self.cur_period = int2datetime(n_date=data.nActionDay,
-                                       n_time=data.nTime)
-        self.market_quantity += data.nVolume
+        if not self.allow_trading:
+            return
 
-        if self.cur_period - self.ordering_start >= self.ordering_interval:
-            price = self.get_last_price(data.szCode)
-            units = int(self.market_quantity * self.ordering_ratio / 100)
+        ds = self.market_trades[data.szCode]
+        mv_0 = np.mean([d.nPrice for d in ds[-50:]])
 
-            self.ordering_start = self.cur_period
-            self.market_quantiy = 0
+        if ds[-1].nPrice > mv_0:
 
-            quantity = min(units * 100, self.ordering_quota)
-            if quantity > 0:
-                self.buy(data.szCode, price, quantity)
-                self.ordering_quota -= quantity
-                self.logger.info('分批报单 quantiy={}'.format(quantity))
+            # cur_pos = self.get_position_by_code(data.szCode)
+            cur_pos = self.positions[data.szCode]
 
-                if self.ordering_quota <= 0:
-                    self.logger.warning('报单全部完成')
+            if not self.order_all_filled:
+                return
+
+            if cur_pos['quantity'] < self.max_holding_quantity:
+            # if self.bought_quantity < 30000:
+                self.buy(data.szCode,
+                         round(ds[-1].nPrice / 10000 + 0.01, 2),
+                         10000)
+                self.logger.info('买入')
+                self.bought_quantity += 10000
+
+                self.order_all_filled = False
+
+#        if ds[-1].nPrice < mv_0:
+#            if self.bought_quantity > 0:
+#                self.sell(data.szCode,
+#                          round(ds[-1].nPrice / 10000 - 0.01, 2),
+#                          10000)
+#                self.logger.info('卖出')
+#                self.bought_quantity -= 10000
+
+    def on_market_queue(self, data):
+        self.market_queues[data.szCode].append(data)
 
     def on_market_order(self, market_order):
         pass
@@ -136,14 +125,17 @@ class MyStrategy(Strategy):
     def on_market_snapshot(self, data):
         self.market_snapshots[data.szCode].append(data)
 
-    def on_order(self, order):
+    def on_order_tmp(self, order):
         # show_title('报单回报')
         self.on_order_list.append(order)
         self.logger.info(order)
 
-    def on_trade(self, trade):
-        # show_title('成交回报')
-        print(trade)
+    def on_trade_tmp(self, trade):
+        show_title('成交回报')
+
+        if trade.fill_status == dtp_type.FILL_STATUS_FILLED:
+            self.order_all_filled = True
+
         self.on_trade_list.append(trade)
         self.logger.info(trade)
 
@@ -155,59 +147,75 @@ class MyStrategy(Strategy):
         show_title('撤单提交回报')
         print(msg)
 
+def test_mq():
+    self = ea.dispatcher
+    try:
+        # mail = self._outbox.get(timeout=0.000001)
+        mail = self._outbox.get(block=False)
+        self.dispatch(mail)
+    except queue.Empty:
+        pass
+
+    try:
+        mail = self._market_queue.get(block=False)
+        self.dispatch(mail)
+    except queue.Empty:
+        pass
+
+def test(ea, amount):
+    self = ea
+    code = '002230'
+    cur_pos = self.position_store.get_position_by_code(
+        self.strategy_id, code)
+    print(cur_pos)
+
+    if cur_pos['quantity'] < amount:
+
+        self.buy(code,
+                 round(22, 2),
+                 2000)
+        self.logger.info('买入')
+    else:
+        raise Exception('stop')
+
+def test_limit(interval=0.1, amount=800000):
+    while True:
+        time.sleep(interval)
+        test(strategy_6, amount)
 
 if __name__ == '__main__':
+    
+    from data_provider.datafeed.universe import Universe
+    sz50 = Universe().get_index_compose_weight_by_date('000016.SH', '20181109')
+    codes = sz50.securityId.tolist()
+    codes = [c[:6] for c in codes]
 
     import logging
     logger = logging.getLogger('test')
-    
-    from fast_trader.dtp_trade import DTP, Trader, Dispatcher
-    
-    dispatcher = Dispatcher()
 
-    # dtp通道
-    dtp = DTP(dispatcher)
+    datasource_0 = QuoteFeed('trade_feed')
+    # datasource_0.subscribe(['601607', '600519', '300104', '002230', '000001'])
+    datasource_0.subscribe(codes)
 
-    # 提供交易接口
-    trader = Trader(dispatcher, dtp)
+    datasource_1 = QuoteFeed('tick_feed')
+    datasource_1.subscribe(codes)
+
+    datasource_2 = QuoteFeed('queue_feed')
+    datasource_2.subscribe(codes)
 
     # 策略实例
-    strategy_2 = MyStrategy(1)
+    strategy_6 = get_strategy_instance(MyStrategy, 8)
+    strategy_7 = get_strategy_instance(MyStrategy, 9)
 
+    strategy_6.add_datasource(datasource_0)
+    strategy_6.add_datasource(datasource_1)
+    strategy_6.add_datasource(datasource_2)
 
-    strategy_2.set_dispatcher(dispatcher)
-    strategy_2.set_trader(trader)
+    strategy_7.add_datasource(datasource_0)
+    strategy_7.add_datasource(datasource_1)
+    strategy_7.add_datasource(datasource_2)
 
+    strategy_6.start()
+    strategy_7.start()
 
-
-
-#    datasource_0 = QuoteFeed('trade_feed')
-#    datasource_0.subscribe(['300104', '002230', '000001'])
-#
-#    datasource_1 = QuoteFeed('tick_feed')
-#    datasource_1.subscribe(['300104', '002230'])
-#
-#    strategy_2.add_datasource(datasource_0)
-#    strategy_2.add_datasource(datasource_1)
-#    
-
-#    strategy_5.add_datasource(datasource_0)
-#    strategy_5.add_datasource(datasource_1)
-    
-
-    strategy_2.start()
-    
-    strategy_2.buy('002230', 22, 1000)
-    logger.info("strategy_2.buy('002230', 22, 1000)")
-
-    strategy_5 = MyStrategy(5)
-    strategy_5.set_dispatcher(dispatcher)
-    strategy_5.set_trader(trader)
-    strategy_5.start()
-    
-    strategy_5.buy('002230', 21, 1000)
-    logger.info("strategy_5.buy('002230', 21, 1000)")
-
-
-
-
+    # strategy_2.cancel_all()

@@ -19,13 +19,9 @@ from fast_trader.dtp import type_pb2 as dtp_type
 from fast_trader.dtp import ext_api_pb2 as dtp_struct_
 from fast_trader.dtp import ext_type_pb2 as dtp_type_
 
-from fast_trader.utils import timeit, message2dict, load_config, Mail, _id_pool
+from fast_trader.utils import timeit, message2dict, Mail, _id_pool
+from fast_trader.settings import settings
 from fast_trader.logging import setup_logging
-
-from concurrent.futures import ProcessPoolExecutor
-executor = ProcessPoolExecutor(2)
-
-config = load_config()
 
 REQUEST_TIMEOUT = 60
 
@@ -151,26 +147,27 @@ class DTP(object):
 
         self.dispatcher = dispatcher or Queue()
 
-        self._account = config['account']
+        # FIXME: param
+        self._account = settings['account']
         self._ctx = zmq_context.CONTEXT
 
         # 同步查询通道
         self._sync_req_resp_channel = self._ctx.socket(zmq.REQ)
-        self._sync_req_resp_channel.connect(config['sync_channel_port'])
+        self._sync_req_resp_channel.connect(settings['sync_channel_port'])
 
         # 异步查询通道
         self._async_req_channel = self._ctx.socket(zmq.DEALER)
-        self._async_req_channel.connect(config['async_channel_port'])
+        self._async_req_channel.connect(settings['async_channel_port'])
 
         # 异步查询响应通道
         self._async_resp_channel = self._ctx.socket(zmq.SUB)
-        self._async_resp_channel.connect(config['rsp_channel_port'])
+        self._async_resp_channel.connect(settings['rsp_channel_port'])
         self._async_resp_channel.subscribe('{}'.format(self._account))
 
         # 风控推送通道
-        self._risk_report_channel = self._ctx.socket(zmq.SUB)
-        self._risk_report_channel.connect(config['risk_channel_port'])
-        self._async_resp_channel.subscribe('{}'.format(self._account))
+        # self._risk_report_channel = self._ctx.socket(zmq.SUB)
+        # self._risk_report_channel.connect(settings['risk_channel_port'])
+        # self._risk_report_channel.subscribe('{}'.format(self._account))
 
         self.logger = logging.getLogger('fast_trader.dtp_trade.DTP')
 
@@ -180,7 +177,7 @@ class DTP(object):
 
         self._running = True
         threading.Thread(target=self.handle_counter_response).start()
-        threading.Thread(target=self.handle_compliance_report).start()
+        # threading.Thread(target=self.handle_compliance_report).start()
 
     def _populate_message(self, cmsg, attrs):
 
@@ -202,10 +199,15 @@ class DTP(object):
                     setattr(cmsg, name, value)
 
     def handle_sync_request(self, mail):
+        print(mail)
 
         header = dtp_struct.RequestHeader()
         header.request_id = mail['request_id']
         header.api_id = mail['api_id']
+        header.account_no = mail['account']
+        header.ip = settings['ip']
+        header.mac = settings['mac']
+        header.harddisk = settings['harddisk']
 
         token = mail.get('token')
         if token:
@@ -244,7 +246,7 @@ class DTP(object):
                 report_body = self._sync_req_resp_channel.recv(
                     flags=zmq.NOBLOCK)
 
-            except zmq.ZMQError as e:
+            except zmq.ZMQError:
                 time.sleep(0.0001)
                 waited_time += 0.0001
 
@@ -288,10 +290,16 @@ class DTP(object):
 
     def handle_async_request(self, mail):
 
+        print(mail)
+
         header = dtp_struct.RequestHeader()
+        header.token = mail['token']
         header.request_id = mail['request_id']
         header.api_id = mail['api_id']
-        header.token = mail['token']
+        header.account_no = mail['account']
+        header.ip = settings['ip']
+        header.mac = settings['mac']
+        header.harddisk = settings['harddisk']
 
         req_type = DTPType.get_proto_type(header.api_id)
         body = req_type()
@@ -300,6 +308,7 @@ class DTP(object):
 
         self.logger.info(mail)
 
+        print(header, body)
         self._async_req_channel.send(
             header.SerializeToString(), zmq.SNDMORE)
 
@@ -490,11 +499,11 @@ class Trader(object):
 
         id_range = strategy._id_whole_range
 
-        if mail.header.request_id != '':
+        # if mail.header.request_id != '':
 
-            if int(mail.header.request_id) in id_range:
-                return True
-            return False
+        #     if int(mail.header.request_id) in id_range:
+        #         return True
+        #     return False
 
         order_id = mail.body['order_original_id']
 
@@ -741,4 +750,7 @@ if __name__ == '__main__':
 
     trader = Trader()
     trader.start()
-    trader.login(**config)
+    trader.login(
+        account=settings['account'],
+        password=settings['password'],
+    )
