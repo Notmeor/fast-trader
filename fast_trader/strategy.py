@@ -321,6 +321,7 @@ class Strategy(object):
         api_id = message['api_id']
 
         if api_id == 'trade_feed':
+            print('??:', message['content'])
             data = message2tuple(message['content'], Transaction)
             self.on_market_trade(data)
 
@@ -329,7 +330,9 @@ class Strategy(object):
             self.on_market_snapshot(data)
 
         elif api_id == 'order_feed':
-            data = message2tuple(message['content'], MarketOrder)
+            print('??:', message['content'])
+#            data = message2tuple(message['content'], MarketOrder)
+            data = message['content']
             self.on_market_order(data)
 
         elif api_id == 'queue_feed':

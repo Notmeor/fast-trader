@@ -15,7 +15,7 @@ import pandas as pd
 from fast_trader import zmq_context
 from fast_trader.dtp import quotation_pb2 as quote_struct
 
-from fast_trader.utils import timeit, message2dict, Mail
+from fast_trader.utils import timeit, message2dict, message2tuple, Mail
 from fast_trader.settings import settings as conf
 
 
@@ -47,7 +47,7 @@ class MarketFeed(object):
         _type = data.Type.Name(data.type).lower()
 
         return getattr(data, _type)
-    
+
     def _on_message(self, msg):
         data = self._parse_data(msg)
         if not isinstance(data, str):
@@ -55,12 +55,12 @@ class MarketFeed(object):
 
     def sub(self, topic):
         self._socket.subscribe(topic)
-    
+
     def _retrieve(self):
         while True:
             msg = self._queue.get()
             self._on_message(msg)
-    
+
     def _recv(self):
         msg = self._socket.recv()
         self._queue.put(msg)
@@ -99,6 +99,7 @@ class QuoteFeed(MarketFeed):
             'fast_trader.dtp_quote.{}'.format(self.name))
 
         self.as_raw_message = False
+        self.as_tuple = False
         self._thread = None
 
     def start(self):
@@ -229,12 +230,22 @@ class OrderFeed(QuoteFeed):
     逐笔报单
     """
     name = 'order_feed'
-    
+
     def format(self, data):
-        ret = message2dict(data)
+
         price_fields = ['nPrice']
+        _updates = {}
         for field in price_fields:
-            ret[field] = ret[field] / 10000
+            _updates[field] = getattr(data, field) / 10000
+
+        if self.as_tuple:
+            ret = message2tuple(data, MarketOrder)
+            print('_updates:', _updates)
+            ret = ret._replace(**_updates)
+        else:
+            ret = message2dict(data)
+            ret.update(_updates)
+
         return ret
 
 

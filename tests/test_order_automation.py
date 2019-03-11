@@ -125,9 +125,10 @@ if __name__ == '__main__':
     tf.subscribe(['300104', '002230', '000001'])
 
     of = OrderFeed()
+    of.as_tuple = True
     of.subscribe(['300104', '002230'])
 
-    strategy.add_datasource(tf)
+    # strategy.add_datasource(tf)
     strategy.add_datasource(of)
 
     strategy.start()
