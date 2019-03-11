@@ -75,7 +75,6 @@ class MarketFeed(object):
             while self._socket.getsockopt(zmq.RCVMORE):
                 self._recv()
 
-
     def on_data(self, data):
 
         print(data, '\n')
@@ -99,7 +98,6 @@ class QuoteFeed(MarketFeed):
             'fast_trader.dtp_quote.{}'.format(self.name))
 
         self.as_raw_message = False
-        self.as_tuple = False
         self._thread = None
 
     def start(self):
@@ -230,22 +228,12 @@ class OrderFeed(QuoteFeed):
     逐笔报单
     """
     name = 'order_feed'
-
+    
     def format(self, data):
-
+        ret = message2dict(data)
         price_fields = ['nPrice']
-        _updates = {}
         for field in price_fields:
-            _updates[field] = getattr(data, field) / 10000
-
-        if self.as_tuple:
-            ret = message2tuple(data, MarketOrder)
-            print('_updates:', _updates)
-            ret = ret._replace(**_updates)
-        else:
-            ret = message2dict(data)
-            ret.update(_updates)
-
+            ret[field] = ret[field] / 10000
         return ret
 
 

@@ -5,12 +5,12 @@ from collections import defaultdict
 
 from fast_trader.dtp import dtp_api_id
 from fast_trader.dtp import type_pb2 as dtp_type
-from fast_trader.dtp_quote import TradeFeed, OrderFeed
+from fast_trader.dtp_quote import TradeFeed, OrderFeed, TickFeed
 from fast_trader.strategy import Strategy, StrategyFactory
-from fast_trader.utils import timeit, message2dict, int2datetime
+from fast_trader.utils import timeit, message2dict, int2datetime, attrdict
 
 
-def get_target_holding_amount():
+def get_target_trading_amount():
     return {
         '002230.SZ': 10000.,
         '601555.SH': 10000.,
@@ -18,6 +18,13 @@ def get_target_holding_amount():
 
 
 class MyStrategy(Strategy):
+    """
+    1.
+        1.1 最新价加滑点(slippages)报单
+        1.2 报单周期(order_period)结束后，撤单已涨跌停价报单
+    2.
+        最新价已达到涨跌停，直接以涨跌停价格报单
+    """
 
     @property
     def now(self):
@@ -34,17 +41,24 @@ class MyStrategy(Strategy):
         """
 
         # 目标持仓金额
-        self.target_holding_amount = get_target_holding_amount()
+        self.target_amount = get_target_trading_amount()
 
-        self.target_codes = list(self.target_holding_amount.keys())
+        self.target_codes = list(self.target_amount.keys())
 
         # 委托单占用的现金
         self.pending_amount = defaultdict(lambda: 0.)
         # 待成交金额（不包含委托占用资金）
-        self.unrealized_amount = self.target_holding_amount.copy()
+        self.available_amount = self.target_amount.copy()
+        # 已成交金额
+        self.traded_amount = defaultdict(lambda: 0.)
+
+        # 当前委托
+        self.last_order = defaultdict(attrdict)
 
         # 设置滑点
-        self.param_slipages = 1
+        self.param_slippages = 1
+        # 报单周期间隔(秒)
+        self.param_order_period = 5
 
     @timeit
     def get_position_detail_by_code(self, code):
@@ -58,50 +72,137 @@ class MyStrategy(Strategy):
         响应逐笔成交行情
         """
 
+        print(f'\rtrade: {data.nTime} {data.nPrice}', end='')
+
         if data.nTime < 93000000:  # 不参与集合竞价
             return
 
-        code = data.szWindCode
-        if code in self.target_codes:
-            left_amount = self.unrealized_amount[code]
-            price = data.nPrice + self.param_slippage * 0.01
-            volume = int(left_amount / price / 100) * 100
-            if volume > 0:
-                self.buy(data.code, price, volume)
-                self.unrealized_amount[code] -= price * volume
+    def process_pending_order(self, order, now):
 
+        if order.status < 4:
+
+            code = self.as_wind_code(order.code)
+            if order['insert_time'] - now > 5000:
+
+                # 涨跌停价报单，不需要重发
+                if (order.price >= self.high_limit[code] or
+                    order.price <= self.low_limit[code]):
+                    return
+
+            self.cancel_order(order)
+
+    def insert_order(self, code, price, now):
+
+        # 计算需要委托的报单方向与数量
+        left_amount = self.available_amount[code]
+        price = price + self.param_slippages * 0.01
+
+        side = 1 if left_amount > 0 else -1
+
+        high_limit, low_limit = self.high_limit[code], self.low_limit[code]
+
+        if price >= high_limit:
+            self.logger.warning('{code} 触及涨停板价 {high_limit}')
+            price = high_limit
+
+        if price <= low_limit:
+            self.logger.warning('{code} 触及跌停板价 {low_limit}')
+            price = low_limit
+
+        # 买入卖出数量均以100股为单位
+        volume = int(abs(left_amount) / price / 100) * 100
+
+        if volume > 0:
+            code_ = code.split('.', 1)[0]
+            if side == 1:
+                order = self.buy(code_, price, volume)
                 self.logger.warning(f'{code} 委托买入 {volume} 股')
+            else:
+                order = self.sell(code_, price, volume)
+                self.logger.warning(f'{code} 委托卖出 {volume} 股')
 
-    def on_market_order(self, data):
-        """
-        响应逐笔报单行情(上交所无该数据推送)
-        """
-        pass
+            order['insert_time'] = now
+
+            amount = price * volume * side
+            self.pending_amount[code] += amount
+            self.available_amount[code] -= amount
 
     def on_market_snapshot(self, data):
         """
         响应快照行情
         """
-        pass
+        print(f'\r{data.nTime} {data.nMatch}', end='')
+
+        code = data.szWindCode
+
+        # 记录涨跌停价格
+        if code not in self.high_limit:
+            self.high_limit[code] = data.nHighLimited
+            self.low_limit[code] = data.nLowLimited
+
+        # 不参与集合竞价
+        if data.nTime < 93000000:
+            return
+
+        if code in self.target_codes:
+
+            # 处理未成交报单委托
+            if code in self.last_order:
+                self.process_pending_order(self.last_order[code], data.nTime)
+
+            self.insert_order(code, data.nMatch, data.nTime)
 
     def on_order(self, order):
         """
         响应报单回报
         """
-        pass
+        # 部分撤单
+        if order.status == dtp_type.ORDER_STATUS_PARTIAL_CANCELLED:
+            print('部分撤单\n', order)
 
     def on_trade(self, trade):
         """
         响应成交回报
         """
-        pass
+        
+        # 委托占用金额转为成金额
+        if trade.fill_status == dtp_type.FILL_STATUS_FILLED:
+            code = self.as_wind_code(trade.code)
+            _sign = 1 if trade.order_side == dtp_type.ORDER_SIDE_BUY else -1
 
-    def on_order_cancelation(self, msg):
+            amount = trade.fill_amount * _sign
+            self.traded_amount[code] += amount
+            self.pending_amount[code] -= amount
+            self.log_order_stats(code)
+
+    def on_order_cancelation(self, data):
         """
         响应撤单回报
         """
-        print(msg)
+        
+        # 撤单后释放委托占用金额
+        # cancelled_vol = data.cancelled_quantity
+        # self.pending_amount[data.szWindCode] -= price * cancelled_vol
+        code = self.as_wind_code(data.code)
+        amount = data.freeze_amount * -1
+        self.pending_amount[code] -= amount
+        self.available_amount[code] += amount
 
+        self.log_order_stats(code)
+
+    def as_wind_code(self, code):
+        if code.startswith('6'):
+            return code + '.SH'
+        return code + '.SZ'
+
+    def log_order_stats(self, code):
+        print(
+            f'代码: {code}',
+            f'目标金额: {self.target_amount[code]}',
+            f'已成交: {self.traded_amount[code]}',
+            f'报单冻结: {self.pending_amount[code]}',
+            f'可用金额: {self.available_amount[code]}',
+        )
 
 
 if __name__ == '__main__':
@@ -116,20 +217,23 @@ if __name__ == '__main__':
 
     factory = StrategyFactory()
     strategy = factory.generate_strategy(
-        MyStrategy, 
-        trader_id=1, 
+        MyStrategy,
+        trader_id=1,
         strategy_id=1
     )
 
     tf = TradeFeed()
-    tf.subscribe(['300104', '002230', '000001'])
+    tf.subscribe(['002230'])
 
     of = OrderFeed()
-    of.as_tuple = True
     of.subscribe(['300104', '002230'])
 
-    # strategy.add_datasource(tf)
-    strategy.add_datasource(of)
+    tk = TickFeed()
+    tk.subscribe(['002230'])
+
+    strategy.add_datasource(tf)
+    # strategy.add_datasource(of)
+    strategy.add_datasource(tk)
 
     strategy.start()
 

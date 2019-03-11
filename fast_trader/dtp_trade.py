@@ -41,6 +41,9 @@ class Dispatcher(object):
 
         self.logger = logging.getLogger('fast_trader.dtp_trade.Dispatcher')
 
+        self._rsp_processer = None
+        self._req_processer = None
+
         self._running = False
         self.start()
 
@@ -50,8 +53,11 @@ class Dispatcher(object):
             return
 
         self._running = True
-        threading.Thread(target=self.process_inbox).start()
-        threading.Thread(target=self.process_outbox).start()
+        self._rsp_processor = threading.Thread(target=self.process_inbox)
+        self._req_processor = threading.Thread(target=self.process_outbox)
+
+        self._rsp_processor.start()
+        self._req_processor.start()
 
     def process_inbox(self):
 

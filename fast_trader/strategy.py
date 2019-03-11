@@ -321,27 +321,23 @@ class Strategy(object):
         api_id = message['api_id']
 
         if api_id == 'trade_feed':
-            print('??:', message['content'])
-            data = message2tuple(message['content'], Transaction)
+            data = message['content']
             self.on_market_trade(data)
 
         elif api_id == 'tick_feed':
-            data = message2tuple(message['content'], Snapshot)
+            data = message['content']
             self.on_market_snapshot(data)
 
         elif api_id == 'order_feed':
-            print('??:', message['content'])
-#            data = message2tuple(message['content'], MarketOrder)
             data = message['content']
             self.on_market_order(data)
 
         elif api_id == 'queue_feed':
-            # FIXME: RepeatedScalarContainer
-            data = data = message2tuple(message['content'], OrderQueue)
+            data = message['content']
             self.on_market_queue(data)
 
         elif api_id == 'index_feed':
-            data = message2tuple(message['content'], Index)
+            data = message['content']
             self.on_market_index(data)
 
     def on_start(self):
@@ -362,9 +358,15 @@ class Strategy(object):
         """
         pass
 
+    def on_market_trade(self, market_trade):
+        """
+        逐笔成交行情
+        """
+        pass
+
     def on_market_order(self, market_order):
         """
-        逐笔报单行情
+        逐笔报单行情(上交所无该数据推送)
         """
         pass
 
@@ -487,7 +489,8 @@ class Strategy(object):
         order.update({
             'order_original_id': order_original_id,
             'exchange': exchange,
-            'price': price})
+            'price': price,
+            'status': dtp_type.ORDER_STATUS_UNDEFINED})
 
         self.trader.send_order(request_id=request_id, **order)
         self._orders[order_original_id] = order
