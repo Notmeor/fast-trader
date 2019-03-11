@@ -51,7 +51,13 @@ class SSDBListStore:
     def __init__(self):
 
         self._client = get_client()
-        self._write_buffer_size = conf['quote_feed_store']['ssdb_write_buffer_size']
+
+        try:
+            self._write_buffer_size = \
+                conf['quote_feed_store']['ssdb_write_buffer_size']
+        except KeyError:
+            self._write_buffer_size = 0
+
         self._buffer = queue.Queue()
         self._writer = None 
         self._buffer_interval = 10
