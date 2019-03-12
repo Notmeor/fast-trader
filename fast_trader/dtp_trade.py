@@ -19,14 +19,61 @@ from fast_trader.dtp import type_pb2 as dtp_type
 from fast_trader.dtp import ext_api_pb2 as dtp_struct_
 from fast_trader.dtp import ext_type_pb2 as dtp_type_
 
-from fast_trader.utils import timeit, message2dict, Mail, _id_pool
+from fast_trader.utils import timeit, attrdict, message2dict, Mail, _id_pool
 from fast_trader.settings import settings
 from fast_trader.logging import setup_logging
 
 REQUEST_TIMEOUT = 60
 
 
-class Dispatcher(object):
+def str2float(s):
+    if s == '':
+        return 0.
+    return float(s)
+
+
+class OrderResponse:
+    """
+    报单回报
+    """
+    
+    @staticmethod
+    def from_msg(msg):
+        ret = msg  # .copy()
+        ret['freeze_amount'] = str2float(msg.freeze_amount)
+        ret['price'] = str2float(msg.price)
+        return ret
+        
+
+class TradeResponse:
+    """
+    成交回报
+    """
+
+    @staticmethod
+    def from_msg(msg):
+        ret = msg  # .copy()
+        ret['fill_price'] = str2float(msg.fill_price)
+        ret['fill_amount'] = str2float(msg.fill_amount)
+        ret['clear_amount'] = str2float(msg.clear_amount)
+        ret['total_fill_amount'] = str2float(msg.total_fill_amount)
+        ret['price'] = str2float(msg.price)
+        return ret
+
+
+class CancellationResponse:
+    """
+    撤单回报
+    """
+
+    @staticmethod
+    def from_msg(msg):
+        ret = msg  # .copy()
+        ret['freeze_amount'] = str2float(msg.freeze_amount)
+        return ret
+
+
+class Dispatcher:
 
     def __init__(self, **kw):
 
@@ -112,7 +159,7 @@ class Dispatcher(object):
         return self._handlers[mail['handler_id']](mail)
 
 
-class DTPType(object):
+class DTPType:
 
     api_map = {
         'CANCEL_REPORT': 'CancellationReport',
@@ -147,7 +194,7 @@ class DTPType(object):
         return cls.proto_structs[api_id]
 
 
-class DTP(object):
+class DTP:
 
     def __init__(self, dispatcher=None):
 
@@ -205,7 +252,6 @@ class DTP(object):
                     setattr(cmsg, name, value)
 
     def handle_sync_request(self, mail):
-        print(mail)
 
         header = dtp_struct.RequestHeader()
         header.request_id = mail['request_id']
@@ -296,8 +342,6 @@ class DTP(object):
 
     def handle_async_request(self, mail):
 
-        print(mail)
-
         header = dtp_struct.RequestHeader()
         header.token = mail['token']
         header.request_id = mail['request_id']
@@ -314,7 +358,6 @@ class DTP(object):
 
         self.logger.info(mail)
 
-        print(header, body)
         self._async_req_channel.send(
             header.SerializeToString(), zmq.SNDMORE)
 
@@ -380,7 +423,7 @@ class DTP(object):
                 message2dict(header), message2dict(body)))
 
 
-class Order(object):
+class Order:
 
     exchange = dtp_type.EXCHANGE_SH_A
     code = ''
@@ -393,7 +436,7 @@ class Order(object):
         return getattr(self, key)
 
 
-class Trader(object):
+class Trader:
 
     def __init__(self, dispatcher=None, broker=None, trader_id=0):
 
@@ -511,6 +554,11 @@ class Trader(object):
         #         return True
         #     return False
 
+        if 'order_original_id' not in mail.body:
+            # FIXME: CancelResponse has no order_original_id,
+            # and is temperarily invisible to user strategy
+            return False
+
         order_id = mail.body['order_original_id']
 
         if int(order_id) in id_range:
@@ -609,6 +657,9 @@ class Trader(object):
         """
         报单委托
         """
+        # 报价转为str类型
+        price_ = str(price)
+
         mail = Mail(
             api_type='req',
             api_id=dtp_api_id.PLACE_ORDER,
@@ -618,7 +669,7 @@ class Trader(object):
             order_original_id=order_original_id,
             exchange=exchange,
             code=code,
-            price=price,
+            price=price_,
             quantity=quantity,
             order_side=order_side,
             order_type=order_type
@@ -631,6 +682,10 @@ class Trader(object):
         """
         批量下单
         """
+        # 报价转为str类型
+        for order in orders:
+            order['price'] = str(order['price'])
+
         mail = Mail(
             api_type='req',
             api_id=dtp_api_id.PLACE_BATCH_ORDER,
@@ -720,7 +775,7 @@ class Trader(object):
         return self.dispatcher.put(mail)
 
 
-class PositionDetail(object):
+class PositionDetail:
     """
     交易标的持仓状态
     """
@@ -740,7 +795,7 @@ class PositionDetail(object):
         pass
 
 
-class AccountDetail(object):
+class AccountDetail:
     """
     账户详情
     """

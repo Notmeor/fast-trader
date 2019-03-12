@@ -14,6 +14,7 @@ def get_target_trading_amount():
     return {
         '002230.SZ': 10000.,
         '601555.SH': 10000.,
+        '601668.SH': 10000.,
     }
 
 
@@ -40,6 +41,9 @@ class MyStrategy(Strategy):
         执行策略启动前的一些初始化操作
         """
 
+        # 是否允许报单
+        self.allow_trading = False
+
         # 目标持仓金额
         self.target_amount = get_target_trading_amount()
 
@@ -58,7 +62,12 @@ class MyStrategy(Strategy):
         # 设置滑点
         self.param_slippages = 1
         # 报单周期间隔(秒)
-        self.param_order_period = 5
+        self.param_order_period = 10000000
+
+        self.high_limit = {}
+        self.low_limit = {}
+
+        self._xx = []
 
     @timeit
     def get_position_detail_by_code(self, code):
@@ -72,26 +81,36 @@ class MyStrategy(Strategy):
         响应逐笔成交行情
         """
 
-        print(f'\rtrade: {data.nTime} {data.nPrice}', end='')
+        # 过滤撤单记录
+        if data.nTurnover == 0:
+            return
+
+        # print(f'\rtrade: {data.nTime} {data.szCode} {data.nPrice}', end='')
+        if data.nPrice < 1:
+            self._xx.append(data)
 
         if data.nTime < 93000000:  # 不参与集合竞价
             return
 
     def process_pending_order(self, order, now):
 
-        if order.status < 4:
+        if order['status'] < 4:
 
             code = self.as_wind_code(order.code)
-            if order['insert_time'] - now > 5000:
+            if order['insert_time'] - now > self.param_order_period * 1000:
 
                 # 涨跌停价报单，不需要重发
                 if (order.price >= self.high_limit[code] or
                     order.price <= self.low_limit[code]):
                     return
 
-            self.cancel_order(order)
+            self.logger.warning(f'{code} 撤单')
+            self.cancel_order(**order)
 
     def insert_order(self, code, price, now):
+
+        if not self.allow_trading:
+            return
 
         # 计算需要委托的报单方向与数量
         left_amount = self.available_amount[code]
@@ -122,16 +141,18 @@ class MyStrategy(Strategy):
                 self.logger.warning(f'{code} 委托卖出 {volume} 股')
 
             order['insert_time'] = now
+            self.last_order[code] = order
 
             amount = price * volume * side
             self.pending_amount[code] += amount
             self.available_amount[code] -= amount
+            self.log_order_stats(code)
 
     def on_market_snapshot(self, data):
         """
         响应快照行情
         """
-        print(f'\r{data.nTime} {data.nMatch}', end='')
+        # print(f'\r{data.nTime} {data.szCode}. {data.nMatch}', end='')
 
         code = data.szWindCode
 
@@ -164,22 +185,24 @@ class MyStrategy(Strategy):
         """
         响应成交回报
         """
-        
+
         # 委托占用金额转为成金额
         if trade.fill_status == dtp_type.FILL_STATUS_FILLED:
             code = self.as_wind_code(trade.code)
             _sign = 1 if trade.order_side == dtp_type.ORDER_SIDE_BUY else -1
 
-            amount = trade.fill_amount * _sign
-            self.traded_amount[code] += amount
-            self.pending_amount[code] -= amount
+            traded_amount = trade.fill_amount * _sign
+            released_amount = (self.last_order[code]['price'] *
+                               trade.fill_quantity * _sign)
+            self.traded_amount[code] += traded_amount
+            self.pending_amount[code] -= released_amount
             self.log_order_stats(code)
 
     def on_order_cancelation(self, data):
         """
         响应撤单回报
         """
-        
+        print('撤单回报')
         # 撤单后释放委托占用金额
         # cancelled_vol = data.cancelled_quantity
         # self.pending_amount[data.szWindCode] -= price * cancelled_vol

@@ -15,7 +15,7 @@ from fast_trader.serializer import serializer, compress, decompress
 LOG = logging.getLogger('fast_trader.feed_store.sqlite')
 
 
-class SqliteStore(object):
+class SqliteStore:
 
     # TODO: use sqlalchemy
 
@@ -229,7 +229,7 @@ class SqliteStore(object):
             ))
 
 
-class SqliteKVStore(object):
+class SqliteKVStore:
 
     def __init__(self, table_name, sqlite_uri=None):
         self.db_path = sqlite_uri

@@ -12,6 +12,7 @@ from google.protobuf.pyext._message import RepeatedScalarContainer
 import yaml
 import uuid
 import socket
+import re
 
 
 class attrdict(dict):
@@ -26,6 +27,9 @@ class attrdict(dict):
 
     def __setattr__(self, key, value):
         raise AttributeError('Assignment not allowed')
+    
+    def copy(self):
+        return attrdict(self)
 
 
 class Mail(attrdict):
@@ -54,7 +58,7 @@ class Mail(attrdict):
 
 def get_mac_address():
     mac = uuid.getnode()
-    ret = '-'.join(("%012X" % mac)[i:i+2] for i in range(0, 12, 2))
+    ret = ':'.join(re.findall('..', '%012x' % mac)).upper()
     return ret
 
 

@@ -17,7 +17,7 @@ from fast_trader.utils import (timeit, message2dict, load_config, Mail,
 conf = load_config()
 
 
-class Store(object):
+class Store:
 
     def __init__(self, db_name):
 

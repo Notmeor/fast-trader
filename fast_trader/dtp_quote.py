@@ -19,7 +19,7 @@ from fast_trader.utils import timeit, message2dict, message2tuple, Mail
 from fast_trader.settings import settings as conf
 
 
-class MarketFeed(object):
+class MarketFeed:
 
     url = None
 

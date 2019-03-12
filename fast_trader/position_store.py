@@ -10,7 +10,7 @@ import datetime
 import sqlite3
 
 
-class PositionStore(object):
+class PositionStore:
     """
     PositionStore 接口定义
     """
@@ -41,7 +41,7 @@ class PositionStore(object):
         raise NotImplementedError
 
 
-class SqliteStore(object):
+class SqliteStore:
 
     # TODO: use sqlalchemy
 

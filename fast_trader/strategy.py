@@ -10,12 +10,14 @@ from fast_trader.dtp_quote import (Transaction, Snapshot,
 
 from fast_trader.dtp import type_pb2 as dtp_type
 
+from fast_trader.dtp_trade import OrderResponse, TradeResponse, CancellationResponse
+
 from fast_trader.position_store import SqlitePositionStore as PositionStore
-from fast_trader.utils import timeit, message2tuple
+from fast_trader.utils import timeit, message2tuple, attrdict
 from fast_trader.settings import settings
 
 
-class Market(object):
+class Market:
 
     def __init__(self):
         self._strategies = []
@@ -28,7 +30,7 @@ class Market(object):
             ea.on_quote_message(message)
 
 
-class Strategy(object):
+class Strategy:
 
     def __init__(self, number, *args, **kw):
 
@@ -213,7 +215,7 @@ class Strategy(object):
 
         if order_side == dtp_type.ORDER_SIDE_BUY:
             tot_value = (last_quantity * last_cost_price +
-                         fill_quantity * float(trade.price))
+                         fill_quantity * float(trade.fill_price))
             tot_quantity = (last_quantity + trade.fill_quantity)
             cost_price = tot_value / tot_quantity
         else:
@@ -235,7 +237,7 @@ class Strategy(object):
     @property
     def positions(self):
         if not hasattr(self, '_position_query_proxy'):
-            class _Positions(object):
+            class _Positions:
                 def __getitem__(self_, code):
                     return self.get_position_by_code(code)
             self._position_query_proxy = _Positions()
@@ -380,7 +382,7 @@ class Strategy(object):
         """
         成交回报
         """
-        trade = msg.body
+        trade = TradeResponse.from_msg(msg.body)
         if msg.header.code == dtp_type.RESPONSE_CODE_OK:
             original_id = trade.order_original_id
             order_detail = self._orders[original_id]
@@ -404,11 +406,11 @@ class Strategy(object):
         """
         订单回报
         """
-        order = msg.body
-        if msg.header.code == dtp_type.RESPONSE_CODE_OK:
-            original_id = order.order_original_id
-            order_detail = self._orders[original_id]
-            order_detail.update(order)
+        order = OrderResponse.from_msg(msg.body)
+        # if msg.header.code == dtp_type.RESPONSE_CODE_OK:
+        original_id = order.order_original_id
+        order_detail = self._orders[original_id]
+        order_detail.update(order)
 
         self.on_order(order)
 
@@ -440,7 +442,13 @@ class Strategy(object):
         """
         撤单确认回报
         """
-        self.on_order_cancelation(msg)
+        data = CancellationResponse.from_msg(msg.body)
+        if msg.header.code == dtp_type.RESPONSE_CODE_OK:
+            original_id = data.order_original_id
+            order_detail = self._orders[original_id]
+            order_detail.update(data)
+
+        self.on_order_cancelation(data)
 
     def on_order_cancelation(self, msg):
         pass
@@ -457,7 +465,6 @@ class Strategy(object):
             order_original_id = self.generate_order_id()
             if 'exchange' not in order:
                 order['exchange'] = self.get_exchange(order['code'])
-            order['price'] = str(order['price'])
             order['order_side'] = order_side
             order['order_type'] = dtp_type.ORDER_TYPE_LIMIT
             order['order_original_id'] = order_original_id
@@ -483,17 +490,21 @@ class Strategy(object):
         request_id = self.generate_request_id()
         order_original_id = self.generate_order_id()
         exchange = kw['exchange'] or self.get_exchange(kw['code'])
-        price = str(kw['price'])
+        price = kw['price']
 
         order = kw.copy()
         order.update({
             'order_original_id': order_original_id,
             'exchange': exchange,
             'price': price,
-            'status': dtp_type.ORDER_STATUS_UNDEFINED})
+        })
 
         self.trader.send_order(request_id=request_id, **order)
+
+        order['status'] = dtp_type.ORDER_STATUS_UNDEFINED
+        order = attrdict(order)
         self._orders[order_original_id] = order
+
         return order
 
     def buy(self, code, price, quantity, exchange=None):
