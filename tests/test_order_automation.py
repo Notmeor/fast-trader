@@ -12,7 +12,7 @@ from fast_trader.utils import timeit, message2dict, int2datetime, attrdict
 
 def get_target_trading_amount():
     return {
-        '002230.SZ': 10000.,
+        '600056.SH': 10000.,
         '601555.SH': 10000.,
         '601668.SH': 10000.,
     }
@@ -246,13 +246,13 @@ if __name__ == '__main__':
     )
 
     tf = TradeFeed()
-    tf.subscribe(['002230'])
+    tf.subscribe(['600056'])
 
     of = OrderFeed()
-    of.subscribe(['300104', '002230'])
+    of.subscribe(['600056'])
 
     tk = TickFeed()
-    tk.subscribe(['002230'])
+    tk.subscribe(['600056'])
 
     strategy.add_datasource(tf)
     # strategy.add_datasource(of)
