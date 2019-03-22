@@ -24,10 +24,18 @@ class Market:
 
     def add_strategy(self, strategy):
         self._strategies.append(strategy)
+    
+    def remove_strategy(self, strategy):
+        self._strategies.remove(strategy)
 
     def on_quote_message(self, message):
         for ea in self._strategies:
             ea.on_quote_message(message)
+
+
+def to_timeint(dt):
+    return (dt.hour * 10000000 + dt.minute * 100000 
+        + dt.second * 1000 + int(dt.microsecond / 1000))
 
 
 class Strategy:
@@ -459,6 +467,13 @@ class Strategy:
         """
         pass
 
+    def _store_order(self, order):
+        order['status'] = dtp_type.ORDER_STATUS_UNDEFINED
+        order['placed_localtime'] = to_timeint(datetime.datetime.now())
+        order = attrdict(order)
+        self._orders[order.order_original_id] = order
+        return order
+
     def _insert_many(self, order_side, orders):
         request_id = self.generate_request_id()
         for order in orders:
@@ -469,9 +484,11 @@ class Strategy:
             order['order_type'] = dtp_type.ORDER_TYPE_LIMIT
             order['order_original_id'] = order_original_id
 
-            self._orders[order_original_id] = order
-
         self.trader.place_order_batch(request_id=request_id, orders=orders)
+
+        for order in orders:
+            order = self._store_order(order)
+
         return orders
 
     def buy_many(self, orders):
@@ -501,9 +518,7 @@ class Strategy:
 
         self.trader.send_order(request_id=request_id, **order)
 
-        order['status'] = dtp_type.ORDER_STATUS_UNDEFINED
-        order = attrdict(order)
-        self._orders[order_original_id] = order
+        order = self._store_order(order)
 
         return order
 
@@ -575,7 +590,7 @@ class StrategyFactory:
     """
     def __init__(self):
         # 用于 trader 与 dtp通道 以及 策略实例 间的消息分发
-        # 将所有行情数据与柜台回报在同一个线程中进行分发，实现策略的同步执行（无需加锁）
+        # 将所有行情数据与柜台回报在同一个线程中进行分发
         self.dispatcher = Dispatcher()
 
         # dtp通道
@@ -596,3 +611,7 @@ class StrategyFactory:
         strategy.set_market(self.market)
 
         return strategy
+    
+    def remove_strategy(self, strategy):
+        self.market.remove_strategy(strategy)
+        self.trader.remove_strategy(strategy)

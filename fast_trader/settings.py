@@ -1,6 +1,7 @@
 import os
 import yaml
 
+
 def load_config(path=None):
     if path is None:
         path = os.getenv('FAST_TRADER_CONFIG')
@@ -15,16 +16,13 @@ def load_config(path=None):
 class Settings:
 
     def __init__(self):
-        self._custom_settings = {}
+        self._default_settings = load_config()
+        self._custom_settings = self._default_settings.copy()
 
     def set(self, config):
         assert isinstance(config, dict)
         self._custom_settings.update(config)
 
-    @property
-    def _default_settings(self):
-        return load_config()
-    
     @property
     def _settings(self):
         ret = self._default_settings.copy()
@@ -32,10 +30,10 @@ class Settings:
         return ret
 
     def __getitem__(self, key):
-        return self._settings[key]
-    
+        return self._custom_settings[key]
+
     def get(self, k, d=None):
-        return self._settings.get(k, d)
+        return self._custom_settings.get(k, d)
 
 
 settings = Settings()

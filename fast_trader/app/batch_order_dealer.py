@@ -18,7 +18,7 @@ def get_target_trading_amount():
     }
 
 
-class MyStrategy(Strategy):
+class BatchOrderDealer(Strategy):
     """
     1.
         1.1 最新价加滑点(slippages)报单
@@ -233,41 +233,46 @@ class MyStrategy(Strategy):
             f'可用金额: {self.available_amount[code]}',
         )
 
+    def write2sql(self):
+        now = datetime.datetime.now().strftime('%Y%m%d %H:%M:%S.%f')
+        update_date = now[:8]
+        update_time = now[9:]
+        session = self._Session()
 
-if __name__ == '__main__':
+        # 写入账户资金信息
+        capital = self.get_capital()
+        capital['update_date'] = update_date
+        capital['update_time'] = update_time
+        session.add(CapitalModel.from_msg(capital))
 
-    from fast_trader.settings import settings
-    from fast_trader.utils import get_mac_address
-    settings.set({
-        'ip': '192.168.211.169',
-        'mac': get_mac_address(),
-        'harddisk': '6B69DD46',
-    })
+        # 写入成交记录
+        trades = self.get_trades()
+        last_trade = (session
+                      .query(TradeModel)
+                      .order_by(TradeModel.fill_exchange_id.desc())
+                      .first())
 
-    factory = StrategyFactory()
-    strategy = factory.generate_strategy(
-        MyStrategy,
-        trader_id=1,
-        strategy_id=1
-    )
+        if last_trade is None or last_trade.update_date < update_date:
+            today_last_trade_no = -1
+        else:
+            today_last_trade_no = int(last_trade.fill_exchange_id)
+        # 仅追加新的成交记录
+        for trade in trades:
+            if int(trade.fill_exchange_id) > today_last_trade_no:
+                trade['update_date'] = update_date
+                trade['update_time'] = update_time
+                session.add(TradeModel.from_msg(trade))
 
-    tf = TradeFeed()
-    tf.subscribe(['600056'])
+        # 刷新持仓记录
+        positions = self.get_account_positions()
+        (session
+            .query(PositionModel)
+            .filter(PositionModel.update_date == update_date)
+            .delete(synchronize_session=False))
+        for position in positions:
+            position['update_date'] = update_date
+            position['update_time'] = update_time
+            session.add(PositionModel.from_msg(position))
 
-    of = OrderFeed()
-    of.subscribe(['600056'])
-
-    tk = TickFeed()
-    tk.subscribe(['600056'])
-
-    strategy.add_datasource(tf)
-    # strategy.add_datasource(of)
-    strategy.add_datasource(tk)
-
-    strategy.start()
-
-    ea = strategy
-
-
-
-
+        session.commit()
+        session.close()

@@ -23,6 +23,8 @@ from fast_trader.utils import timeit, attrdict, message2dict, Mail, _id_pool
 from fast_trader.settings import settings
 from fast_trader.logging import setup_logging
 
+setup_logging()
+
 REQUEST_TIMEOUT = 60
 
 
@@ -92,6 +94,8 @@ class Dispatcher:
         self._req_processer = None
 
         self._running = False
+        self._service_suspended = False
+
         self.start()
 
     def start(self):
@@ -138,8 +142,22 @@ class Dispatcher:
             raise KeyError(
                 'handler {} already exists!'.format(handler_id))
         self._handlers[handler_id] = handler
+    
+    def suspend(self):
+        """
+        When suspended, ignore all incoming/outgoing messages
+        """
+        self._service_suspended = True
+        self.logger.warning('Mail service is currently suspended.')
+    
+    def resume(self):
+        self._service_suspended = False
 
     def put(self, mail):
+
+        if self._service_suspended:
+            # ignore all incoming/outgoing messages
+            return
 
         handler_id = mail['handler_id']
 
@@ -458,7 +476,6 @@ class Trader:
         self._strategies = []
         self._strategy_dict = OrderedDict()
 
-        setup_logging()
         self.logger = logging.getLogger('fast_trader.dtp_trade.Trader')
         self.logger.info('初始化 process_id={}'.format(os.getpid()))
 
@@ -543,6 +560,11 @@ class Trader:
         self._strategies.append(strategy)
         self._strategy_dict[strategy.strategy_id] = strategy
         self._generate_initial_id(strategy)
+    
+    def remove_strategy(self, strategy):
+        # TODO: keep one only
+        self._strategies.remove(strategy)
+        self._strategy_dict.pop(strategy.strategy_id)
 
     def _check_owner(self, strategy, mail):
 
