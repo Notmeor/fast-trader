@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from fast_trader.utils import timeit, message2dict, int2datetime, attrdict
+
 
 import os
 import zmq
