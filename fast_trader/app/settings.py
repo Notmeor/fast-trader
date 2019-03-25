@@ -21,7 +21,8 @@ Session = None
 def config_sqlalchemy():
     global engine
     global Session
-    engine = create_engine(settings['sqlalchemy_url'])
+    engine = create_engine(
+        settings['batch_order_dealer_app']['sqlalchemy_url'])
     Session = sessionmaker(bind=engine)
     Base.metadata.create_all(bind=engine)
 
