@@ -22,7 +22,6 @@ class StrategyProxy:
         host = settings['batch_order_dealer_app']['strategy_host']
         port = settings['batch_order_dealer_app']['strategy_port']
         url = f"tcp://{host}:{port}"
-        print(url)
         self._sock.connect(url)
 
         self.strategy_id = strategy_id
