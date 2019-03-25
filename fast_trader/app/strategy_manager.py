@@ -25,7 +25,9 @@ class Manager:
 
     def __init__(self):
         self._sock = zmq.Context().socket(zmq.REP)
-        conn = f"tcp://{settings['strategy_host']}:{settings['strategy_port']}"
+        host = settings['batch_order_dealer_app']['strategy_host']
+        port = settings['batch_order_dealer_app']['strategy_port']
+        conn = f"tcp://{host}:{port}"
         self._sock.bind(conn)
 
         self._strategy_settings = None

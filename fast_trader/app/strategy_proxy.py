@@ -19,7 +19,9 @@ class StrategyProxy:
         self._sock = zmq.Context().socket(zmq.REQ)
         self._sock.setsockopt(zmq.REQ_RELAXED, 1)
 
-        url = f"tcp://{settings['strategy_host']}:{settings['strategy_port']}"
+        host = settings['batch_order_dealer_app']['strategy_host']
+        port = settings['batch_order_dealer_app']['strategy_port']
+        url = f"tcp://{host}:{port}"
         print(url)
         self._sock.connect(url)
 
