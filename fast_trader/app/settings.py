@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
 
 import logging
-import yaml
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
+import os
+
+os.environ['FAST_TRADER_CONFIG'] = os.path.join(
+    os.path.dirname(__file__), 'config.yaml')
 
 from fast_trader.settings import settings
 from fast_trader.app.models import StrategyLogModel, Base

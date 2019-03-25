@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import os
-os.environ['FAST_TRADER_CONFIG'] = os.path.join(
-    os.path.dirname(__file__), 'config.yaml')
 
 import datetime
 import time
@@ -13,7 +11,7 @@ import threading
 
 import sqlalchemy.orm.exc as orm_exc
 
-from fast_trader.settings import settings
+from fast_trader.app.settings import settings
 from fast_trader.strategy import Strategy, StrategyFactory
 from fast_trader.app.settings import Session, SqlLogHandler
 from fast_trader.app.models import StrategyStatus
