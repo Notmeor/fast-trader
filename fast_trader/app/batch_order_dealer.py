@@ -9,6 +9,8 @@ from fast_trader.dtp_quote import TradeFeed, OrderFeed, TickFeed
 from fast_trader.strategy import Strategy, StrategyFactory, to_timeint
 from fast_trader.utils import timeit, message2dict, int2datetime, attrdict
 
+from fast_trader.app.models import *
+
 
 def get_target_trading_amount():
     return {

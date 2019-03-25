@@ -1,25 +1,13 @@
 # -*- coding: utf-8 -*-
 
 import logging
+import yaml
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import String, Column, Integer, Float, Boolean
-from sqlalchemy.ext.declarative import declarative_base
 
-from fast_trader.app.models import StrategyLogModel
-
-
-Base = declarative_base()
-
-settings = {
-    'sqlalchemy_url': 'mysql+pymysql://root:idwzx.com@192.168.211.190:3306/'
-                      'dtp_trade_test?charset=utf8',
-    'strategy_host': '127.0.0.1',
-    'strategy_port': 5600,
-    'strategy_directory': '/Users/eisenheim/Documents/git/fast-trader/'
-                          'fast_trader/app',
-}
+from fast_trader.settings import settings
+from fast_trader.app.models import StrategyLogModel, Base
 
 
 engine = None
@@ -29,9 +17,12 @@ Session = None
 def config_sqlalchemy():
     global engine
     global Session
-    engine = create_engine(settings['strategy_channel'])
+    engine = create_engine(settings['sqlalchemy_url'])
     Session = sessionmaker(bind=engine)
     Base.metadata.create_all(bind=engine)
+
+
+config_sqlalchemy()
 
 
 class SqlLogHandler(logging.Handler):

@@ -218,6 +218,7 @@ class DTP:
 
         self.dispatcher = dispatcher or Queue()
 
+        self.__settings = settings.copy()
         # FIXME: param
         self._account = settings['account']
         self._ctx = zmq_context.CONTEXT
@@ -275,9 +276,9 @@ class DTP:
         header.request_id = mail['request_id']
         header.api_id = mail['api_id']
         header.account_no = mail['account']
-        header.ip = settings['ip']
-        header.mac = settings['mac']
-        header.harddisk = settings['harddisk']
+        header.ip = self.__settings['ip']
+        header.mac = self.__settings['mac']
+        header.harddisk = self.__settings['harddisk']
 
         token = mail.get('token')
         if token:
@@ -365,9 +366,9 @@ class DTP:
         header.request_id = mail['request_id']
         header.api_id = mail['api_id']
         header.account_no = mail['account']
-        header.ip = settings['ip']
-        header.mac = settings['mac']
-        header.harddisk = settings['harddisk']
+        header.ip = self.__settings['ip']
+        header.mac = self.__settings['mac']
+        header.harddisk = self.__settings['harddisk']
 
         req_type = DTPType.get_proto_type(header.api_id)
         body = req_type()

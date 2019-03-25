@@ -120,3 +120,5 @@ class StrategyStatus(Base, BaseDocument):
     running = Column(Boolean)
     # 启动时间
     start_time = Column(String(30))
+    # 最新心跳时间戳
+    last_heartbeat = Column(Integer)

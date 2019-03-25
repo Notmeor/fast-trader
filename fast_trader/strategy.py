@@ -588,7 +588,12 @@ class StrategyFactory:
     """
     演示策略实例化流程
     """
-    def __init__(self):
+    def __init__(self, factory_settings=None):
+
+        # FIXME: settings should be independent for each factory instance
+        if factory_settings is not None:
+            settings.set(factory_settings)
+
         # 用于 trader 与 dtp通道 以及 策略实例 间的消息分发
         # 将所有行情数据与柜台回报在同一个线程中进行分发
         self.dispatcher = Dispatcher()
@@ -613,5 +618,6 @@ class StrategyFactory:
         return strategy
     
     def remove_strategy(self, strategy):
+        # FIXME: remove trader from dtp
         self.market.remove_strategy(strategy)
-        self.trader.remove_strategy(strategy)
+        strategy.trader.remove_strategy(strategy)

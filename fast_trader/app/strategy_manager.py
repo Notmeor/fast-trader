@@ -1,39 +1,87 @@
 # -*- coding: utf-8 -*-
 
 import os
+os.environ['FAST_TRADER_CONFIG'] = os.path.join(
+    os.path.dirname(__file__), 'config.yaml')
+
 import datetime
+import time
 import zmq
 import logging
 import importlib
+import threading
 
+import sqlalchemy.orm.exc as orm_exc
+
+from fast_trader.settings import settings
 from fast_trader.strategy import Strategy, StrategyFactory
-from fast_trader.app.settings import Session, SqlLogHandler, settings
+from fast_trader.app.settings import Session, SqlLogHandler
 from fast_trader.app.models import StrategyStatus
+
+
+class StrategyNotFound(Exception):
+    pass
 
 
 class Manager:
 
     def __init__(self):
         self._sock = zmq.Context().socket(zmq.REP)
-        conn = f"tcp://{settings['strategy_host']}:{settings['strategy_host']}"
+        conn = f"tcp://{settings['strategy_host']}:{settings['strategy_port']}"
         self._sock.bind(conn)
 
-        self.factory = StrategyFactory()
+        self._strategy_settings = None
+        self._factory = None
         self._strategies = {}
 
+        self._heartbeat_thread = threading.Thread(target=self.send_heartbeat)
+
     def receive(self):
-        return self._sock.recv_json()
+        return self._sock.recv_json()  # (zmq.NOBLOCK)
 
     def send(self, msg):
         self._sock.send_json(msg)
 
+    def send_heartbeat(self):
+        session = Session()
+        while True:
+            time.sleep(1)
+            ts = int(datetime.datetime.now().timestamp())
+            for _id in self._strategies:
+                (session
+                 .query(StrategyStatus)
+                 .filter_by(strategy_id=_id)
+                 .update({'last_heartbeat': ts}))
+            session.commit()
+
+    @property
+    def factory(self):
+        if self._strategy_settings is None:
+            raise Exception('交易参数未配置')
+        if self._factory is None:
+            self._factory = StrategyFactory(
+                factory_settings=self._strategy_settings)
+        return self._factory
+
+    def update_settings(self, strategy_settings):
+        self._strategy_settings = strategy_settings
+        return {'ret_code': 0, 'data': None}
+
     def add_strategy(self, strategy):
         self._strategies[strategy.strategy_id] = strategy
 
-    def start_strategy(self, strategy, config):
+    def get_strategy(self, strategy_id):
         try:
-            if strategy.strategi_id not in self._strategies:
-                self.instantiate_strategy(config)
+            return self._strategies[strategy_id]
+        except KeyError:
+            raise StrategyNotFound('策略未启动')
+
+    def start_strategy(self, strategy_id):
+        try:
+            if strategy_id not in self._strategies:
+                self.instantiate_strategy(strategy_id)
+
+            strategy = self.get_strategy(strategy_id)
 
             strategy.start()
             data = {
@@ -47,24 +95,28 @@ class Manager:
             self._update_strategy_status(data)
             return {'ret_code': 0, 'data': data}
         except Exception as e:
-            return {'ret_code': -1, 'err_msg': str(e)}
+            return {'ret_code': -1, 'err_msg': repr(e)}
 
     def stop_strategy(self, strategy_id):
         try:
-            strategy = self._strategies[strategy_id]
+            strategy = self.get_strategy(strategy_id)
             self.factory.remove_strategy(strategy)
             return {'ret_code': 0, 'data': None}
         except Exception as e:
-            return {'ret_code': -1, 'err_msg': str(e)}
+            return {'ret_code': -1, 'err_msg': repr(e)}
 
-    def _operate(self, strategy, request):
-        if request['token'] != strategy.trader._token:
-            return {'ret_code': -1, 'err_msg': 'token错误'}
+    def _operate(self, request):
+
         try:
+            strategy = self.get_strategy(request['strategy_id'])
+            if request['token'] != strategy.trader._token:
+                return {'ret_code': -1, 'err_msg': 'token错误'}
+
             ret = getattr(strategy, request['api_name'])(**request['kw'])
             return {'ret_code': 0, 'data': ret}
+
         except Exception as e:
-            return {'ret_code': -1, 'err_msg': str(e)}
+            return {'ret_code': -1, 'err_msg': repr(e)}
 
     def _update_strategy_status(self, msg):
         session = Session()
@@ -84,16 +136,18 @@ class Manager:
         session.commit()
 
     def handle_request(self, request):
-        strategy = self._strategies[request['strategy_id']]
+        # strategy = self._strategies[request['strategy_id']]
 
         if request['api_name'] == 'start_strategy':
-            return self.start_strategy(strategy)
+            return self.start_strategy(request['strategy_id'])
         elif request['api_name'] == 'stop_strategy':
-            return self.stop_strategy(strategy)
+            return self.stop_strategy(request['strategy_id'])
+        elif request['api_name'] == 'update_settings':
+            return self.update_settings(request['settings'])
         else:
-            return self._operate(strategy, request)
-    
-    def instantiate_strategy(self, strategy_id, config):
+            return self._operate(request)
+
+    def instantiate_strategy(self, strategy_id):
         StrategyCls = StrategyLoader().load()[0]
 
         strategy = self.factory.generate_strategy(
@@ -102,18 +156,26 @@ class Manager:
             strategy_id=strategy_id
         )
         self.add_strategy(strategy)
-    
+
     def run(self):
         logger = logging.getLogger(f'{__name__}')
         logger.addHandler(SqlLogHandler())
-        
+        logger.info('Strategy manager started...')
+
+        self._heartbeat_thread.start()
+
         while True:
             # 监听外部指令
-            request = self.receive()
-            logger.info(f'received: {request}')
-            ret = self.handle_request(request)
-            self.send(ret)
-            logger.info(f'sent: {ret}')
+            try:
+                request = self.receive()
+            except zmq.Again:
+                self.send_heartbeat()
+                time.sleep(0.2)
+            else:
+                logger.info(f'received: {request}')
+                ret = self.handle_request(request)
+                self.send(ret)
+                logger.info(f'sent: {ret}')
 
 
 class StrategyLoader:
@@ -139,22 +201,7 @@ class StrategyLoader:
         return strategy_classes
 
 
-def start_strategy():
-    from fast_trader.settings import settings
-    from fast_trader.utils import get_mac_address
-    settings.set({
-        'ip': '192.168.211.169',
-        'mac': get_mac_address(),
-        'harddisk': '6B69DD46',
-    })
+if __name__ == '__main__':
 
-    factory = StrategyFactory()
-    strategy = factory.generate_strategy(
-        StrategyCls,
-        trader_id=1,
-        strategy_id=1
-    )
-
-
-
-    return factory, strategy
+    manager = Manager()
+    manager.run()
