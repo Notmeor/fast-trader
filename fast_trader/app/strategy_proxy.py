@@ -76,7 +76,7 @@ class StrategyProxy:
             策略启动成功返回`True`, 否则返回`False`
         """
         if self.is_running():
-            return {'ret_code': 0, 'err_msg': '策略运行中，无需重复启动'}
+            return {'ret_code': 0, 'data': '策略运行中，无需重复启动'}
 
         rsp = self.send_request({
             'strategy_id': self.strategy_id,

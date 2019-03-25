@@ -181,7 +181,8 @@ class Manager:
 class StrategyLoader:
 
     def __init__(self):
-        self.strategy_dir = settings['strategy_directory']
+        self.strategy_dir = \
+            settings['batch_order_dealer_app']['strategy_directory']
 
     def load(self):
         strategy_classes = []
