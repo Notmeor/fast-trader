@@ -24,10 +24,14 @@ class MemoryStore:
         self._store = collections.defaultdict(list)
 
     def write(self, key, value):
+        lst = self._store[key]
         if self._keep_history:
-            self._store[key].append(value)
+            lst.append(value)
         else:
-            self._store[key][0] = value
+            if lst:
+                lst[0] = value
+            else:
+                lst.append(value)
 
     def read(self, key):
         return self._store[key]
