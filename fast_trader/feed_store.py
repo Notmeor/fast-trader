@@ -250,6 +250,8 @@ class FeedStore:
             dict: {code -> [ticks]}
             list; [ticks]
         """
+        if not isinstance(codes, list):
+            raise TypeError(f'`codes` expects type `list`, got {type(codes)}')
 
         keys = self._store.list_keys()
 
