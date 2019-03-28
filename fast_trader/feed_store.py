@@ -204,10 +204,21 @@ class FeedStore:
     def connect(self):
         self.datasource.start()
 
+    @staticmethod
+    def as_wind_code(code):
+        if '.' in code:
+            return code
+        if code.startswith('6'):
+            return code + '.SH'
+        else:
+            return code + '.SZ'
+
     def get_all_codes(self):
         if self.datasource.subscribed_all:
             return self._store.list_keys()
-        return self.datasource.subscribed_codes
+        codes = [self.as_wind_code(c) 
+                 for c in self.datasource.subscribed_codes]
+        return codes
 
     def pull(self, codes=None):
         """
