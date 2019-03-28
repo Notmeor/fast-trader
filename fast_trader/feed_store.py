@@ -214,11 +214,12 @@ class FeedStore:
             return code + '.SZ'
 
     def get_all_codes(self):
-        if self.datasource.subscribed_all:
-            return self._store.list_keys()
-        codes = [self.as_wind_code(c) 
-                 for c in self.datasource.subscribed_codes]
-        return codes
+        # if self.datasource.subscribed_all:
+        #     return self._store.list_keys()
+        # codes = [self.as_wind_code(c) 
+        #          for c in self.datasource.subscribed_codes]
+        # return codes
+        return self._store.list_keys()
 
     def pull(self, codes=None):
         """
