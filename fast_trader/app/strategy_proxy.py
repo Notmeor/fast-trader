@@ -13,9 +13,12 @@ from fast_trader.app.models import StrategyStatus
 
 class StrategyProxy:
 
-    def __init__(self, strategy_id):
+    def __init__(self, strategy_id, timeout=3):
         self._sock = zmq.Context().socket(zmq.REQ)
         self._sock.setsockopt(zmq.REQ_RELAXED, 1)
+        self._sock.setsockopt(zmq.SNDTIMEO, 1000 * timeout)
+        self._sock.setsockopt(zmq.RCVTIMEO, 1000 * timeout)
+        
 
         host = settings['batch_order_dealer_app']['strategy_host']
         port = settings['batch_order_dealer_app']['strategy_port']
@@ -55,10 +58,12 @@ class StrategyProxy:
         return False
 
     def send_request(self, request):
-        # TODO: timeout
-        self._sock.send_json(request)
-        ret = self._sock.recv_json()
-        return ret
+        try:
+            self._sock.send_json(request)
+            ret = self._sock.recv_json()
+            return ret
+        except zmq.Again:
+            return {'ret_code': -1, 'err_msg': '连接超时'}
 
     def update_settings(self, config):
         self.send_request({
