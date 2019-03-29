@@ -610,7 +610,7 @@ class StrategyFactory:
 
         strategy = StrategyCls(strategy_id)
         
-        if not trader_id in self.traders:
+        if trader_id not in self.traders:
             trader = Trader(self.dispatcher, self.dtp, trader_id)
         else:
             trader = self.traders['trader_id']

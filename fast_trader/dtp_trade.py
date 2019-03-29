@@ -477,6 +477,8 @@ class Trader:
         self._strategies = []
         self._strategy_dict = OrderedDict()
 
+        self.__api_bound = False
+
         self.logger = logging.getLogger('fast_trader.dtp_trade.Trader')
         self.logger.info('初始化 process_id={}'.format(os.getpid()))
 
@@ -497,15 +499,19 @@ class Trader:
 
     def _bind(self):
 
-        dispatcher, broker = self.dispatcher, self.broker
+        if not self.__api_bound:
 
-        for api_id in dtp_api_id.RSP_API_NAMES:
-            dispatcher.bind('{}_rsp'.format(api_id), self._on_response)
+            dispatcher, broker = self.dispatcher, self.broker
 
-        for api_id in dtp_api_id.REQ_API_NAMES:
-            api_name = dtp_api_id.REQ_API_NAMES[api_id]
-            handler = getattr(broker, api_name)
-            dispatcher.bind('{}_req'.format(api_id), handler)
+            for api_id in dtp_api_id.RSP_API_NAMES:
+                dispatcher.bind('{}_rsp'.format(api_id), self._on_response)
+
+            for api_id in dtp_api_id.REQ_API_NAMES:
+                api_name = dtp_api_id.REQ_API_NAMES[api_id]
+                handler = getattr(broker, api_name)
+                dispatcher.bind('{}_req'.format(api_id), handler)
+            
+            self.__api_bound = True
 
     def _set_number(self, number, max_number=None):
         """
