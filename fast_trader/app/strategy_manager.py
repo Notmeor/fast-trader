@@ -104,6 +104,7 @@ class Manager:
         try:
             strategy = self.get_strategy(strategy_id)
             self.factory.remove_strategy(strategy)
+            self._strategies.pop(strategy_id)
             return {'ret_code': 0, 'data': None}
         except Exception as e:
             return {'ret_code': -1, 'err_msg': repr(e)}
@@ -163,7 +164,7 @@ class Manager:
     def run(self):
         logger = logging.getLogger(f'{__name__}')
         logger.addHandler(SqlLogHandler())
-        logger.info('Strategy manager started...')
+        logger.info(f'Strategy manager started. Pid={os.getpid()}')
 
         self._heartbeat_thread.start()
 
