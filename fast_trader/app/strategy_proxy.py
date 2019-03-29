@@ -157,6 +157,10 @@ class StrategyProxy:
 
 if __name__ == '__main__':
     from fast_trader.utils import get_mac_address
+    from fast_trader.app.strategy_manager import start_strategy_server
+    
+    start_strategy_server()
+
     p = StrategyProxy(1)
     p.update_settings({
         'ip': '192.168.211.169',

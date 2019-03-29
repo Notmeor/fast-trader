@@ -34,6 +34,9 @@ class SqlLogHandler(logging.Handler):
 
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        self.setFormatter(formatter)
 
     def emit(self, record):
         try:

@@ -8,6 +8,8 @@ import zmq
 import logging
 import importlib
 import threading
+import subprocess
+import multiprocessing
 
 import sqlalchemy.orm.exc as orm_exc
 
@@ -61,6 +63,7 @@ class Manager:
         if self._factory is None:
             self._factory = StrategyFactory(
                 factory_settings=self._strategy_settings)
+            self._factory.dtp.logger.addHandler(SqlLogHandler())
         return self._factory
 
     def update_settings(self, strategy_settings):
@@ -186,10 +189,16 @@ class StrategyLoader:
 
     def load(self):
         strategy_classes = []
-        for fl in os.listdir(self.strategy_dir):
+
+        if self.strategy_dir == '':
+            strategy_dir = os.path.dirname(__file__)
+        else:
+            strategy_dir = self.strategy_dir
+
+        for fl in os.listdir(strategy_dir):
             if not fl.endswith('ler.py'):
                 continue
-            path = os.path.join(self.strategy_dir, fl)
+            path = os.path.join(strategy_dir, fl)
             spec = importlib.util.spec_from_file_location(
                 "strategy", path)
             mod = importlib.util.module_from_spec(spec)
@@ -202,7 +211,16 @@ class StrategyLoader:
         return strategy_classes
 
 
-if __name__ == '__main__':
-
+def main():
     manager = Manager()
     manager.run()
+
+
+def start_strategy_server():
+    proc = subprocess.Popen(['python', __file__])
+    return proc.pid
+
+
+if __name__ == '__main__':
+
+    main()
