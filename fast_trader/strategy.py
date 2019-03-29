@@ -604,11 +604,17 @@ class StrategyFactory:
         # 行情通道
         self.market = Market()
 
+        self.traders = {}
+
     def generate_strategy(self, StrategyCls, trader_id, strategy_id):
 
         strategy = StrategyCls(strategy_id)
+        
+        if not trader_id in self.traders:
+            trader = Trader(self.dispatcher, self.dtp, trader_id)
+        else:
+            trader = self.traders['trader_id']
 
-        trader = Trader(self.dispatcher, self.dtp, trader_id)
         strategy.set_trader(trader)
 
         strategy.set_dispatcher(self.dispatcher)
