@@ -609,11 +609,12 @@ class StrategyFactory:
     def generate_strategy(self, StrategyCls, trader_id, strategy_id):
 
         strategy = StrategyCls(strategy_id)
-        
+
         if trader_id not in self.traders:
             trader = Trader(self.dispatcher, self.dtp, trader_id)
+            self.traders[trader_id] = trader
         else:
-            trader = self.traders['trader_id']
+            trader = self.traders[trader_id]
 
         strategy.set_trader(trader)
 
@@ -622,7 +623,7 @@ class StrategyFactory:
         strategy.set_market(self.market)
 
         return strategy
-    
+
     def remove_strategy(self, strategy):
         # FIXME: remove trader from dtp
         self.market.remove_strategy(strategy)
