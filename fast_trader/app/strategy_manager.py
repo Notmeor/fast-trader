@@ -13,10 +13,9 @@ import multiprocessing
 
 import sqlalchemy.orm.exc as orm_exc
 
-from fast_trader.app.settings import settings
+from fast_trader.settings import settings, Session, SqlLogHandler
 from fast_trader.strategy import Strategy, StrategyFactory
-from fast_trader.app.settings import Session, SqlLogHandler
-from fast_trader.app.models import StrategyStatus
+from fast_trader.models import StrategyStatus
 
 
 class StrategyNotFound(Exception):
@@ -218,8 +217,28 @@ def main():
 
 
 def start_strategy_server():
-    proc = subprocess.Popen(['python', __file__])
+    proc = subprocess.Popen(
+        ['python', __file__],
+        shell=False,
+        bufsize=1,
+        universal_newlines=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return proc
     return proc.pid
+
+
+#import subprocess, datetime, time, sys
+#
+#def foo():
+#    while True:
+#        print('stdout:'+str(datetime.datetime.now()), flush=True)
+#        print('stderr:'+str(datetime.datetime.now()), file=sys.stderr, flush=True)
+#        time.sleep(1.5)
+#
+#def main():
+#    foo()
 
 
 if __name__ == '__main__':

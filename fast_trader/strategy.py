@@ -47,7 +47,7 @@ class Strategy:
         self._started = False
 
         self._positions = {}
-        self._orders = collections.defaultdict(dict)
+        self._orders = collections.defaultdict(attrdict)
         self._trades = {}
 
         self.subscribed_datasources = []
@@ -209,9 +209,9 @@ class Strategy:
         fill_quantity = trade.fill_quantity
         last_pos = self.get_position_by_code(code)
 
-        last_quantity = last_pos['quantity']
+        last_quantity = last_pos['balance']
         available_quantity = last_pos['available_quantity']
-        last_cost_price = last_pos['cost_price'] or 0.
+        last_cost_price = last_pos['cost'] or 0.
 
         _sign = 1 if order_side == dtp_type.ORDER_SIDE_BUY else -1
 
@@ -234,11 +234,11 @@ class Strategy:
                 'strategy_id': self.strategy_id,
                 'exchange': trade.exchange,
                 'code': trade.code,
-                'quantity': quantity,
+                'balance': quantity,
                 'available_quantity': available_quantity,
-                'cost_price': cost_price,
-                'date': datetime.datetime.now().strftime('%Y%m%d'),
-                'time': trade.fill_time
+                'cost': cost_price,
+                'update_date': datetime.datetime.now().strftime('%Y%m%d'),
+                'update_time': trade.fill_time
             }
         ])
 
@@ -393,6 +393,8 @@ class Strategy:
         trade = TradeResponse.from_msg(msg.body)
         if msg.header.code == dtp_type.RESPONSE_CODE_OK:
             original_id = trade.order_original_id
+            # FIXME: strategy might start before trade responses and after
+            # order responses
             order_detail = self._orders[original_id]
             order_detail.update(trade)
 

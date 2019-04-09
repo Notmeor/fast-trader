@@ -9,6 +9,8 @@ import threading
 import datetime
 import sqlite3
 
+import contextlib
+
 
 class PositionStore:
     """
@@ -26,8 +28,8 @@ class PositionStore:
                     'exchange': 2,
                     'code': '000001',
                     'cost': 10.00,
-                    'yesterday_long_quantity': 100,
-                    'quantity': 200
+                    'available_quantity': 100,
+                    'balance': 200
                 },
                 ...
             ]
@@ -168,8 +170,8 @@ class SqlitePositionStore(PositionStore):
     def __init__(self):
 
         self.fields = ['strategy_id', 'exchange', 'code', 'name',
-                       'quantity', 'available_quantity',
-                       'cost_price', 'date', 'time']
+                       'balance', 'available_quantity',
+                       'cost', 'update_date', 'update_time']
 
         self._stores = {}
 
@@ -211,9 +213,9 @@ class SqlitePositionStore(PositionStore):
         if ret:
             return ret[-1]
         failover = {'code': code, 'exchange': exchange,
-                    'cost_price': None, 'quantity': 0,
-                    'available_quantity': 0, 'date': '19700101',
-                    'time': '00:00:00'}
+                    'cost': None, 'balance': 0,
+                    'available_quantity': 0, 'update_date': '19700101',
+                    'update_time': '00:00:00'}
         return failover
 
     def get_all_strategies(self):
@@ -233,8 +235,110 @@ class SqlitePositionStore(PositionStore):
         for strategy in self.get_all_strategies():
             positions = self.get_positions(strategy)
             for pos in positions:
-                if pos['date'] < today:
-                    pos['available_quantity'] = pos['quantity']
-                    pos['date'] = today
-                    pos['time'] = datetime.datetime.now().strftime('%H:%M:%S')
+                if pos['update_date'] < today:
+                    pos['available_quantity'] = pos['balance']
+                    pos['update_date'] = today
+                    pos['update_time'] = datetime.datetime.now().strftime('%H:%M:%S')
+            self.set_positions(positions)
+
+
+from fast_trader.settings import Session, engine
+from fast_trader.models import PositionModel
+
+
+@contextlib.contextmanager
+def session_scope():
+    session = Session()
+    try:
+        yield session
+        session.commit()
+    except:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+class SqlalchemyPositionStore(PositionStore):
+    """
+    TODO: proper session scope & concurrency safety
+    """
+
+    def __init__(self):
+
+        self.fields = ['strategy_id', 'exchange', 'code', 'name',
+                       'balance', 'available_quantity',
+                       'cost', 'update_date', 'update_time']
+
+        self._stores = {}
+
+        self.update_available_quantity()
+
+    def get_positions(self, strategy_id):
+        with contextlib.closing(Session()) as session:
+            ret = (
+                session
+                .query(PositionModel)
+                .filter_by(strategy_id=strategy_id)
+                .all()
+            )
+        return ret
+
+    def set_positions(self, positions):
+
+        with session_scope() as session:
+
+            for pos in positions:
+                code = pos['code']
+                doc = PositionModel.parse(pos)
+                r = (
+                    session
+                    .query(PositionModel)
+                    .filter_by(code=code)
+                    .update(doc)
+                )
+
+                if r == 0:  # upsert
+                    session.add(PositionModel.from_msg(doc, parse=False))
+
+            session.commit()
+
+    def get_position_by_code(self, strategy_id, code, exchange=None):
+        query = {'strategy_id': strategy_id, 'code': code}
+        if exchange is not None:
+            query['exchange'] = exchange
+
+        with session_scope() as session:
+            ret = session.query(PositionModel).filter_by(**query).all()
+
+        if ret:
+            return ret[-1]
+        failover = {'code': code, 'exchange': exchange,
+                    'cost_price': None, 'balance': 0,
+                    'available_quantity': 0, 'update_date': '19700101',
+                    'update_time': '00:00:00'}
+        return failover
+
+    def get_all_strategies(self):
+        with session_scope() as session:
+            res = session.query(PositionModel.strategy_id).all()
+        strategies = [el[0] for el in res]
+        return strategies
+
+    def update_available_quantity(self, today=None):
+        """
+        根据日期变更刷新当日可卖出仓位,
+        须在每日交易之前刷新
+        """
+        if today is None:
+            today = datetime.date.today().strftime('%Y%m%d')
+
+        for strategy in self.get_all_strategies():
+            positions = self.get_positions(strategy)
+            for pos in positions:
+                if pos['update_date'] < today:
+                    pos['available_quantity'] = pos['balance']
+                    pos['update_date'] = today
+                    pos['update_time'] = \
+                        datetime.datetime.now().strftime('%H:%M:%S')
             self.set_positions(positions)

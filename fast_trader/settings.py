@@ -1,6 +1,11 @@
 import os
 import threading
 import yaml
+import logging
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from fast_trader.models import StrategyLogModel, Base
 
 
 def load_config(path=None):
@@ -40,3 +45,41 @@ class Settings:
 
 
 settings = Settings()
+
+
+engine = None
+Session = None
+
+
+def config_sqlalchemy():
+    global engine
+    global Session
+    engine = create_engine(
+        settings['batch_order_dealer_app']['sqlalchemy_url'])
+    Session = sessionmaker(bind=engine)
+    Base.metadata.create_all(bind=engine)
+
+
+config_sqlalchemy()
+
+
+class SqlLogHandler(logging.Handler):
+
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        self.setFormatter(formatter)
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            session = Session()
+
+            item = StrategyLogModel()
+            item.msg = msg
+
+            session.add(item)
+            session.commit()
+        except Exception:
+            self.handleError(record)

@@ -42,6 +42,15 @@ account: '011000106328'
 password: '111111'
 
 
+batch_order_dealer_app:
+  # sqlalchemy_url: 'mysql+pymysql://root:idwzx.com@192.168.211.190:3306/dtp_trade_test?charset=utf8'
+  sqlalchemy_url: 'sqlite:////Users/eisenheim/Documents/git/fast-trader/fast_trader/app/test_sqlite.db'
+  strategy_host: '127.0.0.1'
+  strategy_port: 5600
+  # strategy_directory: '/Users/eisenheim/Documents/git/fast-trader/fast_trader/app'
+  strategy_directory: ''
+
+
 quote_feed_store:
   disk_store_folder: '~/work/share/cache'
   compress: False

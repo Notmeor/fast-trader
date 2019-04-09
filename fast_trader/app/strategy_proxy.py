@@ -7,8 +7,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import sqlalchemy.orm.exc as orm_exc
 
-from fast_trader.app.settings import settings, Session
-from fast_trader.app.models import StrategyStatus
+from fast_trader.settings import settings, Session
+from fast_trader.models import StrategyStatus
 
 
 class StrategyProxy:
@@ -159,9 +159,9 @@ if __name__ == '__main__':
     from fast_trader.utils import get_mac_address
     from fast_trader.app.strategy_manager import start_strategy_server
     
-    start_strategy_server()
+    server = start_strategy_server()
 
-    p = StrategyProxy(1)
+    p = StrategyProxy(3)
     p.update_settings({
         'ip': '192.168.211.169',
         'mac': get_mac_address(),
