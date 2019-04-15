@@ -103,9 +103,16 @@ class Strategy:
             # 启动行情线程
             self.start_market()
 
+            return {'ret_code': 0, 'data': None}
+
         else:
-            self.logger.warning(
-                '策略启动失败 账户<{}>未成功登录'.format(self.account_no))
+            err_msg = '策略启动失败 账户<{}>未成功登录'.format(self.account_no)
+            self.logger.warning(err_msg)
+            return {'ret_code': -1, 'err_msg': err_msg}
+
+    def remove_self(self):
+        self.trader.remove_strategy(self)
+        self.market.remove_strategy(self)
 
     def start_market(self):
 

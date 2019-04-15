@@ -80,12 +80,17 @@ class Manager:
 
     def start_strategy(self, strategy_id):
         try:
-            if strategy_id not in self._strategies:
-                self.instantiate_strategy(strategy_id)
+            if strategy_id in self._strategies:
+                return {'ret_code': -1, 'err_msg': 'Already running'}
 
-            strategy = self.get_strategy(strategy_id)
+            strategy = self.instantiate_strategy(strategy_id)
 
-            strategy.start()
+            ret = strategy.start()
+
+            if ret['ret_code'] != 0:
+                strategy.remove_self()
+                return ret
+
             data = {
                 'pid': os.getpid(),
                 'account_no': strategy.trader._account,
@@ -94,15 +99,19 @@ class Manager:
                     ).strftime('%Y%m%d %H:%M:%S.%f'),
                 'token': strategy.trader._token,
                 'running': True}
+
             self._update_strategy_status(data)
+            self.add_strategy(strategy)
+
             return {'ret_code': 0, 'data': data}
+
         except Exception as e:
             return {'ret_code': -1, 'err_msg': repr(e)}
 
     def stop_strategy(self, strategy_id):
         try:
             strategy = self.get_strategy(strategy_id)
-            self.factory.remove_strategy(strategy)
+            strategy.remove_self()
             self._strategies.pop(strategy_id)
             return {'ret_code': 0, 'data': None}
         except Exception as e:
@@ -158,7 +167,7 @@ class Manager:
             trader_id=1,
             strategy_id=strategy_id
         )
-        self.add_strategy(strategy)
+        return strategy
 
     def run(self):
         logger = logging.getLogger(f'{__name__}')

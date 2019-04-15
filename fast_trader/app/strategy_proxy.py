@@ -18,7 +18,6 @@ class StrategyProxy:
         self._sock.setsockopt(zmq.REQ_RELAXED, 1)
         self._sock.setsockopt(zmq.SNDTIMEO, 1000 * timeout)
         self._sock.setsockopt(zmq.RCVTIMEO, 1000 * timeout)
-        
 
         host = settings['batch_order_dealer_app']['strategy_host']
         port = settings['batch_order_dealer_app']['strategy_port']
@@ -158,7 +157,7 @@ class StrategyProxy:
 if __name__ == '__main__':
     from fast_trader.utils import get_mac_address
     from fast_trader.app.strategy_manager import start_strategy_server
-    
+
     server = start_strategy_server()
 
     p = StrategyProxy(3)
@@ -167,5 +166,3 @@ if __name__ == '__main__':
         'mac': get_mac_address(),
         'harddisk': '6B69DD46',
     })
-
-
