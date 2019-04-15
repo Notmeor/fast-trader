@@ -493,7 +493,7 @@ class Strategy:
             order['order_type'] = dtp_type.ORDER_TYPE_LIMIT
             order['order_original_id'] = order_original_id
 
-        self.trader.place_order_batch(request_id=request_id, orders=orders)
+        self.trader.place_batch_order(request_id=request_id, orders=orders)
 
         for order in orders:
             order = self._store_order(order)
@@ -525,7 +525,7 @@ class Strategy:
             'price': price,
         })
 
-        self.trader.send_order(request_id=request_id, **order)
+        self.trader.place_order(request_id=request_id, **order)
 
         order = self._store_order(order)
 

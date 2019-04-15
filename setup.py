@@ -10,5 +10,6 @@ setup(
     author_email='kevin.inova@gmail.com',
     description='',
     install_requires=[
-        'protobuf>=3.6.1']
+        'protobuf>=3.6.1',
+        'inflection']
 )

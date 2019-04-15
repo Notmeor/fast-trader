@@ -680,7 +680,7 @@ class Trader:
         )
         return self.dispatcher.put(mail)
 
-    def send_order(self, request_id, order_original_id, exchange,
+    def place_order(self, request_id, order_original_id, exchange,
                    code, price, quantity, order_side,
                    order_type=dtp_type.ORDER_TYPE_LIMIT):
         """
@@ -707,7 +707,7 @@ class Trader:
 
         self.logger.info('报单委托 {}'.format(mail))
 
-    def place_order_batch(self, request_id, orders):
+    def place_batch_order(self, request_id, orders):
         """
         批量下单
         """

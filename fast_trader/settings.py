@@ -14,7 +14,7 @@ def load_config(path=None):
     if path is None:
         dirname = os.path.dirname(__file__)
         path = os.path.join(dirname, 'config.yaml')
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding='UTF-8') as f:
         conf = yaml.load(f)
     return conf
 

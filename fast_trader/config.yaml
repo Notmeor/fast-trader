@@ -17,15 +17,6 @@ options_feed_channel: 'tcp://192.168.211.194:7784'
 ctp_feed_channel: 'tcp://192.168.221.82:9504'
 
 
-## 同步请求
-#sync_channel_port: 'tcp://192.168.221.52:19005'
-## 异步请求
-#async_channel_port: 'tcp://192.168.221.91:19001'
-## 异步响应
-#rsp_channel_port: 'tcp://192.168.221.52:19004'
-## 风控消息
-#risk_channel_port: 'tcp://192.168.221.91:19002'
-
 # 同步请求
 sync_channel_port: 'tcp://192.168.221.37:9833'
 # 异步请求
@@ -36,6 +27,14 @@ rsp_channel_port: 'tcp://192.168.221.37:9832'
 risk_channel_port: ''
 
 
+# rest api
+rest_api:
+  order: 'http://192.168.221.36:8101/accounts/{account_no}/orders'
+  cancel_order: 'http://192.168.221.36:8101/accounts/{account_no}/order_cancellations'
+  batch_order: 'http://192.168.221.36:8101/accounts/{account_no}/batchOrder'
+  cancel_batch: 'http://192.168.221.36:8101/accounts/{account_no}/batchCancel'
+
+
 # 账号
 account: '011000106328'
 # 密码
@@ -44,7 +43,7 @@ password: '111111'
 
 batch_order_dealer_app:
   # sqlalchemy_url: 'mysql+pymysql://root:idwzx.com@192.168.211.190:3306/dtp_trade_test?charset=utf8'
-  sqlalchemy_url: 'sqlite:////Users/eisenheim/Documents/git/fast-trader/fast_trader/app/test_sqlite.db'
+  sqlalchemy_url: 'sqlite:////dataUpdate/fast-trader/fast_trader/app/test_sqlite.db'
   strategy_host: '127.0.0.1'
   strategy_port: 5600
   # strategy_directory: '/Users/eisenheim/Documents/git/fast-trader/fast_trader/app'
@@ -99,14 +98,3 @@ logging:
     root:
         level: DEBUG
         handlers: [console, info_file_handler, error_file_handler]
-
-
-  
-#账户：011000106328  密码：111111
-#用户：test03  密码：t123456
-#通道：192.168.221.34:18021
-#需要连接的AC：
-#SYNC_CHANNEL_PORT = "tcp://192.168.221.37:9833"   #query and login
-#ASYNC_CHANNEL_PORT = "tcp://192.168.221.37:9831"     # order
-#SUB_COUNTER_PORT = "tcp://192.168.221.37:9832"     # report
-#AC服务端口：8131
