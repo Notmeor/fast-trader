@@ -1,6 +1,5 @@
 
 
-
 # 指数行情
 index_feed_channel: 'tcp://192.168.211.194:7778'
 # 快照行情
@@ -28,17 +27,14 @@ risk_channel_port: ''
 
 
 # rest api
+use_rest_api: True
+
 rest_api:
+  get_account: 'http://192.168.221.36:8101/accounts'
   order: 'http://192.168.221.36:8101/accounts/{account_no}/orders'
   cancel_order: 'http://192.168.221.36:8101/accounts/{account_no}/order_cancellations'
   batch_order: 'http://192.168.221.36:8101/accounts/{account_no}/batchOrder'
   cancel_batch: 'http://192.168.221.36:8101/accounts/{account_no}/batchCancel'
-
-
-# 账号
-account: '011000106328'
-# 密码
-password: '111111'
 
 
 batch_order_dealer_app:
@@ -53,6 +49,12 @@ batch_order_dealer_app:
 quote_feed_store:
   disk_store_folder: '~/work/share/cache'
   compress: False
+
+
+# 账号
+account: '011000106328'
+# 密码
+password: '111111'
 
 
 logging:

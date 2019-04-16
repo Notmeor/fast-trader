@@ -20,8 +20,8 @@ from fast_trader.dtp import ext_api_pb2 as dtp_struct_
 from fast_trader.dtp import ext_type_pb2 as dtp_type_
 
 from fast_trader.utils import timeit, attrdict, message2dict, Mail, _id_pool
-from fast_trader.settings import settings
-from fast_trader.logging import setup_logging
+from fast_trader.settings import settings, setup_logging
+from fast_trader.rest_api import might_use_rest_api
 
 setup_logging()
 
@@ -629,6 +629,7 @@ class Trader:
     def on_logout(self, mail):
         self.logger.info('登出账户 {}'.format(self.account_no))
 
+    @might_use_rest_api(might=settings['use_rest_api'], api_name='restapi_login')
     def login(self, account, password, sync=True, **kw):
 
         self._account = account

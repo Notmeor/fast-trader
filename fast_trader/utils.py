@@ -15,6 +15,35 @@ import socket
 import re
 
 
+class AnnotationCheckMixin:
+    """
+    Data members must be of the same number and types declared
+    in the annoation.
+    
+    NOTE: `typing` type annotation is not supported
+    """
+    def _check_fields(self):
+        if hasattr(self, '__slots__'):
+            attrs = self.__slots__
+        else:
+            attrs = self.__dict__.keys()
+        
+        unexpected_fields = set(attrs).difference(self.__annotations__)
+        if unexpected_fields:
+            raise RuntimeError(f'Unexpected fields: {unexpected_fields}')
+
+        for k in self.__annotations__:
+            if k not in attrs:
+                raise RuntimeError(f'Missing field: `{k}`')
+
+            _type = type(getattr(self, k))
+            dst_type = self.__annotations__[k]
+
+            if _type is not dst_type:
+                raise TypeError(
+                    f'Expect type {dst_type} for `{k}`, got {_type}')
+
+
 class attrdict(dict):
 
     __slots__ = ()

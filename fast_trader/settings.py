@@ -83,3 +83,12 @@ class SqlLogHandler(logging.Handler):
             session.commit()
         except Exception:
             self.handleError(record)
+
+
+def setup_logging():
+    try:
+        logging.config.dictConfig(settings['logging'])
+    except:
+        logging.basicConfig(level=logging.INFO)
+
+
