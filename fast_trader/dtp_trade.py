@@ -681,6 +681,8 @@ class Trader:
         )
         return self.dispatcher.put(mail)
 
+    @might_use_rest_api(might=settings['use_rest_api'],
+                        api_name='restapi_place_order')
     def place_order(self, request_id, order_original_id, exchange,
                    code, price, quantity, order_side,
                    order_type=dtp_type.ORDER_TYPE_LIMIT):
@@ -708,6 +710,8 @@ class Trader:
 
         self.logger.info('报单委托 {}'.format(mail))
 
+    @might_use_rest_api(might=settings['use_rest_api'],
+                        api_name='restapi_place_batch_order')
     def place_batch_order(self, request_id, orders):
         """
         批量下单
@@ -726,6 +730,8 @@ class Trader:
         self.dispatcher.put(mail)
         self.logger.info('批量买入委托 {}'.format(mail))
 
+    @might_use_rest_api(might=settings['use_rest_api'],
+                        api_name='restapi_cancel_order')
     def cancel_order(self, **kw):
         """
         撤单
@@ -739,6 +745,8 @@ class Trader:
         )
         self.dispatcher.put(mail)
 
+    @might_use_rest_api(might=settings['use_rest_api'],
+                        api_name='restapi_query_orders')
     def query_orders(self, **kw):
         """
         查询订单
@@ -752,6 +760,8 @@ class Trader:
         )
         return self.dispatcher.put(mail)
 
+    @might_use_rest_api(might=settings['use_rest_api'],
+                        api_name='restapi_query_fills')
     def query_trades(self, **kw):
         """
         查询成交
@@ -765,6 +775,8 @@ class Trader:
         )
         return self.dispatcher.put(mail)
 
+    @might_use_rest_api(might=settings['use_rest_api'],
+                        api_name='restapi_query_positions')
     def query_positions(self, **kw):
         """
         查询持仓
@@ -778,6 +790,8 @@ class Trader:
         )
         return self.dispatcher.put(mail)
 
+    @might_use_rest_api(might=settings['use_rest_api'],
+                        api_name='restapi_query_capital')
     def query_capital(self, **kw):
         """
         查询账户资金

@@ -85,7 +85,7 @@ class SSDBListStore:
             while self._writer_running:
                 now = datetime.datetime.now()
                 if (now - self._last_write_time).seconds > self._buffer_interval:
-                    slef._last_write_time = now
+                    self._last_write_time = now
                     try:
                         for i in range(self._buffer.qsize()):
                             el = self._buffer.get(block=False)
