@@ -48,6 +48,20 @@ default_query_headers = {
 }
 
 
+class Order(AnnotationCheckMixin):
+    code: str
+    exchange: int
+    original_id: str
+    order_type: int
+    price: str
+    quantity: int
+    side: int
+    
+    def to_dict(self):
+        self._check_fields
+        return self.__dict__
+
+
 def request(url, headers, body, method='post'):
     data = json.dumps(body)
     meth = getattr(session, method)
@@ -65,20 +79,6 @@ def get_account():
     headers = default_query_headers
     body = {}
     return request(url, headers=headers, body=body, method='get')
-                 
-                 
-class Order(AnnotationCheckMixin):
-    code: str
-    exchange: int
-    original_id: str
-    order_type: int
-    price: str
-    quantity: int
-    side: int
-    
-    def to_dict(self):
-        self._check_fields
-        return self.__dict__
        
 
 def place_order(order):
@@ -93,7 +93,6 @@ def place_order(order):
 
 
 def cancel_order(order_exchange_id, order_original_id=''):
-    # TODO: test non-optional params
     url = settings['rest_api']['cancel_order'].format(
         account_no=settings['account'])
     headers = default_headers
@@ -185,15 +184,13 @@ def query_open_orders():
     return request(url, headers=headers, body=body, method='get')
 
 
-def restapi_login(trader, account, password, *args, **kw):
-    stats = get_account()[0]
-    print(account == stats['cashAccountNo'], account, stats['cashAccountNo'])
-    if stats['loginStatus'] == 1:
-        trader._logined = True
-        trader._token = user_meta['token']
-        print('Login success')
-    else:
-        print('Login failed')
+def make_pageable_query(method_name, page, size):
+    url = settings['rest_api'][method_name].format(
+    account_no = settings['account'])
+    url = f'{url}?page={page}&size={size}'
+    headers = default_query_headers
+    body = {}
+    return request(url, headers=headers, body=body, method='get')
 
 
 def _get_order_obj(kw):
@@ -209,19 +206,107 @@ def _get_order_obj(kw):
     return order
 
 
-#def restapi_place_order(trader, request_id, order_original_id, exchange,
-#                        code, price, quantity, order_side,
-#                        order_type=dtp_type.ORDER_TYPE_LIMIT):
-#    order = Order()
-#    order.code = code
-#    order.exchange = exchange
-#    order.order_type = order_type
-#    order.original_id = order_original_id
-#    order.price = price
-#    order.quantity = quantity
-#    order.side = order_side
-#    
-#    place_order(order)
+def handle_pagination(method_name, content_name, pagination, format_fn):
+    size = pagination['size']
+    offset = pagination['offset']
+    page = int((offset + 1) / size)
+    
+    result = make_pageable_query(method_name, page, size)
+
+    content = format_fn(result)
+    
+    mail = attrdict()
+    mail['body'] = attrdict()
+    mail['body'][content_name] = content
+    
+    pag = attrdict()
+    pag['offset'] = offset + len(content)
+    pag['size'] = size
+
+    mail['body']['pagination'] = pag
+
+    return mail
+
+
+def format_positions(stats):
+    positions = []
+    for item in stats:
+        pos = {
+            'available_quantity': item['availableQuantity'],
+            'balance': item['balance'],
+            'buy_quantity': item['buyQuantity'],
+            'code': item['code'],
+            'cost': item['cost'],
+            'exchange': item['exchange'],
+            'freeze_quantity': item['freezeQuantity'],
+            'market_value': item['marketValue'],
+            'name': item['name'],
+            'sell_quantity': item['sellQuantity']
+        }
+        positions.append(attrdict(pos))
+    return positions
+
+
+def format_fills(stats):
+    fills = []
+    for item in stats:
+        fill = {
+            'clear_amount': item['clearAmount'],
+            'code': item['code'],
+            'exchange': item['exchange'],
+            'fill_amount': item['fillAmount'],
+            'fill_exchange_id': item['fillId'],
+            'fill_price': item['fillPrice'],
+            'fill_quantity': item['fillQuantity'],
+            'fill_status': item['fillType'],
+            'fill_time': item['fillTime'],
+            'name': item['name'],
+            'order_exchange_id': item['orderExchangeId'],
+            'order_original_id': item['orderOriginalId'],
+            'order_side': item['side']
+        }
+        fill = attrdict(fill)
+        fills.append(fill)
+    return fills
+
+
+def format_orders(stats):
+    orders = []
+    for kw in stats:
+        order = {
+            'account_no': kw['accountNo'],
+            'average_fill_price': kw['averageFillPrice'],
+            'clear_amount': kw['clearAmount'],
+            'code': kw['code'],
+            'exchange': kw['exchange'],
+            'freeze_amount': kw['freezeAmount'],
+            'name': kw['name'],
+            'order_exchange_id': kw['exchangeId'],
+            'order_original_id': kw['originalId'],
+            'order_side': kw['side'],
+            'order_time': kw['orderTime'],
+            'order_type': kw['orderType'],
+            'price': kw['price'],
+            'quantity': kw['quantity'],
+            'status': kw['orderStatus'],
+            'status_message': '',
+            'total_cancelled_quantity': kw['cancelQuantity'],
+            'total_fill_amount': kw['fillAmount'],
+            'total_fill_quantity': kw['fillQuantity']
+        }
+        orders.append(attrdict(order))
+    return orders
+
+
+def restapi_login(trader, account, password, *args, **kw):
+    stats = get_account()[0]
+    print(account == stats['cashAccountNo'], account, stats['cashAccountNo'])
+    if stats['loginStatus'] == 1:
+        trader._logined = True
+        trader._token = user_meta['token']
+        print('Login success')
+    else:
+        print('Login failed')
 
 
 def restapi_place_order(trader, order_type=dtp_type.ORDER_TYPE_LIMIT, **kw):
@@ -234,7 +319,6 @@ def restapi_cancel_order(trader, **kw):
     order_exchange_id = kw['order_exchange_id']
     cancel_order(order_exchange_id=order_exchange_id)
     
-
 
 def restapi_place_batch_order(trader, request_id, orders):
     order_objs = []
@@ -259,108 +343,41 @@ def restapi_query_capital(trader, **kw):
 
 
 def restapi_query_positions(trader, **kw):
-    stats = query_positions()
-    positions = []
-    for item in stats:
-        pos = {
-            'available_quantity': item['availableQuantity'],
-            'balance': item['balance'],
-            'buy_quantity': item['buyQuantity'],
-            'code': item['code'],
-            'cost': item['cost'],
-            'exchange': item['exchange'],
-            'freeze_quantity': item['freezeQuantity'],
-            'market_value': item['marketValue'],
-            'name': item['name'],
-            'sell_quantity': item['sellQuantity']
-        }
-        positions.append(pos)
-    mail = {'body': positions}
-    return mail
+    return handle_pagination(
+        method_name='query_positions',
+        content_name='position_list',
+        pagination=kw['pagination'],
+        format_fn=format_positions
+    )
 
 
 def restapi_query_fills(trader, **kw):
-    # TODO: pagination
-    stats = query_fills()
-    fills = []
-    for item in stats:
-        fill = {
-            'clear_amount': item['clearAmount'],
-            'code': item['code'],
-            'exchange': item['exchange'],
-            'fill_amount': item['fillAmount'],
-            'fill_exchange_id': item['fillId'],
-            'fill_price': item['fillPrice'],
-            'fill_quantity': item['fillQuantity'],
-            'fill_status': item['fillType'],
-            'fill_time': item['fillTime'],
-            'name': item['name'],
-            'order_exchange_id': item['orderExchangeId'],
-            'order_original_id': item['orderOriginalId'],
-            'order_side': item['side']
-        }
-        fill = attrdict(fill)
-        fills.append(fill)
-    mail = attrdict()
-
-    mail['body'] = attrdict()
-    mail['body']['fill_list'] = fills
-    
-    pag = attrdict()
-    pag['offset'] = len(fills)
-    pag['size'] = 100
-    if pag['offset'] > pag['size']:
-        raise RuntimeError('Pagination Error')
-    mail['body']['pagination'] = pag
-
-    return mail
-
-
-def _convert_order(kw):
-    order = {
-        'account_no': kw['accountNo'],
-        'average_fill_price': kw['averageFillPrice'],
-        'clear_amount': kw['clearAmount'],
-        'code': kw['code'],
-        'exchange': kw['exchange'],
-        'freeze_amount': kw['freezeAmount'],
-        'name': kw['name'],
-        'order_exchange_id': kw['exchangeId'],
-        'order_original_id': kw['originalId'],
-        'order_side': kw['side'],
-        'order_time': kw['orderTime'],
-        'order_type': kw['orderType'],
-        'price': kw['price'],
-        'quantity': kw['quantity'],
-        'status': kw['orderStatus'],
-        'status_message': '',
-        'total_cancelled_quantity': kw['cancelQuantity'],
-        'total_fill_amount': kw['fillAmount'],
-        'total_fill_quantity': kw['fillQuantity']
-    }
-    return order
+    print('fill params:', kw)
+    return handle_pagination(
+        method_name='query_fills',
+        content_name='fill_list',
+        pagination=kw['pagination'],
+        format_fn=format_fills
+    )
 
 
 def restapi_query_orders(trader, **kw):
-    # TODO: pagination
-    stats = query_orders()
-    orders = []
-    for item in stats:
-        order = _convert_order(item)
-        orders.append(order)
-    mail = {'body': orders}
-    return mail
+    print('order params:', kw)
+    return handle_pagination(
+        method_name='query_orders',
+        content_name='order_list',
+        pagination=kw['pagination'],
+        format_fn=format_orders
+    )
 
 
 def restapi_query_open_orders(trader, **kw):
-    # TODO: pagination
-    stats = query_open_orders()
-    open_orders = []
-    for item in stats:
-        order = _convert_order(item)
-        open_orders.append(order)
-    mail  = {'body': open_orders}
-    return mail
+    return handle_pagination(
+        method_name='query_open_orders',
+        content_name='order_list',
+        pagination=kw['pagination'],
+        format_fn=format_orders
+    )
 
 
 def might_use_rest_api(might, api_name):
