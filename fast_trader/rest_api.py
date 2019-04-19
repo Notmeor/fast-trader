@@ -25,7 +25,7 @@ if sys.platform == 'win32':
         return dict(tuple(p.split('=')) for p in content.split('\n')[:-1])
     
     os_user = getpass.getuser()
-    kay_file = 'c:/Users/{user}/AppData/Roaming/Kay/.kay'.format(
+    kay_file = settings['rest_api']['kay_file'].format(
         user=os_user)
     
     user_meta.update(_read_kay(kay_file))

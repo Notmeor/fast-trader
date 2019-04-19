@@ -172,11 +172,63 @@ class Strategy:
 
         return all_objs
 
+    def get_account_orders(self):
+        """
+        查询账户报单
+        """
+        return self._get_all_pages(self.trader.query_orders)
+    
+    def get_account_open_orders(self):
+        """
+        查询账户未成交(可撤)报单
+
+        Note
+        --------
+        enum OrderStatus
+        {
+            ORDER_STATUS_UNDEFINED = 0;
+            ORDER_STATUS_PLACING = 1;               // 正报: 交易所处理中
+                                                    // (order_exchange_id已产生)
+            ORDER_STATUS_PLACED = 2;                // 已报: 交易所已挂单
+            ORDER_STATUS_PARTIAL_FILLED = 3;        // 部分成交
+            ORDER_STATUS_FILLED = 4;                // 全部成交
+            ORDER_STATUS_CANCELLING = 5;            // 待撤
+            ORDER_STATUS_CANCELLED = 6;             // 已撤
+            ORDER_STATUS_PARTIAL_CANCELLING = 7;    // 部分成交其余待撤
+            ORDER_STATUS_PARTIAL_CANCELLED = 8;     // 部分成交其余已撤
+            ORDER_STATUS_FAILED = 9;                // 废单
+        }
+        """
+        orders = self.get_account_orders()
+        open_orders = [order for order in orders if order['status'] < 4]
+        return open_orders
+    
+    def get_account_trades(self):
+        """
+        查询账户成交
+        """
+        return self._get_all_pages(self.trader.query_trades)
+
+    def get_account_positions(self):
+        """
+        查询账户持仓
+        """
+        positions = self._get_all_pages(self.trader.query_positions)
+        return positions
+
     def get_orders(self):
         """
-        查询报单（同步）
+        查询报单
         """
-        orders = self._get_all_pages(self.trader.query_orders)
+        orders = self.get_account_orders()
+        orders = [order for order in orders if self._check_owner(order)]
+        return orders
+
+    def get_open_orders(self):
+        """
+        查询未成交报单
+        """
+        orders = self.get_account_open_orders()
         orders = [order for order in orders if self._check_owner(order)]
         return orders
 
@@ -184,16 +236,25 @@ class Strategy:
         """
         查询成交（同步）
         """
-        trades = self._get_all_pages(self.trader.query_trades)
+        trades = self.get_account_trades()
         trades = [trade for trade in trades if self._check_owner(trade)]
         return trades
 
-    def get_account_positions(self):
+    def get_capital(self):
         """
-        查询账户总持仓（同步）
+        查询资金（同步）
         """
-        positions = self._get_all_pages(self.trader.query_positions)
-        return positions
+        request_id = self.generate_request_id()
+        mail = self.trader.query_capital(request_id=request_id, sync=True)
+        return mail['body']
+
+    def get_ration(self):
+        """
+        查询配售权益
+        """
+        request_id = self.generate_request_id()
+        mail = self.trader.query_ration(request_id=request_id, sync=True)
+        return mail['body']
 
     def get_positions(self):
         """
@@ -257,47 +318,6 @@ class Strategy:
                     return self.get_position_by_code(code)
             self._position_query_proxy = _Positions()
         return self._position_query_proxy
-
-    def get_open_orders(self):
-        """
-        查询未成交报单（同步）
-
-        Note
-        --------
-        enum OrderStatus
-        {
-            ORDER_STATUS_UNDEFINED = 0;
-            ORDER_STATUS_PLACING = 1;               // 正报: 交易所处理中
-                                                    // (order_exchange_id已产生)
-            ORDER_STATUS_PLACED = 2;                // 已报: 交易所已挂单
-            ORDER_STATUS_PARTIAL_FILLED = 3;        // 部分成交
-            ORDER_STATUS_FILLED = 4;                // 全部成交
-            ORDER_STATUS_CANCELLING = 5;            // 待撤
-            ORDER_STATUS_CANCELLED = 6;             // 已撤
-            ORDER_STATUS_PARTIAL_CANCELLING = 7;    // 部分成交其余待撤
-            ORDER_STATUS_PARTIAL_CANCELLED = 8;     // 部分成交其余已撤
-            ORDER_STATUS_FAILED = 9;                // 废单
-        }
-        """
-        orders = self.get_orders()
-        open_orders = [order for order in orders if order['status'] < 4]
-        return open_orders
-
-    def get_capital(self):
-        """
-        查询资金（同步）
-        """
-        request_id = self.generate_request_id()
-        mail = self.trader.query_capital(request_id=request_id, sync=True)
-        return mail['body']
-
-    def get_ration(self):
-        """
-        查询配售权益
-        """
-        request_id = self.generate_request_id()
-        mail = self.trader.query_ration(request_id=request_id, sync=True)
-        return mail['body']
 
     def get_exchange(self, code):
         """

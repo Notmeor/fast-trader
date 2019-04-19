@@ -81,17 +81,14 @@ class Dispatcher:
 
         self._handlers = {}
 
-        # 收件箱
-        self._inbox = Queue()
-        # 发件箱
-        self._outbox = Queue()
-
+        self._req_queue = Queue()
+        self._rsp_queue = Queue()
         self._market_queue = Queue()
 
         self.logger = logging.getLogger('fast_trader.dtp_trade.Dispatcher')
 
-        self._rsp_processer = None
-        self._req_processer = None
+        self._rsp_processor = None
+        self._req_processor = None
 
         self._running = False
         self._service_suspended = False
@@ -104,38 +101,39 @@ class Dispatcher:
             return
 
         self._running = True
-        self._rsp_processor = threading.Thread(target=self.process_inbox)
-        self._req_processor = threading.Thread(target=self.process_outbox)
+        self._req_processor = threading.Thread(target=self.process_req)
+        self._rsp_processor = threading.Thread(target=self.process_rsp)
 
-        self._rsp_processor.start()
         self._req_processor.start()
+        self._rsp_processor.start()
 
-    def process_inbox(self):
+        print('workers?:', self._rsp_processor, self._req_processor)
 
-        while self._running:
-            mail = self._inbox.get()
-            self.dispatch(mail)
-
-    def process_outbox_(self):
+    def process_req(self):
 
         while self._running:
-            mail = self._outbox.get()
+            mail = self._req_queue.get()
             self.dispatch(mail)
 
-    def process_outbox(self):
+    def process_rsp(self):
 
+        # TODO: poll queues or zmq socks
         while self._running:
             try:
-                mail = self._outbox.get(block=False)
+                mail = self._rsp_queue.get(block=False)
                 self.dispatch(mail)
             except queue.Empty:
                 pass
+            except Exception as e:
+                self.logger.error(str(e), exc_info=True)
 
             try:
                 mail = self._market_queue.get(block=False)
                 self.dispatch(mail)
             except queue.Empty:
                 time.sleep(0.0001)
+            except Exception as e:
+                self.logger.error(str(e), exc_info=True)
 
     def bind(self, handler_id, handler, override=False):
         if not override and handler_id in self._handlers:
@@ -165,11 +163,11 @@ class Dispatcher:
             return self.dispatch(mail)
 
         if handler_id.endswith('_req'):
-            self._inbox.put(mail)
+            self._req_queue.put(mail)
         elif handler_id[0].isalpha():
             self._market_queue.put(mail)
         elif handler_id.endswith('_rsp'):
-            self._outbox.put(mail)
+            self._rsp_queue.put(mail)
         else:
             raise Exception('Invalid message: {}'.format(mail))
 

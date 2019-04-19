@@ -30,6 +30,7 @@ risk_channel_port: ''
 use_rest_api: True
 
 rest_api:
+  kay_file: 'c:/Users/{user}/AppData/Roaming/Kay/.kay'
 #  get_account: 'http://192.168.221.36:8101/accounts'
 #  order: 'http://192.168.221.36:8101/accounts/{account_no}/orders'
 #  cancel_order: 'http://192.168.221.36:8101/accounts/{account_no}/order_cancellations'
