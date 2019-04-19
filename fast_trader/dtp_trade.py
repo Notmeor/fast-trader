@@ -235,9 +235,9 @@ class DTP:
         self._async_resp_channel.subscribe('{}'.format(self._account))
 
         # 风控推送通道
-        # self._risk_report_channel = self._ctx.socket(zmq.SUB)
-        # self._risk_report_channel.connect(settings['risk_channel_port'])
-        # self._risk_report_channel.subscribe('{}'.format(self._account))
+        self._risk_report_channel = self._ctx.socket(zmq.SUB)
+        self._risk_report_channel.connect(settings['risk_channel_port'])
+        self._risk_report_channel.subscribe('{}'.format(self._account))
 
         self.logger = logging.getLogger('fast_trader.dtp_trade.DTP')
 

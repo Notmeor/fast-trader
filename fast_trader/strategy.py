@@ -425,6 +425,13 @@ class Strategy:
             order_detail = self._orders[original_id]
             order_detail.update(trade)
 
+            # 成交时，可能只会收到成交回报，而不会收到报单回报，手动更新order_status
+            if 0 < trade.total_fill_quantity < trade.quantity:
+                if order_detail.status not in [dtp_type.ORDER_STATUS_PARTIAL_CANCELLED]:
+                    order_detail['status'] = dtp_type.ORDER_STATUS_PARTIAL_FILLED
+            elif trade.total_fill_quantity == trade.quantity: 
+                order_detail['status'] = dtp_type.ORDER_STATUS_FILLED
+
         if msg.body.fill_status != 1:
             self.logger.error(msg)
         else:

@@ -193,6 +193,7 @@ class Manager:
 class StrategyLoader:
 
     def __init__(self):
+        self.strategy_prefix = 'fts_'
         self.strategy_dir = \
             settings['batch_order_dealer_app']['strategy_directory']
 
@@ -205,7 +206,7 @@ class StrategyLoader:
             strategy_dir = self.strategy_dir
 
         for fl in os.listdir(strategy_dir):
-            if not fl.endswith('ler.py'):
+            if not fl.startswith(self.strategy_prefix):
                 continue
             path = os.path.join(strategy_dir, fl)
             spec = importlib.util.spec_from_file_location(

@@ -1,7 +1,7 @@
 import os
 import threading
 import yaml
-import logging
+import logging.config
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

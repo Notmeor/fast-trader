@@ -92,14 +92,14 @@ def place_order(order):
     return request(url, headers=headers, body=body)
 
 
-def cancel_order(order_exchange_id, order_original_id=''):
+def cancel_order(exchange, order_exchange_id, order_original_id=''):
     url = settings['rest_api']['cancel_order'].format(
         account_no=settings['account'])
     headers = default_headers
     body = {
         "originalId": order_original_id,
         "orderTime": 0,
-        "exchange": 0,
+        "exchange": exchange,
         "code": "",
         "cancelOrderExchangeId": order_exchange_id,
     }
@@ -316,8 +316,10 @@ def restapi_place_order(trader, order_type=dtp_type.ORDER_TYPE_LIMIT, **kw):
 
 
 def restapi_cancel_order(trader, **kw):
+    exchange = kw['exchange']
     order_exchange_id = kw['order_exchange_id']
-    cancel_order(order_exchange_id=order_exchange_id)
+    cancel_order(exchange=exchange,
+                 order_exchange_id=order_exchange_id)
     
 
 def restapi_place_batch_order(trader, request_id, orders):
@@ -352,7 +354,6 @@ def restapi_query_positions(trader, **kw):
 
 
 def restapi_query_fills(trader, **kw):
-    print('fill params:', kw)
     return handle_pagination(
         method_name='query_fills',
         content_name='fill_list',
@@ -362,7 +363,6 @@ def restapi_query_fills(trader, **kw):
 
 
 def restapi_query_orders(trader, **kw):
-    print('order params:', kw)
     return handle_pagination(
         method_name='query_orders',
         content_name='order_list',

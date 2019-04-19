@@ -8,8 +8,10 @@ import os
 import threading
 import datetime
 import sqlite3
-
 import contextlib
+
+from fast_trader.settings import Session, engine
+from fast_trader.models import PositionModel
 
 
 class PositionStore:
@@ -241,9 +243,6 @@ class SqlitePositionStore(PositionStore):
                     pos['update_time'] = datetime.datetime.now().strftime('%H:%M:%S')
             self.set_positions(positions)
 
-
-from fast_trader.settings import Session, engine
-from fast_trader.models import PositionModel
 
 
 @contextlib.contextmanager
