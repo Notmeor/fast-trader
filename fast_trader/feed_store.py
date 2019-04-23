@@ -24,10 +24,14 @@ class MemoryStore:
         self._store = collections.defaultdict(list)
 
     def write(self, key, value):
+        lst = self._store[key]
         if self._keep_history:
-            self._store[key].append(value)
+            lst.append(value)
         else:
-            self._store[key][0] = value
+            if lst:
+                lst[0] = value
+            else:
+                lst.append(value)
 
     def read(self, key):
         return self._store[key]
@@ -200,10 +204,22 @@ class FeedStore:
     def connect(self):
         self.datasource.start()
 
+    @staticmethod
+    def as_wind_code(code):
+        if '.' in code:
+            return code
+        if code.startswith('6'):
+            return code + '.SH'
+        else:
+            return code + '.SZ'
+
     def get_all_codes(self):
-        if self.datasource.subscribed_all:
-            return self._store.list_keys()
-        return self.datasource.subscribed_codes
+        # if self.datasource.subscribed_all:
+        #     return self._store.list_keys()
+        # codes = [self.as_wind_code(c) 
+        #          for c in self.datasource.subscribed_codes]
+        # return codes
+        return self._store.list_keys()
 
     def pull(self, codes=None):
         """
@@ -234,6 +250,8 @@ class FeedStore:
             dict: {code -> [ticks]}
             list; [ticks]
         """
+        if not isinstance(codes, list):
+            raise TypeError(f'`codes` expects type `list`, got {type(codes)}')
 
         keys = self._store.list_keys()
 
