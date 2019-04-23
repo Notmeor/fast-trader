@@ -47,6 +47,24 @@ class Settings:
 settings = Settings()
 
 
+def ensure_directories():
+
+    def _mkdir(path):
+        if not os.path.exists(path):
+            os.makedirs(path)
+        
+    working_dir = os.getenv('FAST_TRADER_HOME')
+    _mkdir(working_dir)
+
+    logging_dir = os.path.join(working_dir, 'logs')
+    _mkdir(logging_dir)
+    
+    strategy_dir = settings['app']['strategy_directory']
+    _mkdir(strategy_dir)
+
+
+ensure_directories()
+
 engine = None
 Session = None
 
@@ -54,8 +72,9 @@ Session = None
 def config_sqlalchemy():
     global engine
     global Session
-    engine = create_engine(
-        settings['batch_order_dealer_app']['sqlalchemy_url'])
+    uri = settings['app']['sqlalchemy_url'].format(
+        fast_trader_home=os.getenv('FAST_TRADER_HOME'))
+    engine = create_engine(uri)
     Session = sessionmaker(bind=engine)
     Base.metadata.create_all(bind=engine)
 

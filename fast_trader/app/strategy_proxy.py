@@ -9,6 +9,11 @@ import sqlalchemy.orm.exc as orm_exc
 
 from fast_trader.settings import settings, Session
 from fast_trader.models import StrategyStatus
+from fast_trader.app.strategy_manager import StrategyLoader
+
+from fast_trader.utils import get_mac_address
+from fast_trader.app.strategy_manager import (start_strategy_server,
+                                              stop_strategy_server)
 
 
 class StrategyProxy:
@@ -19,8 +24,8 @@ class StrategyProxy:
         self._sock.setsockopt(zmq.SNDTIMEO, 1000 * timeout)
         self._sock.setsockopt(zmq.RCVTIMEO, 1000 * timeout)
 
-        host = settings['batch_order_dealer_app']['strategy_host']
-        port = settings['batch_order_dealer_app']['strategy_port']
+        host = settings['app']['strategy_host']
+        port = settings['app']['strategy_port']
         url = f"tcp://{host}:{port}"
         self._sock.connect(url)
 
@@ -153,16 +158,43 @@ class StrategyProxy:
             'kw': {},
         })
 
+    
+def get_strategy_list():
+    loader = StrategyLoader()
+    strategies = loader.load()
+    
+    ret = []
+    session = Session()
+    for s in strategies:
+        res = (session
+         .query(StrategyStatus)
+         .filter_by(strategy_id=s.strategy_id)
+         .all())
+        if res:
+            ea = res[0]
+            ret.append({
+                'strategy_name': ea.strategy_name,
+                'strategy_id': ea.strategy_id,
+                'running': ea.running,
+                'start_time': ea.start_time or ''
+            })
+        else:
+            ret.append({
+                'strategy_name': s.strategy_name,
+                'strategy_id': s.strategy_id,
+                'running': False,
+                'start_time': ''})
+    return ret
+            
+
 
 if __name__ == '__main__':
-    from fast_trader.utils import get_mac_address
-    from fast_trader.app.strategy_manager import start_strategy_server
 
     server = start_strategy_server()
 
-    p = StrategyProxy(3)
-    p.update_settings({
-        'ip': '192.168.211.169',
-        'mac': get_mac_address(),
-        'harddisk': '6B69DD46',
-    })
+    p = StrategyProxy(6)
+#    p.update_settings({
+#        'ip': '192.168.211.169',
+#        'mac': get_mac_address(),
+#        'harddisk': '6B69DD46',
+#    })

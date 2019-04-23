@@ -30,22 +30,27 @@ if sys.platform == 'win32':
     
     user_meta.update(_read_kay(kay_file))
     
+    user_meta['harddisk'] = user_meta['harddisk'].strip()
+    user_meta['ip'] = get_local_ip()
+    
 else:
     raise RuntimeError('Only Windows platform is currently supported')
 
 
 default_headers = {
     'Content-Type': 'application/json; charset=utf8',
-    'ip': user_meta.get('ip', get_local_ip()),
+    'ip': user_meta['ip'],
     'mac': user_meta['mac'],
-    'harddisk': user_meta['harddisk'].strip(),
+    'harddisk': user_meta['harddisk'],
     'token': user_meta['token'],
 }
 
-default_query_headers = {
-    'Content-Type': default_headers['Content-Type'],
-    'token': default_headers['token'],
-}
+#default_query_headers = {
+#    'Content-Type': default_headers['Content-Type'],
+#    'token': default_headers['token'],
+#}
+
+default_query_headers = default_headers
 
 
 class Order(AnnotationCheckMixin):
@@ -58,7 +63,7 @@ class Order(AnnotationCheckMixin):
     side: int
     
     def to_dict(self):
-        self._check_fields
+        self._check_fields()
         return self.__dict__
 
 
@@ -73,13 +78,21 @@ def request(url, headers, body, method='post'):
     return r.text
 
 
-def get_account():
+def get_accounts():
     url = settings['rest_api']['get_account'].format(
         account_no=settings['account'])
     headers = default_query_headers
     body = {}
     return request(url, headers=headers, body=body, method='get')
        
+
+# 设定账户
+accounts = get_accounts()
+if len(accounts) > 1:
+    raise RuntimeError('存在多个交易账户，需指定具体交易账号')
+else:
+    settings.set({'account': accounts[0]['cashAccountNo']})
+    
 
 def place_order(order):
     url = settings['rest_api']['order'].format(
@@ -206,6 +219,12 @@ def _get_order_obj(kw):
     return order
 
 
+def _get_by_account(result, account_no, name):
+    return next(filter(
+        lambda x: x[name] == account_no,
+        result))
+
+
 def handle_pagination(method_name, content_name, pagination, format_fn):
     size = pagination['size']
     offset = pagination['offset']
@@ -299,9 +318,11 @@ def format_orders(stats):
 
 
 def restapi_login(trader, account, password, *args, **kw):
-    stats = get_account()[0]
+    stats = _get_by_account(
+            get_accounts(), settings['account'], 'cashAccountNo')
     print(account == stats['cashAccountNo'], account, stats['cashAccountNo'])
     if stats['loginStatus'] == 1:
+        trader._account = settings['account']
         trader._logined = True
         trader._token = user_meta['token']
         print('Login success')
@@ -331,7 +352,8 @@ def restapi_place_batch_order(trader, request_id, orders):
 
 
 def restapi_query_capital(trader, **kw):
-    stats = query_capital()[0]
+    capitals = query_capital()
+    stats = _get_by_account(capitals, settings['account'], 'accountNo')
     capital = {
         'account_no': stats['accountId'],
         'available': stats['available'],
@@ -392,4 +414,16 @@ def might_use_rest_api(might, api_name):
             return ret
         return wrapper
     return decorator
+
+
+if __name__ == '__main__':
+    order = Order()
+    order.code = '002222'
+    order.exchange = 1  # 上海1，深圳2
+    order.original_id = '10'  # 递增
+    order.order_type = 1
+    order.price = '16'
+    order.quantity = 300
+    order.side = dtp_type.ORDER_SIDE_BUY
+    
       

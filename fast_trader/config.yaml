@@ -71,13 +71,16 @@ rest_api:
 #  query_orders: 'https://112.80.54.190:40443/api/counter-cache/query/orders/{account_no}'
 #  query_open_orders: 'https://112.80.54.190:40443/api/counter-cache/query/cancelableorders/{account_no}'
 
-batch_order_dealer_app:
+
+working_dir: ''
+app:
   # sqlalchemy_url: 'mysql+pymysql://root:idwzx.com@192.168.211.190:3306/dtp_trade_test?charset=utf8'
-  sqlalchemy_url: 'sqlite:////dataUpdate/fast-trader/fast_trader/app/test_sqlite.db'
+  # sqlalchemy_url: 'sqlite:////dataUpdate/fast-trader/tmp/test_sqlite.db'
+  sqlalchemy_url: 'sqlite:///{fast_trader_home}/fast_trader.db'
   strategy_host: '127.0.0.1'
   strategy_port: 5600
   # strategy_directory: '/Users/eisenheim/Documents/git/fast-trader/fast_trader/app'
-  strategy_directory: ''
+  strategy_directory: '{fast_trader_home}/strategies'
 
 
 quote_feed_store:

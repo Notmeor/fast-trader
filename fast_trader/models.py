@@ -119,7 +119,7 @@ class StrategyLogModel(Base, BaseDocument):
 
 
 class StrategyStatus(Base, BaseDocument):
-    __tablename__ = 'srategy_status'
+    __tablename__ = 'strategy_status'
 
     id = Column(Integer, primary_key=True)
     # 策略进程id
@@ -130,8 +130,22 @@ class StrategyStatus(Base, BaseDocument):
     token = Column(String(10))
     # 策略id
     strategy_id = Column(Integer)
+    # 策略名称
+    strategy_name = Column(String(100))
     # 是否运行中
     running = Column(Boolean)
+    # 启动时间
+    start_time = Column(String(30))
+    # 最新心跳时间戳
+    last_heartbeat = Column(Integer)
+
+
+class StrategyServer(Base, BaseDocument):
+    __tablename__ = 'strategy_server'
+    
+    id = Column(Integer, primary_key=True)
+    
+    pid = Column(Integer)
     # 启动时间
     start_time = Column(String(30))
     # 最新心跳时间戳

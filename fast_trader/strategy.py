@@ -40,7 +40,15 @@ def to_timeint(dt):
 
 class Strategy:
 
+    strategy_name = 'unnamed'
+    strategy_id = -1
+    trader_id = 1
+
     def __init__(self, number, *args, **kw):
+
+        if self.strategy_id < 0 or not isinstance(self.strategy_id, int):
+            raise RuntimeError(
+                f'`strategy_id`应为非0整数，当前取值：{self.strategy_id}')
 
         self._strategy_id = number
 
@@ -118,10 +126,12 @@ class Strategy:
 
         for ds in self.subscribed_datasources:
             ds.start()
-
-    @property
-    def strategy_id(self):
-        return self._strategy_id
+    
+    @classmethod
+    def get_strategy_name(cls):
+        if cls.strategy_name == 'unnamed':
+            return cls.__name__
+        return cls.strategy_name
 
     @property
     def account_no(self):

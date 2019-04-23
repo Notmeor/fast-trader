@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import sys
 import time
 import datetime
 import functools
@@ -9,7 +10,7 @@ import math
 from google.protobuf.message import Message
 from google.protobuf.pyext._message import RepeatedCompositeContainer
 from google.protobuf.pyext._message import RepeatedScalarContainer
-import yaml
+
 import uuid
 import socket
 import re
@@ -97,6 +98,20 @@ def get_local_ip():
     ip = s.getsockname()[0]
     s.close()
     return ip
+
+
+def get_win_user_documents_dir():
+    if sys.platform != 'win32':
+        raise RuntimeError('Not on Windows!')
+
+    import ctypes
+    from ctypes.wintypes import MAX_PATH
+    dll = ctypes.windll.shell32
+    buf = ctypes.create_unicode_buffer(MAX_PATH + 1)
+    if dll.SHGetSpecialFolderPathW(None, buf, 0x0005, False):
+        return buf.value
+    else:
+        raise RuntimeError('Failed to retrieve `Documents` path!')
 
 
 first_cap_re = re.compile('(.)([A-Z][a-z]+)')

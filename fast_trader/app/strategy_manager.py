@@ -10,12 +10,16 @@ import importlib
 import threading
 import subprocess
 import multiprocessing
+import psutil
 
 import sqlalchemy.orm.exc as orm_exc
 
 from fast_trader.settings import settings, Session, SqlLogHandler
 from fast_trader.strategy import Strategy, StrategyFactory
-from fast_trader.models import StrategyStatus
+from fast_trader.models import StrategyStatus, StrategyServer
+from fast_trader.utils import timeit
+from fast_trader.rest_api import user_meta
+
 
 
 class StrategyNotFound(Exception):
@@ -26,28 +30,72 @@ class Manager:
 
     def __init__(self):
         self._sock = zmq.Context().socket(zmq.REP)
-        host = settings['batch_order_dealer_app']['strategy_host']
-        port = settings['batch_order_dealer_app']['strategy_port']
+        # self._sock.setsockopt(zmq.RCVTIMEO, 2000)
+        host = settings['app']['strategy_host']
+        port = settings['app']['strategy_port']
         conn = f"tcp://{host}:{port}"
         self._sock.bind(conn)
+        
+        self._update_server_status()
 
-        self._strategy_settings = None
+        self._load_strategy_settings()
         self._factory = None
         self._strategies = {}
 
         self._heartbeat_thread = threading.Thread(target=self.send_heartbeat)
+        
+    def _load_strategy_settings(self):
+        if settings['use_rest_api'] is True:
+            self._strategy_settings = user_meta.copy()
+            self._strategy_settings.pop('token')
+        else:
+            self._strategy_settings = None
+    
+    def _update_server_status(self):
+        now = datetime.datetime.now()
+        now_str = now.strftime(
+                '%Y%m%d %H:%M:%S.%f')
+        ts = int(now.timestamp())
+        msg = {
+            'pid': os.getpid(),
+            'start_time': now_str,
+            'last_heartbeat': ts
+        }
+        session = Session()
+        last_status = (
+            session
+            .query(StrategyServer)
+            .filter_by(id=1)
+            .first()
+        )
+        if last_status is None:
+            status = StrategyServer.from_msg(msg)
+            session.add(status)
+        else:
+            for k, v in msg.items():
+                setattr(last_status, k, v)
+
+        session.commit()
+        session.close()
 
     def receive(self):
-        return self._sock.recv_json()  # (zmq.NOBLOCK)
+        return self._sock.recv_json()  # zmq.NOBLOCK)
 
     def send(self, msg):
         self._sock.send_json(msg)
 
+    @timeit
     def send_heartbeat(self):
         session = Session()
         while True:
             time.sleep(1)
             ts = int(datetime.datetime.now().timestamp())
+            
+            (session
+                 .query(StrategyServer)
+                 .filter_by(id=1)
+                 .update({'last_heartbeat': ts}))
+                            
             for _id in self._strategies:
                 (session
                  .query(StrategyStatus)
@@ -93,8 +141,9 @@ class Manager:
 
             data = {
                 'pid': os.getpid(),
-                'account_no': strategy.trader._account,
+                'account_no': strategy.trader.account_no,
                 'strategy_id': strategy.strategy_id,
+                'strategy_name': strategy.strategy_name,
                 'start_time': datetime.datetime.now(
                     ).strftime('%Y%m%d %H:%M:%S.%f'),
                 'token': strategy.trader._token,
@@ -106,6 +155,7 @@ class Manager:
             return {'ret_code': 0, 'data': data}
 
         except Exception as e:
+            raise
             return {'ret_code': -1, 'err_msg': repr(e)}
 
     def stop_strategy(self, strategy_id):
@@ -146,6 +196,7 @@ class Manager:
                 setattr(last_status, k, v)
 
         session.commit()
+        session.close()
 
     def handle_request(self, request):
         # strategy = self._strategies[request['strategy_id']]
@@ -160,7 +211,12 @@ class Manager:
             return self._operate(request)
 
     def instantiate_strategy(self, strategy_id):
-        StrategyCls = StrategyLoader().load()[0]
+        ss = StrategyLoader().load()
+        try:
+            StrategyCls = next(
+                filter(lambda x: x.strategy_id == strategy_id, ss))
+        except StopIteration:
+            raise RuntimeError(f'策略读取失败，strategy_id: {strategy_id}')
 
         strategy = self.factory.generate_strategy(
             StrategyCls,
@@ -181,8 +237,7 @@ class Manager:
             try:
                 request = self.receive()
             except zmq.Again:
-                self.send_heartbeat()
-                time.sleep(0.2)
+                pass
             else:
                 logger.info(f'received: {request}')
                 ret = self.handle_request(request)
@@ -193,9 +248,9 @@ class Manager:
 class StrategyLoader:
 
     def __init__(self):
-        self.strategy_prefix = 'fts_'
+        self.strategy_suffix = '.py'
         self.strategy_dir = \
-            settings['batch_order_dealer_app']['strategy_directory']
+            settings['app']['strategy_directory']
 
     def load(self):
         strategy_classes = []
@@ -206,7 +261,7 @@ class StrategyLoader:
             strategy_dir = self.strategy_dir
 
         for fl in os.listdir(strategy_dir):
-            if not fl.startswith(self.strategy_prefix):
+            if not fl.endswith(self.strategy_suffix):
                 continue
             path = os.path.join(strategy_dir, fl)
             spec = importlib.util.spec_from_file_location(
@@ -214,6 +269,7 @@ class StrategyLoader:
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             for name in dir(mod):
+                print(mod)
                 el = getattr(mod, name)
                 if isinstance(el, type):
                     if issubclass(el, Strategy) and el is not Strategy:
@@ -239,6 +295,15 @@ def start_strategy_server():
     return proc.pid
 
 
+def stop_strategy_server():
+    session = Session()
+    pid = session.query(StrategyServer.pid).one()[0]
+    for proc in psutil.process_iter():
+        if proc.pid == pid:
+            proc.kill()
+            break    
+
+
 #import subprocess, datetime, time, sys
 #
 #def foo():
@@ -252,5 +317,6 @@ def start_strategy_server():
 
 
 if __name__ == '__main__':
-
+    # Do not edit!
     main()
+

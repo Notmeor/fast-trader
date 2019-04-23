@@ -14,12 +14,12 @@ import pandas as pd
 
 from fast_trader import zmq_context
 from fast_trader.dtp import quotation_pb2 as quote_struct
+from fast_trader.settings import settings
+from fast_trader.utils import timeit, message2dict, Mail
 
-from fast_trader.utils import timeit, message2dict, message2tuple, Mail
-from fast_trader.settings import settings as conf
 
 
-class MarketFeed:
+class MarketFeed(object):
 
     url = None
 
@@ -47,7 +47,7 @@ class MarketFeed:
         _type = data.Type.Name(data.type).lower()
 
         return getattr(data, _type)
-
+    
     def _on_message(self, msg):
         data = self._parse_data(msg)
         if not isinstance(data, str):
@@ -55,12 +55,12 @@ class MarketFeed:
 
     def sub(self, topic):
         self._socket.subscribe(topic)
-
+    
     def _retrieve(self):
         while True:
             msg = self._queue.get()
             self._on_message(msg)
-
+    
     def _recv(self):
         msg = self._socket.recv()
         self._queue.put(msg)
@@ -68,6 +68,13 @@ class MarketFeed:
     def _start(self):
 
         self._socket.connect(self.url)
+
+        if self.subscribed_all:
+            self.sub('')
+        else:
+            for code in self.subscribed_codes:
+                topic = self._to_topic(code)
+                self.sub(topic)
         self._running = True
 
         while self._running:
@@ -88,7 +95,7 @@ class QuoteFeed(MarketFeed):
 
         super().__init__(*args, **kw)
 
-        self.url = conf['{}_channel'.format(self.name)]
+        self.url = settings['{}_channel'.format(self.name)]
         self.subscribed_codes = []
         self.subscribed_all = False
         self._listeners = []
@@ -97,7 +104,7 @@ class QuoteFeed(MarketFeed):
         self.logger = logging.getLogger(
             'fast_trader.dtp_quote.{}'.format(self.name))
 
-        self.as_raw_message = False
+        self.as_raw_message = True
         self._thread = None
 
     def start(self):
@@ -139,8 +146,7 @@ class QuoteFeed(MarketFeed):
             if code in self.subscribed_codes:
                 return
             self.subscribed_codes.append(code)
-            topic = self._to_topic(code)
-            self.sub(topic)
+
         else:
             raise TypeError(
                 'Expected `list` or `str`, got `{}`'.format(type(code)))
