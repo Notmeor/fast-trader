@@ -69,6 +69,13 @@ class MarketFeed(object):
     def _start(self):
 
         self._socket.connect(self.url)
+
+        if self.subscribed_all:
+            self.sub('')
+        else:
+            for code in self.subscribed_codes:
+                topic = self._to_topic(code)
+                self.sub(topic)
         self._running = True
 
         while self._running:
@@ -141,8 +148,7 @@ class QuoteFeed(MarketFeed):
             if code in self.subscribed_codes:
                 return
             self.subscribed_codes.append(code)
-            topic = self._to_topic(code)
-            self.sub(topic)
+
         else:
             raise TypeError(
                 'Expected `list` or `str`, got `{}`'.format(type(code)))
