@@ -23,8 +23,15 @@ class Settings:
 
     def __init__(self):
         self._lock = threading.Lock()
-        self._default_settings = load_config()
+        self._default_settings = self._format(load_config())
         self._custom_settings = self._default_settings.copy()
+    
+    def _format(self, conf):
+        conf_str = str(conf).replace(
+            '{fast_trader_home}', os.getenv('FAST_TRADER_HOME'))
+        conf_str_raw = rf'{conf_str}'
+        ret = eval(conf_str_raw)
+        return ret
 
     def set(self, config):
         assert isinstance(config, dict)
@@ -72,8 +79,7 @@ Session = None
 def config_sqlalchemy():
     global engine
     global Session
-    uri = settings['app']['sqlalchemy_url'].format(
-        fast_trader_home=os.getenv('FAST_TRADER_HOME'))
+    uri = settings['app']['sqlalchemy_url']
     engine = create_engine(uri)
     Session = sessionmaker(bind=engine)
     Base.metadata.create_all(bind=engine)

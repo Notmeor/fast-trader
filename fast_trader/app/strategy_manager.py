@@ -155,7 +155,6 @@ class Manager:
             return {'ret_code': 0, 'data': data}
 
         except Exception as e:
-            raise
             return {'ret_code': -1, 'err_msg': repr(e)}
 
     def stop_strategy(self, strategy_id):
@@ -269,7 +268,6 @@ class StrategyLoader:
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             for name in dir(mod):
-                print(mod)
                 el = getattr(mod, name)
                 if isinstance(el, type):
                     if issubclass(el, Strategy) and el is not Strategy:

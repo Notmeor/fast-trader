@@ -31,11 +31,6 @@ use_rest_api: True
 
 rest_api:
   kay_file: 'c:/Users/{user}/AppData/Roaming/Kay/.kay'
-#  get_account: 'http://192.168.221.36:8101/accounts'
-#  order: 'http://192.168.221.36:8101/accounts/{account_no}/orders'
-#  cancel_order: 'http://192.168.221.36:8101/accounts/{account_no}/order_cancellations'
-#  batch_order: 'http://192.168.221.36:8101/accounts/{account_no}/batchOrder'
-#  cancel_batch: 'http://192.168.221.36:8101/accounts/{account_no}/batchCancel'
   get_account: 'https://192.168.221.39/api/entrust-free/accounts'
   order: 'https://192.168.221.39/api/entrust-free/accounts/{account_no}/orders'
   cancel_order: 'https://192.168.221.39/api/entrust-free/accounts/{account_no}/order_cancellations'
@@ -74,8 +69,7 @@ rest_api:
 
 working_dir: ''
 app:
-  # sqlalchemy_url: 'mysql+pymysql://root:idwzx.com@192.168.211.190:3306/dtp_trade_test?charset=utf8'
-  # sqlalchemy_url: 'sqlite:////dataUpdate/fast-trader/tmp/test_sqlite.db'
+
   sqlalchemy_url: 'sqlite:///{fast_trader_home}/fast_trader.db'
   strategy_host: '127.0.0.1'
   strategy_port: 5600
@@ -83,9 +77,9 @@ app:
   strategy_directory: '{fast_trader_home}/strategies'
 
 
-quote_feed_store:
-  disk_store_folder: '~/work/share/cache'
-  compress: False
+#quote_feed_store:
+#  disk_store_folder: ''
+#  compress: False
 
 
 # 账号

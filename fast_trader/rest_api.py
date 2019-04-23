@@ -72,7 +72,7 @@ def request(url, headers, body, method='post'):
     meth = getattr(session, method)
     r = meth(url, headers=headers, data=data, verify=False)
     if r.status_code not in [200, 201]:
-        raise requests.HTTPError(f'{r.status_code}')
+        raise requests.HTTPError(f'{r.status_code}, {r.text}')
     if r.text:
         return json.loads(r.text)
     return r.text
@@ -131,7 +131,7 @@ def place_batch_order(orders):
         for k, v in order.to_dict().items():
             k_ = inflection.camelize(k, uppercase_first_letter=False)
             order_[k_] = v
-    print(body)
+
     return request(url, headers=headers, body=body)
 
 
@@ -320,7 +320,6 @@ def format_orders(stats):
 def restapi_login(trader, account, password, *args, **kw):
     stats = _get_by_account(
             get_accounts(), settings['account'], 'cashAccountNo')
-    print(account == stats['cashAccountNo'], account, stats['cashAccountNo'])
     if stats['loginStatus'] == 1:
         trader._account = settings['account']
         trader._logined = True
