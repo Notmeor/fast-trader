@@ -237,14 +237,6 @@ class MyStrategy(Strategy):
 
 if __name__ == '__main__':
 
-    from fast_trader.settings import settings
-    from fast_trader.utils import get_mac_address
-    settings.set({
-        'ip': '192.168.211.169',
-        'mac': get_mac_address(),
-        'harddisk': '6B69DD46',
-    })
-
     factory = StrategyFactory()
     strategy = factory.generate_strategy(
         MyStrategy,
