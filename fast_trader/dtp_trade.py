@@ -245,7 +245,7 @@ class DTP:
 
         self._running = True
         threading.Thread(target=self.handle_counter_response).start()
-        # threading.Thread(target=self.handle_compliance_report).start()
+        threading.Thread(target=self.handle_compliance_report).start()
 
     def _populate_message(self, cmsg, attrs):
 
@@ -389,7 +389,6 @@ class DTP:
             report_header = sock.recv()
             report_body = sock.recv()
 
-            self.logger.debug('topic: {}'.format(topic))
             header = dtp_struct.ReportHeader()
             header.ParseFromString(report_header)
 
@@ -429,12 +428,11 @@ class DTP:
 
             header = dtp_struct.ReportHeader()
             header.ParseFromString(report_header)
-            self.logger.warning('风控消息 {}', header.api_id, header.message)
 
             body = dtp_struct.PlacedReport()
             body.ParseFromString(report_body)
 
-            self.logger.info('{}, {}'.format(
+            self.logger.info('风控消息 {}, {}'.format(
                 message2dict(header), message2dict(body)))
 
 

@@ -70,12 +70,12 @@ class Manager:
         session = Session()
         last_status = (
             session
-            .query(StrategyServer)
+            .query(StrategyServerModel)
             .filter_by(id=1)
             .first()
         )
         if last_status is None:
-            status = StrategyServer.from_msg(msg)
+            status = StrategyServerModel.from_msg(msg)
             session.add(status)
         else:
             for k, v in msg.items():
@@ -98,7 +98,7 @@ class Manager:
             ts = get_current_ts()
             
             (session
-                 .query(StrategyServer)
+                 .query(StrategyServerModel)
                  .filter_by(id=1)
                  .update({'last_heartbeat': ts}))
                             
@@ -204,7 +204,6 @@ class Manager:
         session.close()
 
     def handle_request(self, request):
-        # strategy = self._strategies[request['strategy_id']]
 
         if request['api_name'] == 'start_strategy':
             return self.start_strategy(request['strategy_id'])
@@ -231,7 +230,7 @@ class Manager:
         return strategy
 
     def run(self):
-        logger = logging.getLogger('strategy_mananger')
+        logger = logging.getLogger('strategy_manager')
         logger.addHandler(SqlLogHandler())
         logger.info(f'Strategy manager started. Pid={os.getpid()}')
 
@@ -301,7 +300,7 @@ def start_strategy_server():
 
 def stop_strategy_server():
     session = Session()
-    pid = session.query(StrategyServer.pid).one()[0]
+    pid = session.query(StrategyServerModel.pid).one()[0]
     for proc in psutil.process_iter():
         if proc.pid == pid:
             proc.kill()

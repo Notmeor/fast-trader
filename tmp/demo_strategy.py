@@ -100,8 +100,8 @@ if __name__ == '__main__':
 
     strategy.start()
 
-    ## 下单
-    # strategy.buy('601555', '16', 500)
+    # 下单
+    strategy.buy('601555', '16', 500)
     ## 全撤
     # strategy.cancle_all()
 

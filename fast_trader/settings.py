@@ -1,4 +1,5 @@
 import os
+import datetime
 import threading
 import yaml
 import logging.config
@@ -28,7 +29,8 @@ class Settings:
     
     def _format(self, conf):
         conf_str = str(conf).replace(
-            '{fast_trader_home}', os.getenv('FAST_TRADER_HOME'))
+            '{fast_trader_home}', os.getenv('FAST_TRADER_HOME')).replace(
+            '{today_str}', datetime.date.today().strftime('%Y%m%d'))
         conf_str_raw = rf'{conf_str}'
         ret = eval(conf_str_raw)
         return ret
