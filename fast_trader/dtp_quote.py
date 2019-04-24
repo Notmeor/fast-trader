@@ -106,7 +106,7 @@ class QuoteFeed(MarketFeed):
         self.logger = logging.getLogger(
             'fast_trader.dtp_quote.{}'.format(self.name))
 
-        self.as_raw_message = True
+        self.as_raw_message = False
         self._thread = None
 
     def start(self):
