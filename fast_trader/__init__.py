@@ -9,5 +9,5 @@ if sys.platform == 'win32':
     os.environ['FAST_TRADER_HOME'] = os.path.join(
         doc_dir, 'fast_trader').replace('\\', '/')
 else:
-    os.environ['FAST_TRADER_HOME'] = os.expanduser('~/work/fast_trader')
+    os.environ['FAST_TRADER_HOME'] = os.path.expanduser('~/work/fast_trader')
 
