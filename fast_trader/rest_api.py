@@ -17,7 +17,6 @@ session = requests.Session()
 
 user_meta = {}
 
-if sys.platform == 'win32':
     
     def _read_kay(path):
         with open(path) as f:
@@ -32,9 +31,6 @@ if sys.platform == 'win32':
     
     user_meta['harddisk'] = user_meta['harddisk'].strip()
     user_meta['ip'] = get_local_ip()
-    
-else:
-    raise RuntimeError('Only Windows platform is currently supported')
 
 
 default_headers = {
