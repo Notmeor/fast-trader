@@ -17,20 +17,19 @@ session = requests.Session()
 
 user_meta = {}
 
-    
-    def _read_kay(path):
-        with open(path) as f:
-            content = f.read()
-        return dict(tuple(p.split('=')) for p in content.split('\n')[:-1])
-    
-    os_user = getpass.getuser()
-    kay_file = settings['rest_api']['kay_file'].format(
-        user=os_user)
-    
-    user_meta.update(_read_kay(kay_file))
-    
-    user_meta['harddisk'] = user_meta['harddisk'].strip()
-    user_meta['ip'] = get_local_ip()
+def _read_kay(path):
+    with open(path) as f:
+        content = f.read()
+    return dict(tuple(p.split('=')) for p in content.split('\n')[:-1])
+
+os_user = getpass.getuser()
+kay_file = settings['rest_api']['kay_file'].format(
+    user=os_user)
+
+user_meta.update(_read_kay(kay_file))
+
+user_meta['harddisk'] = user_meta['harddisk'].strip()
+user_meta['ip'] = get_local_ip()
 
 
 default_headers = {

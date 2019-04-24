@@ -107,8 +107,6 @@ class Dispatcher:
         self._req_processor.start()
         self._rsp_processor.start()
 
-        print('workers?:', self._rsp_processor, self._req_processor)
-
     def process_req(self):
 
         while self._running:
