@@ -85,7 +85,7 @@ class Dispatcher:
         self._rsp_queue = Queue()
         self._market_queue = Queue()
 
-        self.logger = logging.getLogger('fast_trader.dtp_trade.Dispatcher')
+        self.logger = logging.getLogger('dispatcher')
 
         self._rsp_processor = None
         self._req_processor = None
@@ -239,7 +239,7 @@ class DTP:
         self._risk_report_channel.connect(settings['risk_channel_port'])
         self._risk_report_channel.subscribe('{}'.format(self._account))
 
-        self.logger = logging.getLogger('fast_trader.dtp_trade.DTP')
+        self.logger = logging.getLogger('dtp')
 
         self.start()
 
@@ -477,7 +477,7 @@ class Trader:
 
         self.__api_bound = False
 
-        self.logger = logging.getLogger('fast_trader.dtp_trade.Trader')
+        self.logger = logging.getLogger('trader')
         self.logger.info('初始化 process_id={}'.format(os.getpid()))
 
     def start(self):

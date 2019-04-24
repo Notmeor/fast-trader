@@ -16,14 +16,20 @@ import sqlalchemy.orm.exc as orm_exc
 
 from fast_trader.settings import settings, Session, SqlLogHandler
 from fast_trader.strategy import Strategy, StrategyFactory
-from fast_trader.models import StrategyStatus, StrategyServer
+from fast_trader.models import StrategyStatus, StrategyServerModel
 from fast_trader.utils import timeit
 from fast_trader.rest_api import user_meta
 
 
+SERVER_TIMEOUT_SECS = 3
+
 
 class StrategyNotFound(Exception):
     pass
+
+
+def get_current_ts():
+    return int(datetime.datetime.now().timestamp())
 
 
 class Manager:
@@ -55,7 +61,7 @@ class Manager:
         now = datetime.datetime.now()
         now_str = now.strftime(
                 '%Y%m%d %H:%M:%S.%f')
-        ts = int(now.timestamp())
+        ts = get_current_ts()
         msg = {
             'pid': os.getpid(),
             'start_time': now_str,
@@ -89,7 +95,7 @@ class Manager:
         session = Session()
         while True:
             time.sleep(1)
-            ts = int(datetime.datetime.now().timestamp())
+            ts = get_current_ts()
             
             (session
                  .query(StrategyServer)
@@ -225,7 +231,7 @@ class Manager:
         return strategy
 
     def run(self):
-        logger = logging.getLogger(f'{__name__}')
+        logger = logging.getLogger('strategy_mananger')
         logger.addHandler(SqlLogHandler())
         logger.info(f'Strategy manager started. Pid={os.getpid()}')
 
@@ -301,6 +307,48 @@ def stop_strategy_server():
             proc.kill()
             break    
 
+
+class StrategyServer:
+    
+    def __init__(self):
+        self.server_id = 1
+        self.proc = None
+    
+    def start(self):
+        proc = self.proc = subprocess.Popen(
+            ['python', __file__],
+            shell=False,
+            bufsize=1,
+            universal_newlines=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        return proc
+
+    def stop(self):
+        session = Session()
+        pid = session.query(StrategyServerModel.pid).one()[0]
+        for proc in psutil.process_iter():
+            if proc.pid == pid:
+                proc.kill()
+                break  
+        session.close()
+    
+    def is_running(self):
+        session = Session()
+        last_ts = (
+            session
+            .query(StrategyServerModel.last_heartbeat)
+            .filter_by(id=self.server_id)
+            .one()[0])
+        
+        current_ts = get_current_ts()
+        if current_ts > last_ts + SERVER_TIMEOUT_SECS:
+            return False
+        return True
+            
+
+    
 
 #import subprocess, datetime, time, sys
 #

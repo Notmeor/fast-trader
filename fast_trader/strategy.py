@@ -44,13 +44,14 @@ class Strategy:
     strategy_id = -1
     trader_id = 1
 
-    def __init__(self, number, *args, **kw):
+    def __init__(self, strategy_id=None):
 
         if self.strategy_id < 0 or not isinstance(self.strategy_id, int):
             raise RuntimeError(
                 f'`strategy_id`应为非0整数，当前取值：{self.strategy_id}')
 
-        self._strategy_id = number
+        if strategy_id is not None:
+            self.strategy_id = strategy_id
 
         self._started = False
 
@@ -61,7 +62,7 @@ class Strategy:
         self.subscribed_datasources = []
 
         self.logger = logging.getLogger(
-            'fast_trader.strategy.Strategy-{}'.format(number))
+            f'strategy.<id={self.strategy_id}>.<name={self.strategy_name}>')
 
     def set_dispatcher(self, dispatcher):
         self.dispatcher = dispatcher
@@ -143,10 +144,10 @@ class Strategy:
                 if p.get('balance', 0) != 0}
 
     def generate_order_id(self):
-        return self.trader.generate_order_id(self._strategy_id)
+        return self.trader.generate_order_id(self.strategy_id)
 
     def generate_request_id(self):
-        return self.trader.generate_request_id(self._strategy_id)
+        return self.trader.generate_request_id(self.strategy_id)
 
     def _check_owner(self, obj):
         """

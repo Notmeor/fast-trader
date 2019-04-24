@@ -18,7 +18,6 @@ from fast_trader.settings import settings
 from fast_trader.utils import timeit, message2dict, Mail
 
 
-
 class MarketFeed(object):
 
     url = None
@@ -104,7 +103,7 @@ class QuoteFeed(MarketFeed):
         self.logger = logging.getLogger(
             'fast_trader.dtp_quote.{}'.format(self.name))
 
-        self.as_raw_message = True
+        self.as_raw_message = False
         self._thread = None
 
     def start(self):

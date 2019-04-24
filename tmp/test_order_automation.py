@@ -13,7 +13,7 @@ from fast_trader.utils import timeit, message2dict, int2datetime, attrdict
 def get_target_trading_amount():
     return {
         # '600056.SH': 10000.,
-        # '601555.SH': 10000.,
+        '601555.SH': 10000.,
         '601668.SH': 10000.,
     }
 
@@ -26,8 +26,9 @@ class MyStrategy(Strategy):
     2.
         最新价已达到涨跌停，直接以涨跌停价格报单
     """
-
+    
     strategy_id = 7
+    strategy_name = 'Batch ordering'
 
     @property
     def now(self):
@@ -86,10 +87,6 @@ class MyStrategy(Strategy):
         # 过滤撤单记录
         if data.nTurnover == 0:
             return
-
-        # print(f'\rtrade: {data.nTime} {data.szCode} {data.nPrice}', end='')
-        if data.nPrice < 1:
-            self._xx.append(data)
 
         if data.nTime < 93000000:  # 不参与集合竞价
             return
@@ -155,7 +152,7 @@ class MyStrategy(Strategy):
         响应快照行情
         """
         # print(f'\r{data.nTime} {data.szCode}. {data.nMatch}', end='')
-
+        self._xx.append(data)
         code = data.szWindCode
 
         # 记录涨跌停价格
@@ -269,7 +266,7 @@ if __name__ == '__main__':
     of.subscribe(['600056'])
 
     tk = TickFeed()
-    tk.subscribe(['600056', '601668'])
+    tk.subscribe(['600056', '601668', '601555'])
 
     strategy.add_datasource(tf)
     # strategy.add_datasource(of)

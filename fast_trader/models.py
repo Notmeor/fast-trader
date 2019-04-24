@@ -140,7 +140,7 @@ class StrategyStatus(Base, BaseDocument):
     last_heartbeat = Column(Integer)
 
 
-class StrategyServer(Base, BaseDocument):
+class StrategyServerModel(Base, BaseDocument):
     __tablename__ = 'strategy_server'
     
     id = Column(Integer, primary_key=True)
