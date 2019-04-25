@@ -672,8 +672,9 @@ class Trader:
         报单委托
         """
         # 报价转为str类型
-        price_ = str(price)
-
+        price_ = price
+        # xx
+        print('here!!!')
         mail = Mail(
             api_type='req',
             api_id=dtp_api_id.PLACE_ORDER,
@@ -698,9 +699,6 @@ class Trader:
         """
         批量下单
         """
-        # 报价转为str类型
-        for order in orders:
-            order['price'] = str(order['price'])
 
         mail = Mail(
             api_type='req',

@@ -597,7 +597,7 @@ class Strategy:
         request_id = self.generate_request_id()
         order_original_id = self.generate_order_id()
         exchange = kw['exchange'] or self.get_exchange(kw['code'])
-        price = kw['price']
+        price = str(kw['price'])
 
         order = kw.copy()
         order.update({
@@ -621,6 +621,7 @@ class Strategy:
             order['order_side'] = order_side
             order['order_type'] = dtp_type.ORDER_TYPE_LIMIT
             order['order_original_id'] = order_original_id
+            order['price'] = str(order['price'])
 
         self.trader.place_batch_order(request_id=request_id, orders=orders)
 

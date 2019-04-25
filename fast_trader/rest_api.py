@@ -208,7 +208,6 @@ def _get_order_obj(kw):
     order.order_type = kw['order_type']
     order.original_id = kw['order_original_id']
     order.price = kw['price']
-    print(order.price, type(order.price))
     order.quantity = kw['quantity']
     order.side = kw['order_side']
     return order
