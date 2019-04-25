@@ -38,6 +38,41 @@ def to_timeint(dt):
         + dt.second * 1000 + int(dt.microsecond / 1000))
 
 
+def as_order_msg(order):
+    drc = {
+        dtp_type.ORDER_SIDE_BUY: '买入',
+        dtp_type.ORDER_SIDE_SELL: '卖出',
+    }[order.order_side]
+    
+    status = {
+        dtp_type.ORDER_STATUS_PLACING: '委托成功',
+        dtp_type.ORDER_STATUS_PLACED: '已申报',
+        dtp_type.ORDER_STATUS_FAILED: '废单',
+    }.get(order.status, str(order.status))
+
+    err = ''
+    if order.status == dtp_type.ORDER_STATUS_FAILED:
+        err = f'{order.message}, '
+        
+    msg = f'{status}, {err}委托编号={order.order_exchange_id}, '\
+        f'证券代码={order.code}, 方向={drc}, '\
+        f'委托价格={order.price}, 委托数量={order.quantity}'
+    return msg
+
+
+def as_trade_msg(trade):
+    drc = {
+        dtp_type.ORDER_SIDE_BUY: '买入',
+        dtp_type.ORDER_SIDE_SELL: '卖出',
+    }[trade.order_side]
+        
+    msg = f'成交回报, 委托编号={trade.order_exchange_id}, '\
+        f'证券代码={trade.code}, 方向={drc}, '\
+        f'委托价格={trade.fill_price}, 本次成交数量={trade.fill_quantity}, '\
+        f'已成交数量={trade.total_fill_quantity}, 总委托数量={trade.quantity}'
+    return msg
+
+
 class Strategy:
 
     strategy_name = 'unnamed'
@@ -57,12 +92,13 @@ class Strategy:
 
         self._positions = {}
         self._orders = collections.defaultdict(attrdict)
-        self._trades = {}
+        self._trades = collections.defaultdict(attrdict)
+        self._request_id_history = []
 
         self.subscribed_datasources = []
 
         self.logger = logging.getLogger(
-            f'strategy.<id={self.strategy_id}>.<name={self.strategy_name}>')
+            f'strategy<id={self.strategy_id};name={self.strategy_name}>')
 
     def set_dispatcher(self, dispatcher):
         self.dispatcher = dispatcher
@@ -147,13 +183,37 @@ class Strategy:
         return self.trader.generate_order_id(self.strategy_id)
 
     def generate_request_id(self):
-        return self.trader.generate_request_id(self.strategy_id)
+        request_id = self.trader.generate_request_id(self.strategy_id)
+        # 部分响应数据，如CANCEL RESPONSE无`order_original_id`,
+        # 需要记录request_id用来认证此类消息的策略归属
+        # 但在使用rest api接口时，无法指定request_id
+        self._request_id_history.append(request_id)
+        return request_id
 
+    @timeit
     def _check_owner(self, obj):
         """
         判断该查询响应数据是否属于当前策略
         """
-        return int(obj.order_original_id) in self._id_whole_range
+
+        id_range = self._id_whole_range
+        
+        def _check_order_id(o):
+            _id = o['order_original_id']
+            if int(_id) in id_range:
+                return True
+            return False
+        
+        if 'order_original_id' in obj:
+            return _check_order_id(obj)
+        elif 'body' in obj:
+            if 'order_original_id' in obj['body']:
+                return _check_order_id(obj['body'])
+                
+            if obj['header']['request_id'] in self._request_id_history:
+                return True
+
+        return False
 
     def _get_all_pages(self, handle):
         offset = 0
@@ -429,6 +489,9 @@ class Strategy:
         成交回报
         """
         trade = TradeResponse.from_msg(msg.body)
+
+        self.logger.info(as_trade_msg(trade))
+        
         if msg.header.code == dtp_type.RESPONSE_CODE_OK:
             original_id = trade.order_original_id
             # FIXME: strategy might start before trade responses and after
@@ -446,6 +509,7 @@ class Strategy:
         if msg.body.fill_status != 1:
             self.logger.error(msg)
         else:
+            self._trades[trade.order_original_id] = trade
             # 更新本地持仓记录
             self.update_position(trade)
 
@@ -462,12 +526,16 @@ class Strategy:
         订单回报
         """
         order = OrderResponse.from_msg(msg.body)
+        
+        self.logger.info(as_order_msg(order))
+        
         # if msg.header.code == dtp_type.RESPONSE_CODE_OK:
         original_id = order.order_original_id
         order_detail = self._orders[original_id]
         order_detail.update(order)
 
         self.on_order(order)
+
 
     def on_order(self, data):
         """
@@ -491,13 +559,17 @@ class Strategy:
         """
         撤单提交响应
         """
-        pass
+        self.logger.info(
+            f'申请撤单, 委托编号={msg.body.order_exchange_id}')
 
     def _on_order_cancelation(self, msg):
         """
         撤单确认回报
         """
         data = CancellationResponse.from_msg(msg.body)
+        
+        self.logger.info(f'已撤单, 委托编号={data.order_exchange_id}')
+
         if msg.header.code == dtp_type.RESPONSE_CODE_OK:
             original_id = data.order_original_id
             order_detail = self._orders[original_id]
@@ -519,6 +591,25 @@ class Strategy:
         order['placed_localtime'] = to_timeint(datetime.datetime.now())
         order = attrdict(order)
         self._orders[order.order_original_id] = order
+        return order
+
+    def _insert_order(self, **kw):
+        request_id = self.generate_request_id()
+        order_original_id = self.generate_order_id()
+        exchange = kw['exchange'] or self.get_exchange(kw['code'])
+        price = kw['price']
+
+        order = kw.copy()
+        order.update({
+            'order_original_id': order_original_id,
+            'exchange': exchange,
+            'price': price,
+        })
+
+        self.trader.place_order(request_id=request_id, **order)
+
+        order = self._store_order(order)
+
         return order
 
     def _insert_many(self, order_side, orders):
@@ -549,25 +640,6 @@ class Strategy:
         批量买入
         """
         return self._insert_many(dtp_type.ORDER_SIDE_SELL, orders)
-
-    def _insert_order(self, **kw):
-        request_id = self.generate_request_id()
-        order_original_id = self.generate_order_id()
-        exchange = kw['exchange'] or self.get_exchange(kw['code'])
-        price = kw['price']
-
-        order = kw.copy()
-        order.update({
-            'order_original_id': order_original_id,
-            'exchange': exchange,
-            'price': price,
-        })
-
-        self.trader.place_order(request_id=request_id, **order)
-
-        order = self._store_order(order)
-
-        return order
 
     def buy(self, code, price, quantity, exchange=None):
         """

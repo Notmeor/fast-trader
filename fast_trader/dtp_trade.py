@@ -10,6 +10,7 @@ import zmq
 import queue
 from queue import Queue
 from collections import OrderedDict
+import uuid
 
 from fast_trader import zmq_context
 from fast_trader.dtp import dtp_api_id
@@ -232,10 +233,10 @@ class DTP:
         self._async_resp_channel.connect(settings['rsp_channel_port'])
         self._async_resp_channel.subscribe('{}'.format(self._account))
 
-        # 风控推送通道
-        self._risk_report_channel = self._ctx.socket(zmq.SUB)
-        self._risk_report_channel.connect(settings['risk_channel_port'])
-        self._risk_report_channel.subscribe('{}'.format(self._account))
+        ## 风控推送通道
+        #self._risk_report_channel = self._ctx.socket(zmq.SUB)
+        #self._risk_report_channel.connect(settings['risk_channel_port'])
+        #self._risk_report_channel.subscribe('{}'.format(self._account))
 
         self.logger = logging.getLogger('dtp')
 
@@ -245,7 +246,8 @@ class DTP:
 
         self._running = True
         threading.Thread(target=self.handle_counter_response).start()
-        threading.Thread(target=self.handle_compliance_report).start()
+        # 柜台回报似乎已经包含了合规消息
+        # threading.Thread(target=self.handle_compliance_report).start()
 
     def _populate_message(self, cmsg, attrs):
 
@@ -432,7 +434,7 @@ class DTP:
             body = dtp_struct.PlacedReport()
             body.ParseFromString(report_body)
 
-            self.logger.info('风控消息 {}, {}'.format(
+            self.logger.info('合规风控 {}, {}'.format(
                 message2dict(header), message2dict(body)))
 
 
@@ -472,9 +474,12 @@ class Trader:
         self._strategy_dict = OrderedDict()
 
         self.__api_bound = False
+        
+        # order_original_id -> order_exchange_id
+        self._order_id_mapping = {}
 
         self.logger = logging.getLogger('trader')
-        self.logger.info('初始化 process_id={}'.format(os.getpid()))
+        self.logger.debug('初始化 process_id={}'.format(os.getpid()))
 
     def start(self):
 
@@ -531,7 +536,7 @@ class Trader:
             strategy_id)
 
         initial_id = id_range[0]
-        self.logger.warning('初始请求编号 策略={} {}'.format(
+        self.logger.debug('初始请求编号 策略={} {}'.format(
             strategy_id, initial_id))
 
         setattr(self, '_order_id_{}'.format(strategy_id), initial_id)
@@ -541,11 +546,8 @@ class Trader:
         """
         请求id，保证当日不重复
         """
-        name = '{}_{}'.format('_request_id', number)
-
-        request_id = getattr(self, name)
-        setattr(self, name, request_id + 1)
-        return str(request_id)
+        request_id = str(uuid.uuid1())
+        return request_id
 
     def generate_order_id(self, number):
         """
@@ -567,32 +569,18 @@ class Trader:
         self._strategies.remove(strategy)
         self._strategy_dict.pop(strategy.strategy_id)
 
-    def _check_owner(self, strategy, mail):
-
-        id_range = strategy._id_whole_range
-
-        # if mail.header.request_id != '':
-
-        #     if int(mail.header.request_id) in id_range:
-        #         return True
-        #     return False
-
-        if 'order_original_id' not in mail.body:
-            # FIXME: CancelResponse has no order_original_id,
-            # and is temperarily invisible to user strategy
-            return False
-
-        order_id = mail.body['order_original_id']
-
-        if int(order_id) in id_range:
-            return True
-        return False
-
     def _on_response(self, mail):
 
         api_id = mail['api_id']
+        print('\n-----mail-----:\n', mail)
 
+        # TODO: might be opt out
         mail.body['message'] = mail.header.message
+        
+        #body = mail['body']
+        #if 'order_original_id' in body and 'order_exchange_id' in body:
+        #    self._order_id_mapping[body['order_original_id']] =\
+        #        body['order_exchange_id']
 
         if api_id == dtp_api_id.LOGIN_ACCOUNT_RESPONSE:
             self.on_login(mail)
@@ -600,7 +588,7 @@ class Trader:
             self.on_logout(mail)
         else:
             for ea in self._strategies:
-                if self._check_owner(ea, mail):
+                if ea._check_owner(mail):
                     getattr(ea, dtp_api_id.RSP_API_NAMES[api_id])(mail)
 
     @property
@@ -615,7 +603,7 @@ class Trader:
         try:
             self._token = msg['token']
         except Exception as e:
-            self.logger.error('登录失败', exc_info=True)
+            self.logger.warning('登录失败', exc_info=True)
             raise e
 
         self.logger.info('登入账户 {}, {}'.format(self.account_no, msg))

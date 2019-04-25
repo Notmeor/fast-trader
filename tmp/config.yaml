@@ -21,7 +21,8 @@ sync_channel_port: 'tcp://192.168.221.37:9833'
 # 异步请求
 async_channel_port: 'tcp://192.168.221.37:9831'
 # 异步响应推送
-rsp_channel_port: 'tcp://192.168.221.37:9832'
+# rsp_channel_port: 'tcp://192.168.221.37:9832'
+rsp_channel_port: 'tcp://192.168.221.36:9402'
 # 风控消息
 risk_channel_port: 'tcp://192.168.221.36:9402'
 

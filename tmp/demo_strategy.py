@@ -74,7 +74,6 @@ class DemoStrategy(Strategy):
         print(data)
 
 
-
 if __name__ == '__main__':
 
 

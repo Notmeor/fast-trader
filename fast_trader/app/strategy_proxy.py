@@ -100,7 +100,8 @@ class StrategyProxy:
             'strategy_id': self.strategy_id,
             'api_name': 'stop_strategy',
             'kw': {},
-        })
+        })            
+    
 
     def buy(self, code, price, quantity):
         return self.send_request({

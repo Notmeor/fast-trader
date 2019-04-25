@@ -66,8 +66,8 @@ class Mail(attrdict):
 
     def __init__(self, api_type, api_id, **kw):
 
-        if api_type == 'req':
-            kw['request_id'] = str(uuid.uuid1())
+#        if api_type == 'req':
+#            kw['request_id'] = str(uuid.uuid1())
 
         if 'handler_id' not in kw:
             kw['handler_id'] = '{}_{}'.format(api_id, api_type)

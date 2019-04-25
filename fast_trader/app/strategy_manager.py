@@ -168,6 +168,15 @@ class Manager:
             strategy = self.get_strategy(strategy_id)
             strategy.remove_self()
             self._strategies.pop(strategy_id)
+            
+            session = Session()
+            (session
+             .query(StrategyStatus)
+             .filter_by(strategy_id=strategy_id)
+             .update({'running': False}))
+            session.commit()
+            session.close()
+
             return {'ret_code': 0, 'data': None}
         except Exception as e:
             return {'ret_code': -1, 'err_msg': repr(e)}
@@ -312,9 +321,14 @@ class StrategyServer:
     def __init__(self):
         self.server_id = 1
         self.proc = None
+        self.logger = logging.getLogger('strategy_server')
     
     def start(self):
-        proc = self.proc = subprocess.Popen(
+        if self.is_running():
+            self.logger.warning('strategy server正在运行中, 无需重复启动')
+            return
+            
+        self.proc = subprocess.Popen(
             ['python', __file__],
             shell=False,
             bufsize=1,
@@ -322,7 +336,7 @@ class StrategyServer:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        return proc
+        self.logger.info(f'strategy server已启动, pid={os.getpid()}')
 
     def stop(self):
         session = Session()
@@ -331,7 +345,14 @@ class StrategyServer:
             if proc.pid == pid:
                 proc.kill()
                 break  
+
+        # 更新所有策略状态
+        for stats in session.query(StrategyStatus).all():
+            stats.running = False
+        session.commit()
         session.close()
+
+        self.logger.info('strategy server已停止')
     
     def is_running(self):
         session = Session()
@@ -345,20 +366,6 @@ class StrategyServer:
         if current_ts > last_ts + SERVER_TIMEOUT_SECS:
             return False
         return True
-            
-
-    
-
-#import subprocess, datetime, time, sys
-#
-#def foo():
-#    while True:
-#        print('stdout:'+str(datetime.datetime.now()), flush=True)
-#        print('stderr:'+str(datetime.datetime.now()), file=sys.stderr, flush=True)
-#        time.sleep(1.5)
-#
-#def main():
-#    foo()
 
 
 if __name__ == '__main__':
