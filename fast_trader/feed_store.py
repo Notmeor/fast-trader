@@ -12,7 +12,7 @@ import contextlib
 import zmq
 
 from fast_trader.utils import timeit
-from fast_trader.dtp_quote import conf
+from fast_trader.dtp_quote import settings
 from fast_trader.sqlite import SqliteKVStore
 
 
@@ -180,7 +180,7 @@ class FeedStore:
             self._store = MemoryStore()
         elif store_type == 'disk':
             uri = os.path.expanduser(os.path.join(
-                conf['quote_feed_store']['disk_store_folder'],
+                settings['quote_feed_store']['disk_store_folder'],
                 f'{self.name}.{store_engine}'))
             self._store = DiskStore(uri, engine=store_engine, writable=writable)
         elif store_type == 'ssdb':
