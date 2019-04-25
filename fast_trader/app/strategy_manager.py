@@ -9,7 +9,6 @@ import logging
 import importlib
 import threading
 import subprocess
-import multiprocessing
 import psutil
 
 import sqlalchemy.orm.exc as orm_exc
@@ -291,29 +290,7 @@ class StrategyLoader:
 
 def main():
     manager = Manager()
-    manager.run()
-
-
-def start_strategy_server():
-    proc = subprocess.Popen(
-        ['python', __file__],
-        shell=False,
-        bufsize=1,
-        universal_newlines=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    return proc
-    return proc.pid
-
-
-def stop_strategy_server():
-    session = Session()
-    pid = session.query(StrategyServerModel.pid).one()[0]
-    for proc in psutil.process_iter():
-        if proc.pid == pid:
-            proc.kill()
-            break    
+    manager.run()   
 
 
 class StrategyServer:
