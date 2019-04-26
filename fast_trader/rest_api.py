@@ -5,6 +5,7 @@ import functools
 import getpass
 import json
 import requests
+import logging
 
 import inflection
 
@@ -12,40 +13,71 @@ from fast_trader.dtp import type_pb2 as dtp_type
 from fast_trader.settings import settings
 from fast_trader.utils import get_local_ip, AnnotationCheckMixin, attrdict
 
+os_user = getpass.getuser()
 
 session = requests.Session()
 
 user_meta = {}
-
-def _read_kay(path):
-    with open(path) as f:
-        content = f.read()
-    return dict(tuple(p.split('=')) for p in content.split('\n')[:-1])
-
-os_user = getpass.getuser()
-kay_file = settings['rest_api']['kay_file'].format(
-    user=os_user)
-
-user_meta.update(_read_kay(kay_file))
-
-user_meta['harddisk'] = user_meta['harddisk'].strip()
-user_meta['ip'] = get_local_ip()
-
-
-default_headers = {
-    'Content-Type': 'application/json; charset=utf8',
-    'ip': user_meta['ip'],
-    'mac': user_meta['mac'],
-    'harddisk': user_meta['harddisk'],
-    'token': user_meta['token'],
-}
-
-#default_query_headers = {
-#    'Content-Type': default_headers['Content-Type'],
-#    'token': default_headers['token'],
-#}
-
+default_headers = {}
 default_query_headers = default_headers
+
+
+class RestSettings:
+    
+    def __init__(self):
+
+        self._user_meta = user_meta
+        self._default_headers = default_headers
+        self._default_query_headers = default_query_headers
+        
+        self.settings_loaded = False
+        self.logger = logging.getLogger('settings')
+    
+    def reload(self):
+        # load kay file
+        kay_file = settings['rest_api']['kay_file'].format(user=os_user)
+        self._user_meta.update(self._read_kay(kay_file))
+        self._user_meta['harddisk'] = self._user_meta['harddisk'].strip()
+        self._user_meta['ip'] = get_local_ip()
+        
+        # construct default headers
+        self._default_headers.update({
+            'Content-Type': 'application/json; charset=utf8',
+            'ip': user_meta['ip'],
+            'mac': user_meta['mac'],
+            'harddisk': user_meta['harddisk'],
+            'token': user_meta['token'],
+        })
+
+        # 设定账户
+        try:
+            accounts = get_accounts()
+            if len(accounts) > 1:
+                raise RuntimeError('存在多个交易账户，需指定具体交易账号')
+            else:
+                settings.set({'account': accounts[0]['cashAccountNo']})
+        except:
+            self.logger.error('读取账号失败', exc_info=True)
+        else:
+            self.settings_loaded = True
+            
+        
+    @property
+    def user_meta(self):
+        return self._user_meta
+    
+    @property
+    def default_headers(self):
+        return self._default_headers
+    
+    @property
+    def default_query_headers(self):
+        return self._default_query_headers
+        
+    def _read_kay(self, path):
+        with open(path) as f:
+            content = f.read()
+        return dict(tuple(p.split('=')) for p in content.split('\n')[:-1])
 
 
 class Order(AnnotationCheckMixin):
@@ -79,14 +111,6 @@ def get_accounts():
     headers = default_query_headers
     body = {}
     return request(url, headers=headers, body=body, method='get')
-       
-
-# 设定账户
-accounts = get_accounts()
-if len(accounts) > 1:
-    raise RuntimeError('存在多个交易账户，需指定具体交易账号')
-else:
-    settings.set({'account': accounts[0]['cashAccountNo']})
     
 
 def place_order(order):
@@ -408,6 +432,9 @@ def might_use_rest_api(might, api_name):
         return wrapper
     return decorator
 
+
+rest_settings = RestSettings()
+rest_settings.reload()
 
 if __name__ == '__main__':
     order = Order()

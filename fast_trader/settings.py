@@ -118,4 +118,5 @@ def setup_logging():
     except:
         logging.basicConfig(level=logging.INFO)
 
+setup_logging()
 

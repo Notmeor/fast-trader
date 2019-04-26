@@ -9,11 +9,7 @@ import sqlalchemy.orm.exc as orm_exc
 
 from fast_trader.settings import settings, Session
 from fast_trader.models import StrategyStatus
-from fast_trader.app.strategy_manager import StrategyLoader
-
-from fast_trader.utils import get_mac_address
-from fast_trader.app.strategy_manager import (start_strategy_server,
-                                              stop_strategy_server)
+from fast_trader.app.strategy_manager import StrategyLoader, StrategyServer
 
 
 class StrategyProxy:
@@ -190,8 +186,6 @@ def get_strategy_list():
 
 
 if __name__ == '__main__':
-
-    server = start_strategy_server()
 
     p = StrategyProxy(6)
 #    p.update_settings({

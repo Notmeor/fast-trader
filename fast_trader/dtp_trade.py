@@ -24,7 +24,7 @@ from fast_trader.utils import timeit, attrdict, message2dict, Mail, _id_pool
 from fast_trader.settings import settings, setup_logging
 from fast_trader.rest_api import might_use_rest_api
 
-setup_logging()
+# setup_logging()
 
 REQUEST_TIMEOUT = 60
 

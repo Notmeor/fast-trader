@@ -144,6 +144,11 @@ logging:
             level: INFO
             handlers: [info_file_handler, error_file_handler, console]
             propagate: no
+        
+        settings:
+            level: INFO
+            handlers: [info_file_handler, error_file_handler, console]
+            propagate: no
     
     root:
         level: DEBUG
