@@ -78,7 +78,7 @@ logging:
         simple:
             format: "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s"
         debug:
-            format: "%(asctime)s - %(threadName)s - %(name)s - %(filename)s:%(lineno)d - %(levelname)s - %(message)s"
+            format: "%(asctime)s - %(process)d - %(threadName)s - %(name)s - %(filename)s:%(lineno)d - %(levelname)s - %(message)s"
         user:
             format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     handlers:
@@ -148,6 +148,11 @@ logging:
         settings:
             level: INFO
             handlers: [info_file_handler, error_file_handler, console]
+            propagate: no
+
+        rest_api:
+            level: INFO
+            handlers: [info_file_handler, error_file_handler]
             propagate: no
     
     root:

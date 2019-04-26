@@ -107,8 +107,6 @@ logging:
             level: INFO
             formatter: user
             filename: '{fast_trader_home}/logs/strategy.log'
-            when: 'M'
-            interval: 5
     
     loggers:
 

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import os
 import datetime
 import logging
 import collections
@@ -9,12 +10,14 @@ from fast_trader.dtp_quote import (Transaction, Snapshot,
                                    MarketOrder, Index, OrderQueue)
 
 from fast_trader.dtp import type_pb2 as dtp_type
+from fast_trader.dtp_trade import (OrderResponse,
+                                   TradeResponse,
+                                   CancellationResponse)
 
-from fast_trader.dtp_trade import OrderResponse, TradeResponse, CancellationResponse
-
+from fast_trader.models import StrategyStatus
 from fast_trader.position_store import SqlitePositionStore as PositionStore
+from fast_trader.settings import settings, Session
 from fast_trader.utils import timeit, message2tuple, attrdict
-from fast_trader.settings import settings
 
 
 class Market:
@@ -96,6 +99,9 @@ class Strategy:
         self._request_id_history = []
 
         self.subscribed_datasources = []
+        
+        # order_exchange_id -> order_original_id
+        self._order_id_mapping = {}
 
         self.logger = logging.getLogger(
             f'strategy<id={self.strategy_id};name={self.strategy_name}>')
@@ -147,6 +153,9 @@ class Strategy:
 
             # 启动行情线程
             self.start_market()
+            
+            # 更新策略状态的本地记录
+            self._update_strategy_status()
 
             return {'ret_code': 0, 'data': None}
 
@@ -190,7 +199,52 @@ class Strategy:
         self._request_id_history.append(request_id)
         return request_id
 
-    @timeit
+    def _update_strategy_status(self):
+        
+        msg = {
+            'pid': os.getpid(),
+            'account_no': self.trader.account_no,
+            'strategy_id': self.strategy_id,
+            'strategy_name': self.strategy_name,
+            'start_time': datetime.datetime.now(
+                ).strftime('%Y%m%d %H:%M:%S.%f'),
+            'token': '', 
+            'running': True}
+            
+        session = Session()
+        last_status = (
+            session
+            .query(StrategyStatus)
+            .filter_by(strategy_id=msg['strategy_id'])
+            .first()
+        )
+        if last_status is None:
+            status = StrategyStatus.from_msg(msg)
+            session.add(status)
+        else:
+            for k, v in msg.items():
+                setattr(last_status, k, v)
+
+        session.commit()
+        session.close()
+
+    def _check_strategy_status(self):
+        """
+        验证strategy_id是否可用
+        """
+        session = Session()
+        res = (
+            session
+            .query(StrategyStatus)
+            .filter_by(strategy_id=self.strategy_id)
+            .all()
+        )
+        if len(res) > 0:
+            stats = res[0]
+            if stats.running is True:
+                raise RuntimeError(f'已有strategy_id={stats.strategy_id}的'
+                                   f'策略正在运行: {stats.strategy_name}')
+
     def _check_owner(self, obj):
         """
         判断该查询响应数据是否属于当前策略
@@ -209,6 +263,12 @@ class Strategy:
         elif 'body' in obj:
             if 'order_original_id' in obj['body']:
                 return _check_order_id(obj['body'])
+            elif 'order_exchange_id' in obj['body']:
+                # cancel response has 'order_exchange_id'
+                # but no 'order_original_id'
+                exchange_id = obj['body']['order_exchange_id']
+                if exchange_id in self._order_id_mapping:
+                    return True
                 
             if obj['header']['request_id'] in self._request_id_history:
                 return True
@@ -499,10 +559,13 @@ class Strategy:
             order_detail = self._orders[original_id]
             order_detail.update(trade)
 
-            # 成交时，可能只会收到成交回报，而不会收到报单回报，手动更新order_status
+            # 成交时，可能只会收到成交回报，而不会收到报单回报
+            # 此时手动更新order_status
             if 0 < trade.total_fill_quantity < trade.quantity:
-                if order_detail.status not in [dtp_type.ORDER_STATUS_PARTIAL_CANCELLED]:
-                    order_detail['status'] = dtp_type.ORDER_STATUS_PARTIAL_FILLED
+                if order_detail.status not in [
+                        dtp_type.ORDER_STATUS_PARTIAL_CANCELLED]:
+                    order_detail['status'] = \
+                    dtp_type.ORDER_STATUS_PARTIAL_FILLED
             elif trade.total_fill_quantity == trade.quantity: 
                 order_detail['status'] = dtp_type.ORDER_STATUS_FILLED
 
@@ -526,6 +589,9 @@ class Strategy:
         订单回报
         """
         order = OrderResponse.from_msg(msg.body)
+        
+        self._order_id_mapping[order['order_exchange_id']] =\
+            order['order_original_id']
         
         self.logger.info(as_order_msg(order))
         
@@ -560,7 +626,7 @@ class Strategy:
         撤单提交响应
         """
         self.logger.info(
-            f'申请撤单, 委托编号={msg.body.order_exchange_id}')
+            f'{msg.body.message}, 委托编号={msg.body.order_exchange_id}')
 
     def _on_order_cancelation(self, msg):
         """

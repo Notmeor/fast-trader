@@ -475,7 +475,7 @@ class Trader:
 
         self.__api_bound = False
         
-        # order_original_id -> order_exchange_id
+        # order_exchange_id -> order_original_id
         self._order_id_mapping = {}
 
         self.logger = logging.getLogger('trader')
@@ -572,15 +572,9 @@ class Trader:
     def _on_response(self, mail):
 
         api_id = mail['api_id']
-        print('\n-----mail-----:\n', mail)
 
         # TODO: might be opt out
         mail.body['message'] = mail.header.message
-        
-        #body = mail['body']
-        #if 'order_original_id' in body and 'order_exchange_id' in body:
-        #    self._order_id_mapping[body['order_original_id']] =\
-        #        body['order_exchange_id']
 
         if api_id == dtp_api_id.LOGIN_ACCOUNT_RESPONSE:
             self.on_login(mail)

@@ -12,9 +12,10 @@ from fast_trader.utils import timeit, message2dict, int2datetime, attrdict
 
 def get_target_trading_amount():
     return {
-        # '600056.SH': 10000.,
-        '601555.SH': 10000.,
-        '601668.SH': 10000.,
+        '600056.SH': 100000.,
+#        '601555.SH': 100000.,
+#        '601668.SH': 100000.,
+#        '002230.SZ': 100000.,
     }
 
 
@@ -28,7 +29,7 @@ class MyStrategy(Strategy):
     """
     
     strategy_id = 7
-    strategy_name = 'Batch ordering'
+    strategy_name = '目标金额下单'
 
     @property
     def now(self):
@@ -236,18 +237,21 @@ class MyStrategy(Strategy):
 
 
 if __name__ == '__main__':
+    
+    codes = list(get_target_trading_amount().keys())
+    codes = [c[:6] for c in codes]
 
     factory = StrategyFactory()
     strategy = factory.generate_strategy(
         MyStrategy,
         trader_id=1,
-        strategy_id=1
+        strategy_id=2
     )
     
     strategy_1 = factory.generate_strategy(
         MyStrategy,
         trader_id=1,
-        strategy_id=4
+        strategy_id=1
     )
     strategy_1.start()
 
@@ -258,7 +262,7 @@ if __name__ == '__main__':
     of.subscribe(['600056'])
 
     tk = TickFeed()
-    tk.subscribe(['600056', '601668', '601555'])
+    tk.subscribe(codes)
 
     strategy.add_datasource(tf)
     # strategy.add_datasource(of)

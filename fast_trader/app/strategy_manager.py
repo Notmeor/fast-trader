@@ -144,20 +144,9 @@ class Manager:
                 strategy.remove_self()
                 return ret
 
-            data = {
-                'pid': os.getpid(),
-                'account_no': strategy.trader.account_no,
-                'strategy_id': strategy.strategy_id,
-                'strategy_name': strategy.strategy_name,
-                'start_time': datetime.datetime.now(
-                    ).strftime('%Y%m%d %H:%M:%S.%f'),
-                'token': strategy.trader._token,
-                'running': True}
-
-            self._update_strategy_status(data)
             self.add_strategy(strategy)
 
-            return {'ret_code': 0, 'data': data}
+            return {'ret_code': 0, 'data': None}
 
         except Exception as e:
             return {'ret_code': -1, 'err_msg': repr(e)}
@@ -179,6 +168,11 @@ class Manager:
             return {'ret_code': 0, 'data': None}
         except Exception as e:
             return {'ret_code': -1, 'err_msg': repr(e)}
+    
+    def remove_strategy(self, strategy_id):
+        # TODO: 删除策略前须保持策略无任何持仓
+        # 并释放掉所有分配给该策略的资源
+        raise NotImplementedError('暂不支持删除策略')
 
     def _operate(self, request):
 
@@ -192,24 +186,6 @@ class Manager:
 
         except Exception as e:
             return {'ret_code': -1, 'err_msg': repr(e)}
-
-    def _update_strategy_status(self, msg):
-        session = Session()
-        last_status = (
-            session
-            .query(StrategyStatus)
-            .filter_by(strategy_id=msg['strategy_id'])
-            .first()
-        )
-        if last_status is None:
-            status = StrategyStatus.from_msg(msg)
-            session.add(status)
-        else:
-            for k, v in msg.items():
-                setattr(last_status, k, v)
-
-        session.commit()
-        session.close()
 
     def handle_request(self, request):
 

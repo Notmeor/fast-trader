@@ -6,7 +6,7 @@ import getpass
 import json
 import requests
 import logging
-
+from urllib.parse import urlsplit
 import inflection
 
 from fast_trader.dtp import type_pb2 as dtp_type
@@ -20,6 +20,8 @@ session = requests.Session()
 user_meta = {}
 default_headers = {}
 default_query_headers = default_headers
+
+logger = logging.getLogger('rest_api')
 
 
 class RestSettings:
@@ -95,6 +97,7 @@ class Order(AnnotationCheckMixin):
 
 
 def request(url, headers, body, method='post'):
+    logger.info(f'{method.upper()} {urlsplit(url).path}: {body}')
     data = json.dumps(body)
     meth = getattr(session, method)
     r = meth(url, headers=headers, data=data, verify=False)
