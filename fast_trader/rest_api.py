@@ -105,6 +105,7 @@ def request(url, headers, body, method='post'):
         raise requests.HTTPError(f'{r.status_code}, {r.text}')
     if r.text:
         return json.loads(r.text)
+    # TODO: raise if None is returned?
     return r.text
 
 

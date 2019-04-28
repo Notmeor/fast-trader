@@ -234,7 +234,7 @@ class _IDPool:
         range_len = int(len(new_rng) / n)
 
         if range_len < reserve_cnt:
-            raise ValueError('Range to narrow')
+            raise ValueError('Range too narrow')
 
         ranges = []
         i = 0
