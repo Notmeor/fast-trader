@@ -20,7 +20,8 @@ from fast_trader.dtp import type_pb2 as dtp_type
 from fast_trader.dtp import ext_api_pb2 as dtp_struct_
 from fast_trader.dtp import ext_type_pb2 as dtp_type_
 
-from fast_trader.utils import timeit, attrdict, message2dict, Mail, _id_pool
+from fast_trader.id_pool import _id_pool
+from fast_trader.utils import timeit, attrdict, message2dict, Mail
 from fast_trader.settings import settings, setup_logging
 from fast_trader.rest_api import might_use_rest_api
 

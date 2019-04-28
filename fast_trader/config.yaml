@@ -71,6 +71,14 @@ account: '011000106328'
 password: '111111'
 
 
+# 内部order_id分配逻辑参数
+_IDPool:
+  # 最多可分配的策略
+  max_strategies: 100
+  # 每个策略最多可对应的trader数量
+  max_traders_per_strategy: 2
+
+
 logging:
     version: 1
     disable_existing_loggers: False

@@ -770,15 +770,63 @@ class Strategy:
             self.cancel_order(**order)
 
 
+#class StrategyFactory:
+#    """
+#    演示策略实例化流程
+#    """
+#    def __init__(self, trader_id=0, factory_settings=None):
+#
+#        # FIXME: settings should be independent for each factory instance
+#        if factory_settings is not None:
+#            settings.set(factory_settings)
+#
+#        # 用于 trader 与 dtp通道 以及 策略实例 间的消息分发
+#        # 将所有行情数据与柜台回报在同一个线程中进行分发
+#        self.dispatcher = Dispatcher()
+#
+#        # dtp通道
+#        self.dtp = DTP(self.dispatcher)
+#
+#        # 行情通道
+#        self.market = Market()
+#
+#        self.traders = {}
+#
+#    def generate_strategy(self, StrategyCls, trader_id, strategy_id):
+#
+#        strategy = StrategyCls(strategy_id)
+#
+#        if trader_id not in self.traders:
+#            trader = Trader(self.dispatcher, self.dtp, trader_id)
+#            self.traders[trader_id] = trader
+#        else:
+#            trader = self.traders[trader_id]
+#
+#        strategy.set_trader(trader)
+#
+#        strategy.set_dispatcher(self.dispatcher)
+#
+#        strategy.set_market(self.market)
+#
+#        return strategy
+#
+#    def remove_strategy(self, strategy):
+#        # FIXME: remove trader from dtp
+#        self.market.remove_strategy(strategy)
+#        strategy.trader.remove_strategy(strategy)
+
+
 class StrategyFactory:
     """
     演示策略实例化流程
     """
-    def __init__(self, factory_settings=None):
+    def __init__(self, trader_id=0, factory_settings=None):
 
         # FIXME: settings should be independent for each factory instance
         if factory_settings is not None:
             settings.set(factory_settings)
+        
+        self.trader_id = trader_id
 
         # 用于 trader 与 dtp通道 以及 策略实例 间的消息分发
         # 将所有行情数据与柜台回报在同一个线程中进行分发
@@ -790,19 +838,13 @@ class StrategyFactory:
         # 行情通道
         self.market = Market()
 
-        self.traders = {}
+        self.trader = Trader(self.dispatcher, self.dtp, trader_id)
 
-    def generate_strategy(self, StrategyCls, trader_id, strategy_id):
+    def generate_strategy(self, StrategyCls, strategy_id):
 
         strategy = StrategyCls(strategy_id)
-
-        if trader_id not in self.traders:
-            trader = Trader(self.dispatcher, self.dtp, trader_id)
-            self.traders[trader_id] = trader
-        else:
-            trader = self.traders[trader_id]
-
-        strategy.set_trader(trader)
+        
+        strategy.set_trader(self.trader)
 
         strategy.set_dispatcher(self.dispatcher)
 
@@ -811,6 +853,6 @@ class StrategyFactory:
         return strategy
 
     def remove_strategy(self, strategy):
-        # FIXME: remove trader from dtp
         self.market.remove_strategy(strategy)
-        strategy.trader.remove_strategy(strategy)
+        strategy.trader.remove_strategy(strategy)    
+        

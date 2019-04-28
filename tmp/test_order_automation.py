@@ -244,13 +244,11 @@ if __name__ == '__main__':
     factory = StrategyFactory()
     strategy = factory.generate_strategy(
         MyStrategy,
-        trader_id=1,
         strategy_id=2
     )
     
     strategy_1 = factory.generate_strategy(
         MyStrategy,
-        trader_id=1,
         strategy_id=1
     )
     strategy_1.start()
