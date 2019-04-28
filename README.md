@@ -1,6 +1,6 @@
-# 东吴证券快速交易平台
+# 快速交易平台
 
-本模块是对东吴证券快速交易平台接口（DTP）的python版本封装样例，如需在实际环境中使用，请自行保证测试的完整性，或参考本模块重新封装DTP接口。
+本模块是对快速交易平台接口（DTP）的python版本封装样例，如需在实际环境中使用，请自行保证测试的完整性，或参考本模块重新封装DTP接口。
 
 有关DTP接口的详细信息，请参考《东吴证券快速交易平台接口使用说明书》。
 
@@ -53,169 +53,141 @@
 
 基于DTP通道封装行情接口，供策略端调用，代码实现为`QuoteFeed`类
 
-## 多线程
 
-所有查询与报单请求在同一子线程中同步进行，主线程用于模块的启动与交易系统实时监控。
+## 数据结构
+
+### 报单回报结构
+```protobuf
+message PlacedReport                                /* 消息: 委托确认回报 */
+{                                                   // MUST: ReportHeader.api_id = 20001001
+    string order_exchange_id = 1;                   // 交易所委托号
+    string placed_time = 2;                         // 交易所委托确认时间,单位毫秒,不存日期 ;顶点柜台返回的是 HH:MM:SS 格式，推断交易所返回的也是这个格式，所以改成字符串格式 yinwb
+    string freeze_amount = 3;                       // 冻结金额(负数表示解冻)
+    OrderStatus status = 4;                         // 委托状态: 申报结果
+
+    string order_original_id = 5;                   // 客户委托号
+
+    string account_no = 6;                          // 资金账号
+    Exchange exchange = 7;                          // 交易所
+    string code = 8;                                // 证券代码
+    uint32 quantity = 9;                            // 委托数量
+    OrderSide order_side = 10;                      // 委托竞价方向
+    string price = 11;                              // 价格留3位小数
+}
+```
+
+### 成交回报结构
+```protobuf
+message FillReport                                  /* 消息: 委托成交回报 */
+{                                                   // MUST: ReportHeader.api_id = 20001002
+    string fill_exchange_id = 1;                    // 交易所成交编号
+    string fill_time = 2;                           // 成交的时间,单位毫秒,不存日期;顶点柜台返回的是 HH:MM:SS 格式，推断交易所返回的也是这个格式，所以改成字符串格式 yinwb
+    FillStatus fill_status = 3;                     // 成交状态 0:未知 1:成交 2:撤单 3: 废单 4:确认 (TBD: 可能来自'撤销标志')
+                                                    // TBD: 成交状态中指的是什么，其中是否有撤单? 或者撤单成功会使用该回报?
+                                                    // *** 成交回报的状态只会有成交，所以这个状态可以删除
+    string fill_price = 4;                          // 本次成交价格
+    uint32 fill_quantity = 5;                       // 本次成交数量; fill_status为撤单时，此数值为撤单数量(TBD)
+    string fill_amount = 6;                         // 本次成交金额
+    string clear_amount = 7;                        // (TBD)本次清算资金(委托为卖出方向时表示本次成交新增的可用资金),宽睿接口无此参数，建议取消
+    uint32 total_fill_quantity = 8;                 // 该委托总成交数量(本笔成交处理后)
+    string total_fill_amount = 9;                   // 该委托总成交金额(本笔成交处理后)
+    uint32 total_cancelled_quantity = 10;           // (TBD)该委托已撤单数量? 怀疑撤单成功会有该回报? ***撤单成功走撤单回报
+
+    string order_exchange_id = 11;                  // 交易所委托号
+    string order_original_id = 12;                  // 客户委托号
+    string account_no = 13;                         // 资金账号
+    Exchange exchange = 14;
+    string code = 15;
+    string price = 16;                              // (TBD)价格留3位小数，宽睿接口无此参数，建议取消
+    uint32 quantity = 17;                           // (TBD)委托数量，宽睿接口无此参数，建议取消
+    OrderSide order_side = 18;                      // 委托竞价方向
+}        
+```
+
+### 查询资金回报结构
+```protobuf
+message QueryCapitalResponse
+{                                                   // MUST: ResponseHeader.api_id = 11003003
+    string account_no = 1;
+    string balance = 2;                             // 账户余额
+    string available = 3;                           // 可用资金
+    string freeze = 4;                              // 冻结金额
+    string securities = 5;                          // 证券市值
+    string total = 6;                               // 总资产
+}
+```
+
+### 查询报单回报结构
+```protobuf
+message Order                                   // 委托明细
+{
+    string order_exchange_id = 1;               // 交易所委托号
+    string order_original_id = 2;               // 客户委托号
+    Exchange exchange = 3;
+    string code = 4;
+    string name = 5;
+    string price = 6;                           // 价格留3位小数
+    uint32 quantity = 7;                        // 委托数量
+    OrderSide order_side = 8;                   // 委托竞价方向
+    OrderType order_type = 9;                   // 委托竞价类型
+    OrderStatus status = 10;
+    string order_time = 11;                     // 交易所委托时间,单位毫秒,不存日期 ;顶点柜台返回的是 HH:MM:SS 格式，推断交易所返回的也是这个格式，所以改成字符串格式 yinwb
+
+    string account_no = 12;
+    string average_fill_price = 13;             // 成交均价
+    uint32 total_fill_quantity = 14;            // 该委托总成交数量
+    string total_fill_amount = 15;              // 该委托总成交金额
+    string freeze_amount = 16;                  // 冻结金额(负数表示解冻)
+    string clear_amount = 17;                   // (TBD)清算资金 ***买入为负，卖出为正
+    uint32 total_cancelled_quantity = 18;       // 该委托已撤单数量
+    string status_message = 19;                 // 委托状态的文字说明，包括废单原因
+}
+```
+
+### 查询成交回报结构
+```protobuf
+message Fill                                    // 分笔成交明细
+{
+    string fill_exchange_id = 1;                // 交易所成交编号
+    string fill_time = 2;                       // 成交的时间,单位毫秒,不存日期 ;顶点柜台返回的是 HH:MM:SS 格式，推断交易所返回的也是这个格式，所以改成字符串格式 yinwb
+    FillStatus fill_status = 3;                 // (TBD: 同上FillReport)成交状态 0:未知 1:成交 2:撤单 3: 废单 4:确认 (TBD: 可能来自'撤销标志') *** 只有撤单和成交两个状态
+
+    string fill_price = 4;                      // 本次成交价格
+    int32 fill_quantity = 5;                   // 本次成交数量; fill_status为撤单时，此数值为撤单数量
+    string fill_amount = 6;                     // 本次成交金额
+    string clear_amount = 7;                    // 本次清算资金(委托为卖出方向时表示本次成交新增的可用资金)
+
+    string order_exchange_id = 8;               // 交易所委托号
+    string order_original_id = 9;               // 客户委托号
+    Exchange exchange = 10;
+    string code = 11;
+    string name = 12;
+    OrderSide order_side = 13;                  // 委托竞价方向
+}
+```
+
+
+### 查询持仓回报结构
+```protobuf
+message PositionDetail
+{
+    Exchange exchange = 1;                      // 交易所
+    string code = 2;                            // 证券代码
+    string name = 3;                            // 证券名称
+    int64 balance = 4;                          // 剩余数量(今持仓量)
+    int64 available_quantity = 5;               // 可用数量(可卖出数量)
+    int32 freeze_quantity = 6;                  // 冻结数量(可能是真正的冻结数量，例如：司法冻结等)
+    int64 buy_quantity = 7;                     // 当日买入数量
+    int64 sell_quantity = 8;                    // 当日卖出数量
+    string market_value = 9;                    // 最新市值
+    string cost = 10;                           // 持仓均价
+}
+```
+
+**NOTE**   
+*在`Strategy`中，以上返回结构中的表示具体金额的字段，均已从`str`转为`float`类型*
 
 ## API Reference
-
-### fast_trader.dtp_trade.Trader.start
-
-```python
-fast_trader.Trader.start()
-```
-
-注册消息回调函数，启动zmq连接与交易端
-
-### fast_trader.dtp_trade.Trader.add_strategy
-
-```python
-fast_trader.Trader.add_strategy(strategy)
-```
-
-- *strategy* (Strategy) - 用户策略实例
-
-关联用户策略
-
-### fast_trader.dtp_trade.Trader.login
-
-```python
-fast_trader.Trader.login(account, password)
-```
-
-登录
-
-- *account* (str) - 账户
-- *password* (str) - 密码
-
-### fast_trader.dtp_trade.Trader.logout
-
-登出
-
-```python
-fast_trader.Trader.logout(account)
-```
-
-### fast_trader.dtp_trade.Trader.send_order
-
-发送委托
-
-```python
-fast_trader.Trader.send_order(
-    order_original_id, exchange,
-    code, price, quantity, order_side,
-    order_type=dtp_type.ORDER_TYPE_LIMIT
-)
-```
-
-- *order_original_id* (str) - 订单原始编号
-- *exchange* (Enum) - 交易所代码
-
-```protobuf
-enum Exchange                             
-{
-    EXCHANGE_UNDEFINED   = 0;
-    EXCHANGE_SH_A        = 1;               // 沪A
-    EXCHANGE_SZ_A        = 2;               // 深A
-}
-```
-
-- *code* (str) - 交易代码
-- *price* (str) - 价格，最大允许包含两位小数
-- *quantity* (int) - 委托股数
-- *order_side* (Enum) - 委托竞价方向(买卖类型)
-
-```protobuf
-enum OrderSide
-{
-    ORDER_SIDE_UNDEFINED    = 0;
-    ORDER_SIDE_BUY          = 1;            // 买入、新股申购
-    ORDER_SIDE_SELL         = 2;            // 卖出
-    ORDER_SIDE_CREATION     = 11;           // ETF申购
-    ORDER_SIDE_REDEMPTON    = 12;           // ETF赎回
-    ORDER_SIDE_REVERSE_REPO = 21;           // 质押式逆回购(国债逆回购)
-    // ORDER_SIDE_CREDIT_BUY  = 31;            // 信用买入
-    // ORDER_SIDE_CREDIT_SELL = 32;            // 信用卖出
-}
-```
-
-- *order_type* (Enum) - 委托竞价类型
-
-```protobuf
-enum OrderType                              
-{
-    ORDER_TYPE_UNDEFINED    = 0;
-    ORDER_TYPE_LIMIT        = 1;            // 限价
-    // ORDER_TYPE_MARKET       = 2;         // 市价((沪市)最优五档即时成交剩余转限价/(深市)最优五档即时成交剩余撤单)
-    // ORDER_TYPE_BEST_5_ONLY  = 3;         // 最优五档即时成交剩余撤单(上海/深圳)
-    // ORDER_TYPE_BEST_5_LIMIT = 4;         // 最优五档即时成交剩余转限价(上海)
-    // ORDER_TYPE_YOU_BEST     = 5;         // 对手方最优价格(最优一档)委托(深圳)
-    // ORDER_TYPE_WE_BEST      = 6;         // 本方最优价格(最优一档)委托(深圳)
-    // ORDER_TYPE_MARKET_ONCE  = 7;         // 即时成交剩余撤销委托(深圳)
-    // ORDER_TYPE_MARKET_ALL   = 8;         // 全额成交或撤销委托(深圳)
-}
-```
-
-### fast_trader.dtp_trade.Trader.send_order_batch
-
-发送批量委托
-
-```python
-fast_trader.Trader.send_order_batch(orders)
-```
-
-- *orders* (list) - 每个元素即为`send_order`的参数字典
-
-### fast_trader.dtp_trade.Trader.cancel_order
-
-撤单
-
-```python
-fast_trader.Trader.cancel_order(exchange, order_exchange_id)
-```
-
-- *exchange* (Enum) - 交易所
-- *order_exchange_id* (int) - 交易所报单编号
-
-### fast_trader.dtp_trade.Trader.query_orders
-
-查询订单，默认查询当日所有委托
-
-```python
-fast_trader.Trader.query_orders(**kw)
-```
-
-### fast_trader.dtp_trade.Trader.query_trades
-
-查询成交，默认查询当日所有成交
-
-```python
-fast_trader.Trader.query_trades(**kw)
-```
-
-### fast_trader.dtp_trade.Trader.query_positions
-
-查询成交，默认查询全部持仓
-
-```python
-fast_trader.Trader.query_positions(**kw)
-```
-
-### fast_trader.dtp_trade.Trader.query_capital
-
-查询资金
-
-```python
-fast_trader.Trader.query_capital()
-```
-
-### fast_trader.dtp_trade.Trader.query_ration
-
-查询配售权益
-
-```python
-fast_trader.Trader.query_ration()
-```
 
 ### fast_trader.dtp_quote.QuoteFeed.start
 
@@ -267,6 +239,7 @@ fast_trader.strategy.Strategy.start()
 
 ```python
 fast_trader.strategy.Strategy.on_start()
+```
 
 ### fast_trader.strategy.Strategy.set_dispatcher
 
@@ -532,12 +505,6 @@ fast_trader.strategy.Strategy.cancel_order(exchange, order_exchange_id)
 - *order_exchange_id* (int) - 交易所报单编号
 
 ### fast_trader.strategy.get_strategy_instance
-
-返回用户策略实例
-
-```python
-fast_trader.strategy.strategy.get_strategy_instance(UserStrategy)
-```
 
 - *UserStrategy* (class) 用户策略类
 
