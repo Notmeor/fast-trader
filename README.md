@@ -6,7 +6,7 @@
 
 ## 模块结构
 
-<img src="./flowchart.svg"> 
+<img src="flowchart.svg"> 
 
 
 ### DTP接口
