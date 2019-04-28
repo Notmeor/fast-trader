@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-
 import enum
 
 
@@ -32,24 +31,33 @@ class AccountEvent:
 class Account:
 
     account_no = ''
-
-    cash = 0.
-
+    # 可用现金
+    balance = 0.
+    # 证券市值
     security_value = 0.
 
     @property
     def total_value(self):
-        return self.cash + self.security_value
+        return self.balance + self.security_value
 
 
 class Accountant:
+
+    # TODO: persistence
     
     def __init__(self, account):
         self._account = account
+        self._records = []
+    
+    def put_event(self, event):
+        if event.header.event_type == AccountEventType.SECURITY_TRANSACTION:
+            self.on_security_transaction(event)
+        else:
+            raise NotImplementedError
 
     def on_security_transaction(self, event):
-        self._account.cash = event.body.cash
-        self._account.security_value = event.body.security_value
+        self._account.balance += event.body.cash
+        self._account.security_value += event.body.security_value
 
     def on_stock_dividend(self, event):
         pass
@@ -58,4 +66,7 @@ class Accountant:
         pass
 
     def on_rights_offering(self, event):
+        pass
+    
+    def on_costs(self, event):
         pass
