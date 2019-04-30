@@ -10,6 +10,7 @@ from data_provider.datafeed.quote_feed import QuoteFeed
 from data_provider.datafeed.universe import Universe
 from data_provider.nestlib.trading_cal import TradeCal
 import time
+import traceback
 
 tc_handle = TradeCal()
 uni_handle = Universe()
@@ -45,7 +46,7 @@ class OrderGenerator(object):
         self.today_un_filtered_holds_tickers = []   # 今日没有进过高低开过滤的股票列表
         self.common_tickers = []                    # 今日目标持仓和历史持仓的股票列表的交集
         self.is_prepared = False
-        self.record_dict = {}
+        self.record_dict = {}    # 记录下单过程中产生的中间变量
 
     def get_pre_holds(self, path='2019-04-25_Position.csv'):
         pre_holds_df = pd.read_csv(path)
@@ -246,12 +247,14 @@ class OrderGenerator(object):
 
         # 根据昨日持仓和今日目标持仓得到最终的卖出清单
         self.common_tickers = set(pre_holds_real_df['ticker'].tolist()) & set(self.today_holds_df['ticker'].tolist())
+        self.record_dict['common_tickers'] = self.common_tickers
 
         to_sell_df = pre_holds_real_df[~pre_holds_real_df['ticker'].isin(self.common_tickers)].copy()
         to_sell_df['real_time_price'] = to_sell_df['real_time_price'] * self.sell_price_scale  # 将价格下调，提高成交概率
 
         sell_order_ls = self.generate_orders_by_df(to_sell_df, dtp_type.ORDER_SIDE_SELL)
         self.send_orders(sell_order_ls)
+        self.record_dict['sell_order_df'] = to_sell_df
 
     def get_available_capital(self):
         """获取可用资金"""
@@ -266,6 +269,9 @@ class OrderGenerator(object):
 
         initial_capital = float(query_result[0]['available'])
         return initial_capital
+
+    def get_current_time(self):
+        return str(dt.datetime.now().time())
 
     def _buy_stocks(self, tickers_ls):
 
@@ -288,18 +294,28 @@ class OrderGenerator(object):
         buy_order_ls = self.generate_orders_by_df(to_buy_df, dtp_type.ORDER_SIDE_BUY)
         self.send_orders(buy_order_ls)
 
+        self.record_dict['initial_capital_'+self.get_current_time()] = initial_capital
+        self.record_dict['buy_order_df_'+self.get_current_time()] = to_buy_df
+
     def buy_stocks(self):
         # 共同的持仓不进行买入
-        already_buy_tickers = self.get_already_buy()
-        filter_tickers = already_buy_tickers + self.common_tickers
-        filtered_today_holds_df = self.today_holds_df[~self.today_holds_df['ticker'].isin(filter_tickers)]
-        self._buy_stocks(filtered_today_holds_df['ticker'].tolist())
+        try:
+            already_buy_tickers = self.get_already_buy()
+            filter_tickers = already_buy_tickers + self.common_tickers
+            filtered_today_holds_df = self.today_holds_df[~self.today_holds_df['ticker'].isin(filter_tickers)]
+            self._buy_stocks(filtered_today_holds_df['ticker'].tolist())
+        except Exception as e:
+            traceback.print_exc()
 
     def get_already_buy(self):
         """获取已经买入的股票列表"""
         positions = query_positions()
-        tickers = [item['code'] for item in positions if item['buyQuantity'] >= 100]
-        return list(map(self.add_suffix, tickers))
+        df = pd.DataFrame(positions)[['code', 'buyQuantity', 'cost']]
+        df.rename(columns={'code': 'ticker'}, inplace=True)
+        df = df[df['buyQuantity'] >= 100]
+        df['ticker'] = df['ticker'].apply(self.add_suffix)
+        self.record_dict['already_buy_'+self.get_current_time()] = df   # 记录已经买入的股票
+        return df['ticker'].tolist()
 
     def generate_orders_by_df(self, df, order_side):
         """
