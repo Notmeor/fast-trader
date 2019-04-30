@@ -28,7 +28,7 @@ class AccountEvent:
     body = None
 
 
-class Account:
+class Account:
 
     account_no = ''
     # 可用现金
