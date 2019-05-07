@@ -1,5 +1,6 @@
 
 
+
 # 指数行情
 index_feed_channel: 'tcp://192.168.211.194:7778'
 # 快照行情
@@ -21,10 +22,15 @@ sync_channel_port: 'tcp://192.168.221.37:9833'
 # 异步请求
 async_channel_port: 'tcp://192.168.221.37:9831'
 # 异步响应推送
-# rsp_channel_port: 'tcp://192.168.221.37:9832'
-rsp_channel_port: 'tcp://192.168.221.36:9402'
+rsp_channel_port: 'tcp://192.168.221.37:9832'
 # 风控消息
 risk_channel_port: 'tcp://192.168.221.36:9402'
+
+
+# 终端信息
+mac: '02:15:51:37:6C:14'
+harddisk: 'W62H0HQL'
+ip: '192.168.211.201'
 
 
 # rest api
@@ -32,7 +38,7 @@ use_rest_api: True
 
 rest_api:
   # kay_file: 'c:/Users/{user}/AppData/Roaming/Kay/.kay'
-  kay_file: '/home/jovyan/work/fast-trader/tmp/kay.txt'
+  kay_file: '/Users/eisenheim/Documents/git/fast-trader/tmp/kay.txt'
   get_account: 'https://192.168.221.39/api/entrust-free/accounts'
   order: 'https://192.168.221.39/api/entrust-free/accounts/{account_no}/orders'
   cancel_order: 'https://192.168.221.39/api/entrust-free/accounts/{account_no}/order_cancellations'
@@ -67,6 +73,14 @@ account: '011000106328'
 password: '111111'
 
 
+# 内部order_id分配逻辑参数
+_IDPool:
+  # 最多可分配的策略
+  max_strategies: 100
+  # 每个策略最多可对应的trader数量
+  max_traders_per_strategy: 2
+
+
 logging:
     version: 1
     disable_existing_loggers: False
@@ -74,7 +88,7 @@ logging:
         simple:
             format: "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s"
         debug:
-            format: "%(asctime)s - %(threadName)s - %(name)s - %(filename)s:%(lineno)d - %(levelname)s - %(message)s"
+            format: "%(asctime)s - %(process)d - %(threadName)s - %(name)s - %(filename)s:%(lineno)d - %(levelname)s - %(message)s"
         user:
             format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     handlers:
@@ -88,7 +102,7 @@ logging:
             class: logging.handlers.RotatingFileHandler
             level: INFO
             formatter: debug
-            filename: '{fast_trader_home}/logs/info.log'
+            filename: '{fast_trader_home}/logs/info.{today_str}.log'
             maxBytes: 1048576 # 1MB
             backupCount: 20
             encoding: utf8
@@ -97,16 +111,17 @@ logging:
             class: logging.handlers.RotatingFileHandler
             level: ERROR
             formatter: simple
-            filename: '{fast_trader_home}/logs/error.log'
+            filename: '{fast_trader_home}/logs/error.{today_str}.log'
             maxBytes: 1048576 # 1MB
             backupCount: 20
             encoding: utf8
         
         user_log_handler:
-            class: logging.handlers.TimedRotatingFileHandler
+            class: logging.FileHandler
             level: INFO
             formatter: user
-            filename: '{fast_trader_home}/logs/strategy.log'
+            filename: '{fast_trader_home}/logs/strategy.{today_str}.log'
+            encoding: utf8
     
     loggers:
 
@@ -129,7 +144,28 @@ logging:
             level: INFO
             handlers: [user_log_handler]
             propagate: no
+        
+        strategy_manager:
+            level: INFO
+            handlers: [info_file_handler, error_file_handler]
+            propagate: no
+        
+        strategy_server:
+            level: INFO
+            handlers: [info_file_handler, error_file_handler, console]
+            propagate: no
+        
+        settings:
+            level: INFO
+            handlers: [info_file_handler, error_file_handler, console]
+            propagate: no
+
+        rest_api:
+            level: INFO
+            handlers: [info_file_handler, error_file_handler]
+            propagate: no
     
     root:
         level: DEBUG
         handlers: [user_log_handler]
+

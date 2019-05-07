@@ -114,6 +114,17 @@ def get_win_user_documents_dir():
         raise RuntimeError('Failed to retrieve `Documents` path!')
 
 
+def as_wind_code(code, exchange=None):
+    if exchange is None:
+        if code.startswith('6'):
+            return code + '.SH'
+        else:
+            return code + '.SZ'
+    else:
+        # 根据交易所添加相应后缀
+        raise NotImplementedError
+
+
 first_cap_re = re.compile('(.)([A-Z][a-z]+)')
 all_cap_re = re.compile('([a-z0-9])([A-Z])')
 def camel2snake(name):

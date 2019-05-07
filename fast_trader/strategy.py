@@ -17,7 +17,17 @@ from fast_trader.dtp_trade import (OrderResponse,
 from fast_trader.models import StrategyStatus
 from fast_trader.position_store import SqlitePositionStore as PositionStore
 from fast_trader.settings import settings, Session
-from fast_trader.utils import timeit, message2tuple, attrdict
+from fast_trader.utils import timeit, message2tuple, attrdict, as_wind_code
+
+from .ledger import (AccountView as Acc, Accountant, AccountEvent,
+                     EventHeader, EventBody, AccountEventType,
+                     StockLedgerRecord, LedgerCategory, LedgerSubject)
+
+accountant = Accountant(Acc())
+
+
+# 委托状态添加 `SUBMITTED` : 报单本地已发送
+dtp_type.ORDER_STATUS_SUBMITTED = -1
 
 
 class Market:
@@ -27,7 +37,7 @@ class Market:
 
     def add_strategy(self, strategy):
         self._strategies.append(strategy)
-    
+
     def remove_strategy(self, strategy):
         self._strategies.remove(strategy)
 
@@ -37,8 +47,8 @@ class Market:
 
 
 def to_timeint(dt):
-    return (dt.hour * 10000000 + dt.minute * 100000 
-        + dt.second * 1000 + int(dt.microsecond / 1000))
+    return (dt.hour * 10000000 + dt.minute * 100000 +
+            dt.second * 1000 + int(dt.microsecond / 1000))
 
 
 def as_order_msg(order):
@@ -46,7 +56,7 @@ def as_order_msg(order):
         dtp_type.ORDER_SIDE_BUY: '买入',
         dtp_type.ORDER_SIDE_SELL: '卖出',
     }[order.order_side]
-    
+
     status = {
         dtp_type.ORDER_STATUS_PLACING: '委托成功',
         dtp_type.ORDER_STATUS_PLACED: '已申报',
@@ -56,7 +66,7 @@ def as_order_msg(order):
     err = ''
     if order.status == dtp_type.ORDER_STATUS_FAILED:
         err = f'{order.message}, '
-        
+
     msg = f'{status}, {err}委托编号={order.order_exchange_id}, '\
         f'证券代码={order.code}, 方向={drc}, '\
         f'委托价格={order.price}, 委托数量={order.quantity}'
@@ -68,7 +78,7 @@ def as_trade_msg(trade):
         dtp_type.ORDER_SIDE_BUY: '买入',
         dtp_type.ORDER_SIDE_SELL: '卖出',
     }[trade.order_side]
-        
+
     msg = f'成交回报, 委托编号={trade.order_exchange_id}, '\
         f'证券代码={trade.code}, 方向={drc}, '\
         f'委托价格={trade.fill_price}, 本次成交数量={trade.fill_quantity}, '\
@@ -76,7 +86,188 @@ def as_trade_msg(trade):
     return msg
 
 
-class Strategy:
+class LedgerWriter:
+
+    @property
+    def localtime(self):
+        return datetime.datetime.now()
+
+    def write_order_record(self, order):
+        """
+        委托相关流水
+
+        资金在freeze于cash之间的划转记录
+        """
+        code = as_wind_code(order.code)
+        localtime = self.localtime.strftime('%Y-%m-%dT%H:%M:%S.%f')
+
+        # 委托本地提交后，冻结资金
+        if order.status == dtp_type.ORDER_STATUS_SUBMITTED:
+            # 冻结开仓委托占用资金
+            if order.order_side == dtp_type.ORDER_SIDE_BUY:
+                code = as_wind_code(order.code)
+                localtime = self.localtime.strftime('%Y-%m-%dT%H:%M:%S.%f')
+                frozen_value = float(order.price) * order.quantity
+
+                record = StockLedgerRecord()
+                record.subject = LedgerSubject.TRANSACTION
+                record.category = LedgerCategory.FREEZE
+                record.code = code
+                record.quantity = frozen_value
+                record.price = 1.
+                record.localtime = localtime
+                accountant.put_event(record)
+
+                record = StockLedgerRecord()
+                record.subject = LedgerSubject.TRANSACTION
+                record.category = LedgerCategory.CASH
+                record.code = code
+                record.quantity = -frozen_value
+                record.price = 1.
+                record.localtime = localtime
+                accountant.put_event(record)
+
+        # 委托本地提交后，仅冻结了买入委托占用资金
+        # 委托确认后，还须冻结交易费用
+        elif order.status == dtp_type.ORDER_STATUS_PLACED:
+            if order.order_side == dtp_type.ORDER_SIDE_BUY:
+                order_freeze = order.price * order.quantity
+            else:
+                order_freeze = 0.
+            cost_freeze = order.freeze_amount - order_freeze
+
+            record = StockLedgerRecord()
+            record.subject = LedgerSubject.TRANSACTION
+            record.category = LedgerCategory.FREEZE
+            record.code = code
+            record.quantity = cost_freeze
+            record.price = 1.
+            record.localtime = localtime
+            accountant.put_event(record)
+
+            record = StockLedgerRecord()
+            record.subject = LedgerSubject.TRANSACTION
+            record.category = LedgerCategory.CASH
+            record.code = code
+            record.quantity = -cost_freeze
+            record.price = 1.
+            record.localtime = localtime
+            accountant.put_event(record)
+
+        # 委托撤销后（包含部成部撤），释放资金
+        elif order.status == dtp_type.ORDER_STATUS_CANCELLED:
+            # 开仓撤单：委托冻结 + 费用冻结 -> 可用资金
+            # 平仓撤单：费用冻结 -> 可用资金
+
+            record = StockLedgerRecord()
+            record.subject = LedgerSubject.TRANSACTION
+            record.category = LedgerCategory.FREEZE
+            record.code = code
+            record.quantity = order.freeze_amount
+            record.price = 1.
+            record.localtime = localtime
+            accountant.put_event(record)
+
+            record = StockLedgerRecord()
+            record.subject = LedgerSubject.TRANSACTION
+            record.category = LedgerCategory.CASH
+            record.code = code
+            record.quantity = -order.freeze_amount
+            record.price = 1.
+            record.localtime = localtime
+            accountant.put_event(record)
+
+        # 废单，释放资金
+        elif order.status == dtp_type.ORDER_STATUS_FAILED:
+            # 开仓废单：委托冻结 -> 可用资金
+            # 平仓废单：无
+            # FIXME: 交易所拒单？是否已经冻结了交易费用？
+            if order.order_side == dtp_type.ORDER_SIDE_BUY:
+
+                unfreeze = order.price * order.quantity
+
+                record = StockLedgerRecord()
+                record.subject = LedgerSubject.TRANSACTION
+                record.category = LedgerCategory.FREEZE
+                record.code = code
+                record.quantity = -unfreeze
+                record.price = 1.
+                record.localtime = localtime
+                accountant.put_event(record)
+
+                record = StockLedgerRecord()
+                record.subject = LedgerSubject.TRANSACTION
+                record.category = LedgerCategory.CASH
+                record.code = code
+                record.quantity = unfreeze
+                record.price = 1.
+                record.localtime = localtime
+                accountant.put_event(record)
+
+    def write_trade_record(self, trade):
+        """
+        成交相关流水
+
+        资金在cash于security_value之间的划转，以及交易费用记录
+        """
+        code = as_wind_code(trade.code)
+        localtime = self.localtime.strftime('%Y-%m-%dT%H:%M:%S.%f')
+        _sign = -1 if trade.order_side == dtp_type.ORDER_SIDE_BUY else 1
+        clear_amount = abs(trade.clear_amount)
+        cur_cost = abs(clear_amount - trade.fill_amount)
+
+        # 冻结资金解冻 -> 持仓市值 + 可用资金 + 交易费用
+        # 买入委托解冻的资金包括委托占用和费用冻结
+        # 卖出委托解冻的只有费用冻结
+        if trade.order_side == dtp_type.ORDER_SIDE_BUY:
+            unfreeze = trade.price * trade.fill_quantity + cur_cost
+        else:
+            unfreeze = cur_cost
+
+        record = StockLedgerRecord()
+        record.subject = LedgerSubject.TRANSACTION
+        record.category = LedgerCategory.FREEZE
+        record.code = code
+        record.quantity = -unfreeze
+        record.price = 1.
+        record.localtime = localtime
+        accountant.put_event(record)
+
+        # 持仓金额变动
+        record = StockLedgerRecord()
+        record.subject = LedgerSubject.TRANSACTION
+        record.category = LedgerCategory.SECURITY
+        record.code = code
+        record.quantity = trade.fill_quantity * -_sign
+        record.price = trade.fill_price
+        record.localtime = localtime
+        accountant.put_event(record)
+
+        # 交易费用变动
+        record = StockLedgerRecord()
+        record.subject = LedgerSubject.COSTS
+        record.category = LedgerCategory.CASH
+        record.code = code
+        record.quantity = -cur_cost
+        record.price = 1.
+        record.localtime = localtime
+        accountant.put_event(record)
+
+        # 可用资金变动 <- 解冻资金 - 持仓市值增值 - 交易费用
+        # 成交价可能会优于委托价
+        overpayment = abs(trade.price - trade.fill_price) * trade.fill_quantity
+        record = StockLedgerRecord()
+        record.subject = LedgerSubject.TRANSACTION
+        record.category = LedgerCategory.CASH
+        record.code = code
+        record.quantity = overpayment
+        record.price = 1.
+        record.localtime = localtime
+        record.comment = 'order overpayment refund'
+        accountant.put_event(record)
+
+
+class Strategy(LedgerWriterMixin):
 
     strategy_name = 'unnamed'
     strategy_id = -1
@@ -99,12 +290,14 @@ class Strategy:
         self._request_id_history = []
 
         self.subscribed_datasources = []
-        
+
         # order_exchange_id -> order_original_id
         self._order_id_mapping = {}
 
         self.logger = logging.getLogger(
             f'strategy<id={self.strategy_id};name={self.strategy_name}>')
+
+        self._ledger_writer = LedgerWriter()
 
     def set_dispatcher(self, dispatcher):
         self.dispatcher = dispatcher
@@ -123,7 +316,7 @@ class Strategy:
         if store is None:
             store = PositionStore()
         self._position_store = store
-    
+
     def set_initial_positions(self, positions):
         """
         设置策略初始持仓
@@ -153,7 +346,7 @@ class Strategy:
 
             # 启动行情线程
             self.start_market()
-            
+
             # 更新策略状态的本地记录
             self._update_strategy_status()
 
@@ -172,7 +365,7 @@ class Strategy:
 
         for ds in self.subscribed_datasources:
             ds.start()
-    
+
     @classmethod
     def get_strategy_name(cls):
         if cls.strategy_name == 'unnamed':
@@ -194,13 +387,13 @@ class Strategy:
     def generate_request_id(self):
         request_id = self.trader.generate_request_id(self.strategy_id)
         # 部分响应数据，如CANCEL RESPONSE无`order_original_id`,
-        # 需要记录request_id用来认证此类消息的策略归属
+        # 需要记录request_id用来确定此类消息的策略归属
         # 但在使用rest api接口时，无法指定request_id
         self._request_id_history.append(request_id)
         return request_id
 
     def _update_strategy_status(self):
-        
+
         msg = {
             'pid': os.getpid(),
             'account_no': self.trader.account_no,
@@ -208,9 +401,9 @@ class Strategy:
             'strategy_name': self.strategy_name,
             'start_time': datetime.datetime.now(
                 ).strftime('%Y%m%d %H:%M:%S.%f'),
-            'token': '', 
+            'token': '',
             'running': True}
-            
+
         session = Session()
         last_status = (
             session
@@ -251,13 +444,13 @@ class Strategy:
         """
 
         id_range = self._id_whole_range
-        
+
         def _check_order_id(o):
             _id = o['order_original_id']
             if int(_id) in id_range:
                 return True
             return False
-        
+
         if 'order_original_id' in obj:
             return _check_order_id(obj)
         elif 'body' in obj:
@@ -269,7 +462,7 @@ class Strategy:
                 exchange_id = obj['body']['order_exchange_id']
                 if exchange_id in self._order_id_mapping:
                     return True
-                
+
             if obj['header']['request_id'] in self._request_id_history:
                 return True
 
@@ -308,7 +501,7 @@ class Strategy:
         查询账户报单
         """
         return self._get_all_pages(self.trader.query_orders)
-    
+
     def get_account_open_orders(self):
         """
         查询账户未成交(可撤)报单
@@ -333,7 +526,7 @@ class Strategy:
         orders = self.get_account_orders()
         open_orders = [order for order in orders if order['status'] < 4]
         return open_orders
-    
+
     def get_account_trades(self):
         """
         查询账户成交
@@ -544,6 +737,15 @@ class Strategy:
         """
         pass
 
+    def _on_order_submitted(self, order):
+        """
+        响应本地报单提交
+
+        主要用来维护资金状态，本地报单后，立即冻结委托资金
+        """
+        # FIXME: `price` data type
+        self._ledger_writer.write_order_record(order)
+
     def _on_trade(self, msg):
         """
         成交回报
@@ -551,7 +753,7 @@ class Strategy:
         trade = TradeResponse.from_msg(msg.body)
 
         self.logger.info(as_trade_msg(trade))
-        
+
         if msg.header.code == dtp_type.RESPONSE_CODE_OK:
             original_id = trade.order_original_id
             # FIXME: strategy might start before trade responses and after
@@ -565,8 +767,8 @@ class Strategy:
                 if order_detail.status not in [
                         dtp_type.ORDER_STATUS_PARTIAL_CANCELLED]:
                     order_detail['status'] = \
-                    dtp_type.ORDER_STATUS_PARTIAL_FILLED
-            elif trade.total_fill_quantity == trade.quantity: 
+                        dtp_type.ORDER_STATUS_PARTIAL_FILLED
+            elif trade.total_fill_quantity == trade.quantity:
                 order_detail['status'] = dtp_type.ORDER_STATUS_FILLED
 
         if msg.body.fill_status != 1:
@@ -575,6 +777,8 @@ class Strategy:
             self._trades[trade.order_original_id] = trade
             # 更新本地持仓记录
             self.update_position(trade)
+            # 写入账户流水
+            self._ledger_writer.write_trade_record(trade)
 
             self.on_trade(trade)
 
@@ -589,19 +793,20 @@ class Strategy:
         订单回报
         """
         order = OrderResponse.from_msg(msg.body)
-        
+
         self._order_id_mapping[order['order_exchange_id']] =\
             order['order_original_id']
-        
+
         self.logger.info(as_order_msg(order))
-        
+
         # if msg.header.code == dtp_type.RESPONSE_CODE_OK:
         original_id = order.order_original_id
         order_detail = self._orders[original_id]
         order_detail.update(order)
 
-        self.on_order(order)
+        self._ledger_writer.write_order_record(order)
 
+        self.on_order(order)
 
     def on_order(self, data):
         """
@@ -633,7 +838,7 @@ class Strategy:
         撤单确认回报
         """
         data = CancellationResponse.from_msg(msg.body)
-        
+
         self.logger.info(f'已撤单, 委托编号={data.order_exchange_id}')
 
         if msg.header.code == dtp_type.RESPONSE_CODE_OK:
@@ -644,6 +849,9 @@ class Strategy:
         self.on_order_cancelation(data)
 
     def on_order_cancelation(self, msg):
+        """
+        用户策略覆盖此方法以处理撤单成功回报
+        """
         pass
 
     def _on_compliance_report(self, report):
@@ -653,10 +861,14 @@ class Strategy:
         pass
 
     def _store_order(self, order):
-        order['status'] = dtp_type.ORDER_STATUS_UNDEFINED
+        order['status'] = dtp_type.ORDER_STATUS_SUBMITTED
         order['placed_localtime'] = to_timeint(datetime.datetime.now())
         order = attrdict(order)
         self._orders[order.order_original_id] = order
+
+        # 本地报单后，发出一个order submitted事件
+        self._on_order_submitted(order)
+
         return order
 
     def _insert_order(self, **kw):
@@ -770,52 +982,6 @@ class Strategy:
             self.cancel_order(**order)
 
 
-#class StrategyFactory:
-#    """
-#    演示策略实例化流程
-#    """
-#    def __init__(self, trader_id=0, factory_settings=None):
-#
-#        # FIXME: settings should be independent for each factory instance
-#        if factory_settings is not None:
-#            settings.set(factory_settings)
-#
-#        # 用于 trader 与 dtp通道 以及 策略实例 间的消息分发
-#        # 将所有行情数据与柜台回报在同一个线程中进行分发
-#        self.dispatcher = Dispatcher()
-#
-#        # dtp通道
-#        self.dtp = DTP(self.dispatcher)
-#
-#        # 行情通道
-#        self.market = Market()
-#
-#        self.traders = {}
-#
-#    def generate_strategy(self, StrategyCls, trader_id, strategy_id):
-#
-#        strategy = StrategyCls(strategy_id)
-#
-#        if trader_id not in self.traders:
-#            trader = Trader(self.dispatcher, self.dtp, trader_id)
-#            self.traders[trader_id] = trader
-#        else:
-#            trader = self.traders[trader_id]
-#
-#        strategy.set_trader(trader)
-#
-#        strategy.set_dispatcher(self.dispatcher)
-#
-#        strategy.set_market(self.market)
-#
-#        return strategy
-#
-#    def remove_strategy(self, strategy):
-#        # FIXME: remove trader from dtp
-#        self.market.remove_strategy(strategy)
-#        strategy.trader.remove_strategy(strategy)
-
-
 class StrategyFactory:
     """
     演示策略实例化流程
@@ -825,7 +991,7 @@ class StrategyFactory:
         # FIXME: settings should be independent for each factory instance
         if factory_settings is not None:
             settings.set(factory_settings)
-        
+
         self.trader_id = trader_id
 
         # 用于 trader 与 dtp通道 以及 策略实例 间的消息分发
@@ -843,7 +1009,7 @@ class StrategyFactory:
     def generate_strategy(self, StrategyCls, strategy_id):
 
         strategy = StrategyCls(strategy_id)
-        
+
         strategy.set_trader(self.trader)
 
         strategy.set_dispatcher(self.dispatcher)
@@ -854,5 +1020,5 @@ class StrategyFactory:
 
     def remove_strategy(self, strategy):
         self.market.remove_strategy(strategy)
-        strategy.trader.remove_strategy(strategy)    
-        
+        strategy.trader.remove_strategy(strategy)
+
