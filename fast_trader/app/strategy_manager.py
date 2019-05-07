@@ -309,16 +309,16 @@ class StrategyServer:
     
     def is_running(self):
         session = Session()
-        last_ts = (
-            session
+        res = (session
             .query(StrategyServerModel.last_heartbeat)
             .filter_by(id=self.server_id)
-            .one()[0])
-        
-        current_ts = get_current_ts()
-        if current_ts > last_ts + SERVER_TIMEOUT_SECS:
-            return False
-        return True
+            .all())
+        if res:
+            last_ts = res[0].last_heartbeat
+            current_ts = get_current_ts()
+            if current_ts < last_ts + SERVER_TIMEOUT_SECS:
+                return True
+        return False
 
 
 if __name__ == '__main__':

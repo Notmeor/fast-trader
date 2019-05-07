@@ -343,7 +343,7 @@ def restapi_login(trader, account, password, *args, **kw):
     stats = _get_by_account(
             get_accounts(), settings['account'], 'cashAccountNo')
     if stats['loginStatus'] == 1:
-        trader._account = settings['account']
+        trader._account_no = settings['account']
         trader._logined = True
         trader._token = user_meta['token']
         print('Login success')

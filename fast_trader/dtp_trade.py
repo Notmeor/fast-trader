@@ -218,7 +218,7 @@ class DTP:
 
         self.__settings = settings.copy()
         # FIXME: param
-        self._account = settings['account']
+        self._account_no = settings['account']
         self._ctx = zmq_context.CONTEXT
 
         # 同步查询通道
@@ -232,12 +232,12 @@ class DTP:
         # 异步查询响应通道
         self._async_resp_channel = self._ctx.socket(zmq.SUB)
         self._async_resp_channel.connect(settings['rsp_channel_port'])
-        self._async_resp_channel.subscribe('{}'.format(self._account))
+        self._async_resp_channel.subscribe('{}'.format(self._account_no))
 
         ## 风控推送通道
         #self._risk_report_channel = self._ctx.socket(zmq.SUB)
         #self._risk_report_channel.connect(settings['risk_channel_port'])
-        #self._risk_report_channel.subscribe('{}'.format(self._account))
+        #self._risk_report_channel.subscribe('{}'.format(self._account_no))
 
         self.logger = logging.getLogger('dtp')
 
@@ -463,7 +463,7 @@ class Trader:
 
         self._started = False
 
-        self._account = ''
+        self._account_no = ''
         self._token = ''
         self._logined = False
 
@@ -588,7 +588,7 @@ class Trader:
 
     @property
     def account_no(self):
-        return self._account
+        return self._account_no
 
     @property
     def logined(self):
@@ -609,7 +609,7 @@ class Trader:
     @might_use_rest_api(might=settings['use_rest_api'], api_name='restapi_login')
     def login(self, account, password, sync=True, **kw):
 
-        self._account = account
+        self._account_no = account
         ret = self.login_account(account=account,
                                  password=password,
                                  sync=True, **kw)
@@ -645,7 +645,7 @@ class Trader:
             api_type='req',
             api_id=dtp_api_id.LOGOUT_ACCOUNT_REQUEST,
             request_id=kw['request_id'],
-            account=self._account,
+            account=self._account_no,
             token=self._token
         )
         self.dispatcher.put(mail)
@@ -673,7 +673,7 @@ class Trader:
         mail = Mail(
             api_type='req',
             api_id=dtp_api_id.PLACE_ORDER,
-            account=self._account,
+            account=self._account_no,
             token=self._token,
             request_id=request_id,
             order_original_id=order_original_id,
@@ -714,7 +714,7 @@ class Trader:
         mail = Mail(
             api_type='req',
             api_id=dtp_api_id.CANCEL_ORDER,
-            account=self._account,
+            account=self._account_no,
             token=self._token,
             **kw
         )
@@ -729,7 +729,7 @@ class Trader:
         mail = Mail(
             api_type='req',
             api_id=dtp_api_id.QUERY_ORDERS_REQUEST,
-            account=self._account,
+            account=self._account_no,
             token=self._token,
             **kw
         )
@@ -744,7 +744,7 @@ class Trader:
         mail = Mail(
             api_type='req',
             api_id=dtp_api_id.QUERY_FILLS_REQUEST,
-            account=self._account,
+            account=self._account_no,
             token=self._token,
             **kw
         )
@@ -759,7 +759,7 @@ class Trader:
         mail = Mail(
             api_type='req',
             api_id=dtp_api_id.QUERY_POSITION_REQUEST,
-            account=self._account,
+            account=self._account_no,
             token=self._token,
             **kw
         )
@@ -774,7 +774,7 @@ class Trader:
         mail = Mail(
             api_type='req',
             api_id=dtp_api_id.QUERY_CAPITAL_REQUEST,
-            account=self._account,
+            account=self._account_no,
             token=self._token,
             **kw
         )
@@ -787,7 +787,7 @@ class Trader:
         mail = Mail(
             api_type='req',
             api_id=dtp_api_id.QUERY_RATION_REQUEST,
-            account=self._account,
+            account=self._account_no,
             token=self._token,
             **kw
         )

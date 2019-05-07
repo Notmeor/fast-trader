@@ -181,7 +181,7 @@ class Strategy:
 
     @property
     def account_no(self):
-        return self.trader._account
+        return self.trader._account_no
 
     @property
     def position(self):

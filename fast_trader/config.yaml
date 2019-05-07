@@ -1,5 +1,6 @@
 
 
+
 # 指数行情
 index_feed_channel: 'tcp://192.168.211.194:7778'
 # 快照行情
@@ -36,7 +37,8 @@ ip: '192.168.211.201'
 use_rest_api: True
 
 rest_api:
-  kay_file: 'c:/Users/{user}/AppData/Roaming/Kay/.kay'
+  # kay_file: 'c:/Users/{user}/AppData/Roaming/Kay/.kay'
+  kay_file: '/home/jovyan/work/fast-trader/tmp/kay.txt'
   get_account: 'https://192.168.221.39/api/entrust-free/accounts'
   order: 'https://192.168.221.39/api/entrust-free/accounts/{account_no}/orders'
   cancel_order: 'https://192.168.221.39/api/entrust-free/accounts/{account_no}/order_cancellations'
@@ -166,3 +168,4 @@ logging:
     root:
         level: DEBUG
         handlers: [user_log_handler]
+
