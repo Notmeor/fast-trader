@@ -139,7 +139,7 @@ class Strategy:
 
         self.trader.start()
 
-        self._account = settings['account']
+        self._account_no = settings['account']
         self.trader.login(
             account=settings['account'],
             password=settings['password'],

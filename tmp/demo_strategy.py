@@ -80,7 +80,6 @@ if __name__ == '__main__':
     factory = StrategyFactory()
     strategy = factory.generate_strategy(
         DemoStrategy,
-        trader_id=1,
         strategy_id=DemoStrategy.strategy_id
     )
     

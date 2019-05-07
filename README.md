@@ -503,11 +503,3 @@ fast_trader.strategy.Strategy.cancel_order(exchange, order_exchange_id)
 
 - *exchange* (Enum) - 交易所代码
 - *order_exchange_id* (int) - 交易所报单编号
-
-### fast_trader.strategy.get_strategy_instance
-
-- *UserStrategy* (class) 用户策略类
-
-返回值
-
-- *strategy* (Strategy) - 用户策略实例
