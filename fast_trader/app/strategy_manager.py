@@ -292,11 +292,15 @@ class StrategyServer:
 
     def stop(self):
         session = Session()
-        pid = session.query(StrategyServerModel.pid).one()[0]
-        for proc in psutil.process_iter():
-            if proc.pid == pid:
-                proc.kill()
-                break  
+        try:
+            pid = session.query(StrategyServerModel.pid).one()[0]
+        except orm_exc.NoResultFound:
+            self.logger.warn('strategy server未找到运行记录')
+        else:
+            for proc in psutil.process_iter():
+                if proc.pid == pid:
+                    proc.kill()
+                    break  
 
         # 更新所有策略状态
         for stats in session.query(StrategyStatus).all():
