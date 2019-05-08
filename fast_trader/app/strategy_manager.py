@@ -48,6 +48,9 @@ class Manager:
         self._strategies = {}
 
         self._heartbeat_thread = threading.Thread(target=self.send_heartbeat)
+
+        self.logger = logging.getLogger('strategy_manager')
+        self.logger.addHandler(SqlLogHandler())
         
     def _load_strategy_settings(self):
         if settings['use_rest_api'] is True:
@@ -182,7 +185,7 @@ class Manager:
                 return {'ret_code': -1, 'err_msg': 'token错误'}
 
             ret = getattr(strategy, request['api_name'])(**request['kw'])
-            return {'ret_code': 0, 'data': None}
+            return {'ret_code': 0, 'data': ret}
 
         except Exception as e:
             return {'ret_code': -1, 'err_msg': repr(e)}
@@ -213,9 +216,8 @@ class Manager:
         return strategy
 
     def run(self):
-        logger = logging.getLogger('strategy_manager')
-        logger.addHandler(SqlLogHandler())
-        logger.info(f'Strategy manager started. Pid={os.getpid()}')
+
+        self.logger.info(f'Strategy manager started. Pid={os.getpid()}')
 
         self._heartbeat_thread.start()
 
@@ -226,10 +228,10 @@ class Manager:
             except zmq.Again:
                 pass
             else:
-                logger.info(f'received: {request}')
+                self.logger.info(f'received: {request}')
                 ret = self.handle_request(request)
                 self.send(ret)
-                logger.info(f'sent: {ret}')
+                self.logger.info(f'sent: {ret}')
 
 
 class StrategyLoader:
