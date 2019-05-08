@@ -146,7 +146,7 @@ class Manager:
 
             self.add_strategy(strategy)
 
-            return {'ret_code': 0, 'data': None}
+            return {'ret_code': 0, 'data': {'token': strategy.trader._token}}
 
         except Exception as e:
             return {'ret_code': -1, 'err_msg': repr(e)}
@@ -182,7 +182,7 @@ class Manager:
                 return {'ret_code': -1, 'err_msg': 'token错误'}
 
             ret = getattr(strategy, request['api_name'])(**request['kw'])
-            return {'ret_code': 0, 'data': ret}
+            return {'ret_code': 0, 'data': None}
 
         except Exception as e:
             return {'ret_code': -1, 'err_msg': repr(e)}
@@ -208,7 +208,6 @@ class Manager:
 
         strategy = self.factory.generate_strategy(
             StrategyCls,
-            trader_id=1,
             strategy_id=strategy_id
         )
         return strategy

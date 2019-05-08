@@ -89,7 +89,7 @@ class StrategyProxy:
         if rsp['ret_code'] == 0:
             self.token = rsp['data']['token']
             self._status['running'] = True
-        return rsp
+        return {'ret_code': 0, 'data': None}
 
     def stop_strategy(self):
         return self.send_request({
