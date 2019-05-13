@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
-
+import datetime
 from collections import OrderedDict
 
 from sqlalchemy import String, Column, Integer, Float, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
+
+STRATEGY_TIMEOUT_SECS = 5
 
 
 class BaseDocument:
@@ -20,13 +22,10 @@ class BaseDocument:
 
     @classmethod
     def from_msg(cls, msg, parse=True):
-        if parse:
-            payload = cls.parse(msg)
-        else:
-            payload = msg
         ret = cls()
-        for k, v in payload.items():
-            setattr(ret, k, v)
+        for k, v in msg.items():
+            if k in cls.__table__.columns:
+                setattr(ret, k, v)
         return ret
 
 
@@ -139,12 +138,22 @@ class StrategyStatus(Base, BaseDocument):
     # 最新心跳时间戳
     last_heartbeat = Column(Integer)
 
+    def is_running(self):
+        now = datetime.datetime.now().timestamp()
+        # NOTE: 如果与策略服务端时间相差较大，则无法给出正确判断
+        # TODO: only for test
+        if self.last_heartbeat is None:
+            return False
+        if now - self.last_heartbeat < STRATEGY_TIMEOUT_SECS and self.running:
+            return True
+        return False
+
 
 class StrategyServerModel(Base, BaseDocument):
     __tablename__ = 'strategy_server'
-    
+
     id = Column(Integer, primary_key=True)
-    
+
     pid = Column(Integer)
     # 启动时间
     start_time = Column(String(30))

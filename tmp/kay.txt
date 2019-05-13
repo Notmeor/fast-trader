@@ -1,4 +1,4 @@
-token=8710c8f8-c956-4e73-a69a-00d0a0349df8
+token=951551f9-3ea3-448b-8a39-42849b6fdca8
 name=sh-test
 mac=02:15:51:37:6C:14
 harddisk=            W62H0HQL

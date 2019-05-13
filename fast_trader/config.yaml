@@ -53,18 +53,14 @@ rest_api:
 
 
 working_dir: ''
-app:
 
-  sqlalchemy_url: 'sqlite:///{fast_trader_home}/fast_trader.db'
-  strategy_host: '127.0.0.1'
-  strategy_port: 5600
-  # strategy_directory: '/Users/eisenheim/Documents/git/fast-trader/fast_trader/app'
-  strategy_directory: '{fast_trader_home}/strategies'
+sqlalchemy_url: 'sqlite:///{fast_trader_home}/fast_trader.db'
+sqlite_ledger: '{fast_trader_home}/ledger.db'
+sqlite_market_quote: '{fast_trader_home}/market_quote.db'
 
-
-#quote_feed_store:
-#  disk_store_folder: ''
-#  compress: False
+strategy_mananger_host: '127.0.0.1'
+strategy_mananger_port: 5600
+strategy_directory: '{fast_trader_home}/strategies'
 
 
 # 账号

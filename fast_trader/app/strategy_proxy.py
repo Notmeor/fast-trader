@@ -20,8 +20,8 @@ class StrategyProxy:
         self._sock.setsockopt(zmq.SNDTIMEO, 1000 * timeout)
         self._sock.setsockopt(zmq.RCVTIMEO, 1000 * timeout)
 
-        host = settings['app']['strategy_host']
-        port = settings['app']['strategy_port']
+        host = settings['strategy_manager_host']
+        port = settings['strategy_manager_port']
         url = f"tcp://{host}:{port}"
         self._sock.connect(url)
 
@@ -89,15 +89,14 @@ class StrategyProxy:
         if rsp['ret_code'] == 0:
             self.token = rsp['data']['token']
             self._status['running'] = True
-        return rsp
+        return {'ret_code': 0, 'data': None}
 
     def stop_strategy(self):
         return self.send_request({
             'strategy_id': self.strategy_id,
             'api_name': 'stop_strategy',
             'kw': {},
-        })            
-    
+        })
 
     def buy(self, code, price, quantity):
         return self.send_request({
@@ -155,11 +154,11 @@ class StrategyProxy:
             'kw': {},
         })
 
-    
+
 def get_strategy_list():
     loader = StrategyLoader()
     strategies = loader.load()
-    
+
     ret = []
     session = Session()
     for s in strategies:
@@ -172,7 +171,7 @@ def get_strategy_list():
             ret.append({
                 'strategy_name': ea.strategy_name,
                 'strategy_id': ea.strategy_id,
-                'running': ea.running,
+                'running': ea.is_running(),
                 'start_time': ea.start_time or ''
             })
         else:
@@ -182,7 +181,7 @@ def get_strategy_list():
                 'running': False,
                 'start_time': ''})
     return ret
-            
+
 
 
 if __name__ == '__main__':

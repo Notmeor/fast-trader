@@ -13,7 +13,7 @@ import zmq
 
 from fast_trader.utils import timeit
 from fast_trader.dtp_quote import settings
-from fast_trader.sqlite import SqliteKVStore
+from fast_trader.sqlite import SqliteStore, SqliteKVStore
 
 
 class MemoryStore:
@@ -88,7 +88,7 @@ class DiskStore(MemoryStore):
             rec = self._pstore.read(last_ts)
             for k, v in rec.items():
                 self._snapshot[k] = v[-1]
-    
+
     def _update_snapshot(self, key, value):
         self._snapshot[key] = value
 
@@ -135,6 +135,79 @@ class DiskStore(MemoryStore):
             self._last_time = now
 
 
+class LastShot:
+
+    def __init__(self):
+        self._included_fields = [
+            'date', 'code', 'last_price',
+            'high_limit', 'low_limit',
+        ]
+
+        class Tick:
+            code = ''
+            last_price = -1.
+            high_limit = -1.
+            low_limit = -1.
+            date = 19700101
+
+        self.data = collections.defaultdict(Tick)
+        self._inserted = collections.defaultdict(lambda: False)
+
+        uri = settings['sqlite_market_quote']
+        self._store = SqliteStore(
+            db_name=uri,
+            table_name='stock_market_price',
+            fields=self._included_fields
+        )
+
+    def register_datasource(self, ds):
+        self.datasource = ds
+        ds.add_listener(self)
+
+    def load(self, query=None):
+        if query is None:
+            query = {}
+        return self._store.read(query)
+
+    def put(self, msg):
+        snapshot = msg['content']
+        self.on_snapshot(snapshot)
+
+    def on_snapshot(self, snapshot):
+        price = snapshot.nMatch
+        if price > 0:
+            code = snapshot.szWindCode
+            if code not in self.data:
+                tick = self.data[code]
+                tick.date = snapshot.nActionDay
+                tick.code = code
+                # tick.last_price = price
+                tick.high_limit = snapshot.nHighLimited
+                tick.low_limit = snapshot.nLowLimited
+            else:
+                tick = self.data[code]
+
+            if tick.last_price != price:
+                tick.last_price = price
+
+                should_update = True
+                should_insert = not self._inserted[code]
+
+                if should_insert:
+                    existing_records = self._store.read(
+                        {'code': code, 'date': tick.date})
+                    if not existing_records:
+                        self._store.write(tick.__dict__)
+                        should_update = False
+                    self._inserted[code] = True
+
+                if should_update:
+                    query = {'date': tick.date,
+                             'code': tick.code}
+                    doc = {'last_price': tick.last_price}
+                    self._store.update(query, doc)
+
+
 class Listener:
 
     def __init__(self, store):
@@ -163,7 +236,7 @@ class FeedStore:
             历史数据存储类型
                 'memory': store in meory
                 'disk': store in disk
-        
+
         writable: bool
             store读写模式，仅对`disk_store`有效
                 False: read only
@@ -182,7 +255,8 @@ class FeedStore:
             uri = os.path.expanduser(os.path.join(
                 settings['quote_feed_store']['disk_store_folder'],
                 f'{self.name}.{store_engine}'))
-            self._store = DiskStore(uri, engine=store_engine, writable=writable)
+            self._store = DiskStore(uri, engine=store_engine,
+                                    writable=writable)
         elif store_type == 'ssdb':
             raise NotImplementedError
 
@@ -197,7 +271,7 @@ class FeedStore:
     def subscribe(self, codes):
         codes_ = [c.split('.', 1)[0] for c in codes]
         self.datasource.subscribe(codes_)
-    
+
     def subscribe_all(self):
         self.datasource.subscribe_all()
 
@@ -216,7 +290,7 @@ class FeedStore:
     def get_all_codes(self):
         # if self.datasource.subscribed_all:
         #     return self._store.list_keys()
-        # codes = [self.as_wind_code(c) 
+        # codes = [self.as_wind_code(c)
         #          for c in self.datasource.subscribed_codes]
         # return codes
         return self._store.list_keys()
@@ -312,7 +386,7 @@ class FeedStore:
 
 class FeedPortal:
     """
-    行情数据聚合接口 
+    行情数据聚合接口
     """
 
     def __init__(self):
@@ -342,7 +416,7 @@ class _SaveQuote:
             'code': 'szWindCode',
             'date': 'nActionDay',
         }
-    
+
     def set_field_mapping(self, mapping):
         self._field_mapping.update(mapping)
 
@@ -368,11 +442,11 @@ class QuoteCollector:
         self._working_thread = None
 
         self._consumer = None
-    
+
     @property
     def store(self):
         return self._store
-    
+
     def add_datasource(self, ds):
         self._datasources.append(ds)
         ds.as_raw_message = False
@@ -384,10 +458,10 @@ class QuoteCollector:
                 'date': 'actionDay'
             })
         ds.add_listener(handler)
-    
+
     def is_running(self):
         return self._working_thread.is_alive()
-    
+
     def _receive(self):
         while True:
             try:
@@ -409,7 +483,7 @@ class QuoteCollector:
             self.__ds_sock_mapping[ds._socket] = ds
 
             ds._consumer.start()
-        
+
         self._working_thread = threading.Thread(target=self._receive)
         self._working_thread.start()
 

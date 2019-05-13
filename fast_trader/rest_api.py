@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import sys
+import time
 import functools
 import getpass
 import json
@@ -25,23 +26,23 @@ logger = logging.getLogger('rest_api')
 
 
 class RestSettings:
-    
+
     def __init__(self):
 
         self._user_meta = user_meta
         self._default_headers = default_headers
         self._default_query_headers = default_query_headers
-        
+
         self.settings_loaded = False
         self.logger = logging.getLogger('settings')
-    
+
     def reload(self):
         # load kay file
         kay_file = settings['rest_api']['kay_file'].format(user=os_user)
         self._user_meta.update(self._read_kay(kay_file))
         self._user_meta['harddisk'] = self._user_meta['harddisk'].strip()
         self._user_meta['ip'] = get_local_ip()
-        
+
         # construct default headers
         self._default_headers.update({
             'Content-Type': 'application/json; charset=utf8',
@@ -62,20 +63,19 @@ class RestSettings:
             self.logger.error('读取账号失败', exc_info=True)
         else:
             self.settings_loaded = True
-            
-        
+
     @property
     def user_meta(self):
         return self._user_meta
-    
+
     @property
     def default_headers(self):
         return self._default_headers
-    
+
     @property
     def default_query_headers(self):
         return self._default_query_headers
-        
+
     def _read_kay(self, path):
         with open(path) as f:
             content = f.read()
@@ -90,22 +90,37 @@ class Order(AnnotationCheckMixin):
     price: str
     quantity: int
     side: int
-    
+
     def to_dict(self):
         self._check_fields()
         return self.__dict__
 
 
+def retry_on_proxy_error(func):
+    @functools.wraps(func)
+    def decorator(*args, **kw):
+        try:
+            return func(*args, **kw)
+        except requests.exceptions.ProxyError:
+            logger.error(f'Failed: {[args, kw]}', exc_info=True)
+            time.sleep(1)
+            return func(*args, **kw)
+    return decorator
+
+
+@retry_on_proxy_error
 def request(url, headers, body, method='post'):
     logger.info(f'{method.upper()} {urlsplit(url).path}: {body}')
     data = json.dumps(body)
     meth = getattr(session, method)
+
     r = meth(url, headers=headers, data=data, verify=False)
+
     if r.status_code not in [200, 201]:
         raise requests.HTTPError(f'{r.status_code}, {r.text}')
     if r.text:
         return json.loads(r.text)
-    # TODO: raise if None is returned?
+    # TODO: raise if `[null]` is returned?
     return r.text
 
 
@@ -115,7 +130,7 @@ def get_accounts():
     headers = default_query_headers
     body = {}
     return request(url, headers=headers, body=body, method='get')
-    
+
 
 def place_order(order):
     url = settings['rest_api']['order'].format(
@@ -161,7 +176,7 @@ def place_batch_order(orders):
 def cancel_batch_order(p):
     """
     批量撤单
-    
+
     p: dict
         {
             '0': [],
@@ -198,7 +213,7 @@ def query_positions():
 
 def query_fills():
     url = settings['rest_api']['query_fills'].format(
-        account_no = settings['account'])
+        account_no=settings['account'])
     headers = default_query_headers
     body = {}
     return request(url, headers=headers, body=body, method='get')
@@ -206,7 +221,7 @@ def query_fills():
 
 def query_orders():
     url = settings['rest_api']['query_orders'].format(
-        account_no = settings['account'])
+        account_no=settings['account'])
     headers = default_query_headers
     body = {}
     return request(url, headers=headers, body=body, method='get')
@@ -214,7 +229,7 @@ def query_orders():
 
 def query_open_orders():
     url = settings['rest_api']['query_open_orders'].format(
-        account_no = settings['account'])
+        account_no=settings['account'])
     headers = default_query_headers
     body = {}
     return request(url, headers=headers, body=body, method='get')
@@ -222,7 +237,7 @@ def query_open_orders():
 
 def make_pageable_query(method_name, page, size):
     url = settings['rest_api'][method_name].format(
-    account_no = settings['account'])
+        account_no=settings['account'])
     url = f'{url}?page={page}&size={size}'
     headers = default_query_headers
     body = {}
@@ -251,15 +266,15 @@ def handle_pagination(method_name, content_name, pagination, format_fn):
     size = pagination['size']
     offset = pagination['offset']
     page = int((offset + 1) / size)
-    
+
     result = make_pageable_query(method_name, page, size)
 
     content = format_fn(result)
-    
+
     mail = attrdict()
     mail['body'] = attrdict()
     mail['body'][content_name] = content
-    
+
     pag = attrdict()
     pag['offset'] = offset + len(content)
     pag['size'] = size
@@ -362,7 +377,7 @@ def restapi_cancel_order(trader, **kw):
     order_exchange_id = kw['order_exchange_id']
     cancel_order(exchange=exchange,
                  order_exchange_id=order_exchange_id)
-    
+
 
 def restapi_place_batch_order(trader, request_id, orders):
     order_objs = []
@@ -449,5 +464,5 @@ if __name__ == '__main__':
     order.price = '16'
     order.quantity = 300
     order.side = dtp_type.ORDER_SIDE_BUY
-    
-      
+
+

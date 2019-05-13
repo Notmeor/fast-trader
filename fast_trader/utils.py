@@ -132,6 +132,10 @@ def camel2snake(name):
     return all_cap_re.sub(r'\1_\2', s1).lower()
 
 
+def get_current_ts():
+    return int(datetime.datetime.now().timestamp())
+
+
 def timeit(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):

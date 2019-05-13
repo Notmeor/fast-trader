@@ -16,7 +16,7 @@ import sqlalchemy.orm.exc as orm_exc
 from fast_trader.settings import settings, Session, SqlLogHandler
 from fast_trader.strategy import Strategy, StrategyFactory
 from fast_trader.models import StrategyStatus, StrategyServerModel
-from fast_trader.utils import timeit
+from fast_trader.utils import timeit, get_current_ts
 from fast_trader.rest_api import user_meta
 
 
@@ -27,20 +27,16 @@ class StrategyNotFound(Exception):
     pass
 
 
-def get_current_ts():
-    return int(datetime.datetime.now().timestamp())
-
-
 class Manager:
 
     def __init__(self):
         self._sock = zmq.Context().socket(zmq.REP)
         # self._sock.setsockopt(zmq.RCVTIMEO, 2000)
-        host = settings['app']['strategy_host']
-        port = settings['app']['strategy_port']
+        host = settings['strategy_manager_host']
+        port = settings['strategy_manager_port']
         conn = f"tcp://{host}:{port}"
         self._sock.bind(conn)
-        
+
         self._update_server_status()
 
         self._load_strategy_settings()
@@ -48,14 +44,17 @@ class Manager:
         self._strategies = {}
 
         self._heartbeat_thread = threading.Thread(target=self.send_heartbeat)
-        
+
+        self.logger = logging.getLogger('strategy_manager')
+        self.logger.addHandler(SqlLogHandler())
+
     def _load_strategy_settings(self):
         if settings['use_rest_api'] is True:
             self._strategy_settings = user_meta.copy()
             self._strategy_settings.pop('token')
         else:
             self._strategy_settings = None
-    
+
     def _update_server_status(self):
         now = datetime.datetime.now()
         now_str = now.strftime(
@@ -95,17 +94,17 @@ class Manager:
         while True:
             time.sleep(1)
             ts = get_current_ts()
-            
+
             (session
                  .query(StrategyServerModel)
                  .filter_by(id=1)
                  .update({'last_heartbeat': ts}))
-                            
-            for _id in self._strategies:
-                (session
-                 .query(StrategyStatus)
-                 .filter_by(strategy_id=_id)
-                 .update({'last_heartbeat': ts}))
+
+#            for _id in self._strategies:
+#                (session
+#                 .query(StrategyStatus)
+#                 .filter_by(strategy_id=_id)
+#                 .update({'last_heartbeat': ts}))
             session.commit()
 
     @property
@@ -146,7 +145,7 @@ class Manager:
 
             self.add_strategy(strategy)
 
-            return {'ret_code': 0, 'data': None}
+            return {'ret_code': 0, 'data': {'token': strategy.trader._token}}
 
         except Exception as e:
             return {'ret_code': -1, 'err_msg': repr(e)}
@@ -156,7 +155,7 @@ class Manager:
             strategy = self.get_strategy(strategy_id)
             strategy.remove_self()
             self._strategies.pop(strategy_id)
-            
+
             session = Session()
             (session
              .query(StrategyStatus)
@@ -168,7 +167,7 @@ class Manager:
             return {'ret_code': 0, 'data': None}
         except Exception as e:
             return {'ret_code': -1, 'err_msg': repr(e)}
-    
+
     def remove_strategy(self, strategy_id):
         # TODO: 删除策略前须保持策略无任何持仓
         # 并释放掉所有分配给该策略的资源
@@ -208,15 +207,13 @@ class Manager:
 
         strategy = self.factory.generate_strategy(
             StrategyCls,
-            trader_id=1,
             strategy_id=strategy_id
         )
         return strategy
 
     def run(self):
-        logger = logging.getLogger('strategy_manager')
-        logger.addHandler(SqlLogHandler())
-        logger.info(f'Strategy manager started. Pid={os.getpid()}')
+
+        self.logger.info(f'Strategy manager started. Pid={os.getpid()}')
 
         self._heartbeat_thread.start()
 
@@ -227,10 +224,10 @@ class Manager:
             except zmq.Again:
                 pass
             else:
-                logger.info(f'received: {request}')
+                self.logger.info(f'received: {request}')
                 ret = self.handle_request(request)
                 self.send(ret)
-                logger.info(f'sent: {ret}')
+                self.logger.info(f'sent: {ret}')
 
 
 class StrategyLoader:
@@ -238,7 +235,7 @@ class StrategyLoader:
     def __init__(self):
         self.strategy_suffix = '.py'
         self.strategy_dir = \
-            settings['app']['strategy_directory']
+            settings['strategy_directory']
 
     def load(self):
         strategy_classes = []
@@ -266,21 +263,21 @@ class StrategyLoader:
 
 def main():
     manager = Manager()
-    manager.run()   
+    manager.run()
 
 
 class StrategyServer:
-    
+
     def __init__(self):
         self.server_id = 1
         self.proc = None
         self.logger = logging.getLogger('strategy_server')
-    
+
     def start(self):
         if self.is_running():
             self.logger.warning('strategy server正在运行中, 无需重复启动')
             return
-            
+
         self.proc = subprocess.Popen(
             ['python', __file__],
             shell=False,
@@ -293,11 +290,15 @@ class StrategyServer:
 
     def stop(self):
         session = Session()
-        pid = session.query(StrategyServerModel.pid).one()[0]
-        for proc in psutil.process_iter():
-            if proc.pid == pid:
-                proc.kill()
-                break  
+        try:
+            pid = session.query(StrategyServerModel.pid).one()[0]
+        except orm_exc.NoResultFound:
+            self.logger.warn('strategy server未找到运行记录')
+        else:
+            for proc in psutil.process_iter():
+                if proc.pid == pid:
+                    proc.kill()
+                    break
 
         # 更新所有策略状态
         for stats in session.query(StrategyStatus).all():
@@ -306,7 +307,7 @@ class StrategyServer:
         session.close()
 
         self.logger.info('strategy server已停止')
-    
+
     def is_running(self):
         session = Session()
         res = (session

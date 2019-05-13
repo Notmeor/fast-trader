@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import time
+import datetime
 import enum
 import collections
 import contextlib
@@ -12,35 +13,12 @@ from sqlalchemy import String, Column, Integer, Float, Boolean, Enum
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-
+from fast_trader.dtp import type_pb2 as dtp_type
 from fast_trader.sqlite import SqliteStore
-from fast_trader.utils import timeit
+from fast_trader.settings import settings
+from fast_trader.utils import timeit, as_wind_code
 
 Base = declarative_base()
-
-
-#@enum.unique
-#class LedgerCategory(enum.Enum):
-#    # 证券持仓价值
-#    SECURITY = 'security'
-#    # 可用现金价值
-#    CASH = 'cash'
-#    # 冻结现金价值
-#    FREEZE = 'freeze'
-#
-#
-#@enum.unique
-#class LedgerSubject(enum.Enum):
-#    # 交易
-#    TRANSACTION = 'transaction'
-#    # 费用
-#    COSTS = 'costs'
-#    # 估值
-#    EVALUATION = 'evaluation'
-#    # 权益事件(分红送转)
-#    DIVIDEND = 'dividend'
-#    # 配股
-#    RIGHTS_OFFERING = 'rights_offering'
 
 
 class LedgerCategory:
@@ -53,6 +31,8 @@ class LedgerCategory:
 
 
 class LedgerSubject:
+    # 资本变化（出入金）
+    CAPITAL = 'capital'
     # 交易
     TRANSACTION = 'transaction'
     # 费用
@@ -65,7 +45,14 @@ class LedgerSubject:
     RIGHTS_OFFERING = 'rights_offering'
 
 
-class StockLedgerRecord(Base):
+class DateAttrMixin:
+
+    @property
+    def date(self):
+        return self.localtime[:10]
+
+
+class StockLedgerRecord(Base, DateAttrMixin):
 
     __tablename__ = 'stock_ledger_record'
 
@@ -87,58 +74,13 @@ class StockLedgerRecord(Base):
     # 备注
     comment = Column(String(50))
 
-
-class OrderSide(enum.IntEnum):
-    BUY = 1
-    SELL = 2
-    SELLSHORT = 3
-    COVER = 4
-
-
-@enum.unique
-class AccountEventType(enum.Enum):
-
-    # 证券交易
-    SECURITY_TRANSACTION = 'security transaction'
-    # 费用
-    COSTS = 'costs'
-    # 转股/送股
-    STOCK_DIVIDEND = 'stock dividend'
-    # 现金分红
-    CASH_DIVIDEND = 'cash dividend'
-    # 配股
-    RIGHTS_OFFERING = 'rights offering'
-
-
-class EventHeader:
-    event_type: str
-
-class EventBody:
-    pass
-
-class AccountEvent:
-    header: EventHeader
-    body: EventBody
-
-    def __init__(self):
-        self.header = EventHeader()
-        self.body = EventBody()
-
-
-engine = None
-Session = None
-
-
-def config_sqlalchemy():
-    global engine
-    global Session
-    uri = 'sqlite:////Users/eisenheim/Documents/git/fast-trader/tmp/ledger.db'
-    engine = create_engine(uri)
-    Session = sessionmaker(bind=engine)
-    Base.metadata.create_all(bind=engine)
-
-
-config_sqlalchemy()
+    @classmethod
+    def from_msg(cls, msg):
+        ret = cls()
+        for k, v in msg.items():
+            if k in cls.__table__.columns:
+                setattr(ret, k, v)
+        return ret
 
 
 class AccountView:
@@ -162,10 +104,10 @@ class AccountView:
         余额
         """
         return self.cash + self.freeze + self.security_value
-    
+
     def to_dict(self):
         return {k: getattr(self, k) for k in self.__slots__}
-    
+
     def __repr__(self):
         r = ''
         for field in list(self.__slots__) + ['balance']:
@@ -174,31 +116,48 @@ class AccountView:
         return r
 
 
-
 def ledger_record_to_dict(record):
     dct = record.__dict__
     dct.pop('_sa_instance_state')
     return dct
 
 
-class HoldingPosition:
-    __slots__ = ('code', 'quantity', 'price')
+class HoldingPosition(DateAttrMixin):
+    __slots__ = ('code', 'quantity', 'yd_quantity',
+                 'price', 'localtime')
 
     def __init__(self, **kw):
         self.code = ''
-        self.quantity = 0.
+        # 当前持仓数量
+        self.quantity = 0
+        # 可用昨日持仓数量
+        self.yd_quantity = 0
+        # 持仓价格
         self.price = 0.
+        # 最新更新时间
+        self.localtime = '1970-01-01T00:00:00.000000'
 
         for k, v in kw.items():
             setattr(self, k, v)
 
+    @property
+    def sellable_quantity(self):
+        today = datetime.date.today().strftime('%Y-%m-%d')
+        if today > self.date:
+            return self.quantity
+        return self.yd_quantity
+
+    def __repr__(self):
+        return '\n'.join((f'{k}: {getattr(self, k)}'
+                          for k in self.__slots__))
+
 
 class LedgerStore:
 
-    def __init__(self):
+    def __init__(self, name):
         self._store = SqliteStore(
-            db_name='test_ledger1.db',
-            table_name='stock_ledger',
+            db_name=settings['sqlite_ledger'],
+            table_name=name,
             fields=['subject', 'category', 'code', 'price',
                     'quantity', 'localtime', 'comment']
         )
@@ -216,39 +175,57 @@ class LedgerStore:
 
 class Accountant:
 
-    # TODO: persistence
     # TODO: memoize
 
-    def __init__(self, account):
-        self._account = account
-        self._records = []
+    def __init__(self, name):
+        self.name = name
 
         ddict = collections.defaultdict
         self._positions = ddict(HoldingPosition)
 
-        self._general_account_view = AccountView()
+        # self._general_account_view = AccountView()
         self._account_view_per_child = ddict(AccountView)
         # TODO: history records as namedtuple
         self._account_views_per_child = ddict(dict)
 
         self._unhandled = 0
-        
-        self._store = LedgerStore()
+
+        self._store = LedgerStore(name=name)
+
+        self._records = self._load_history()
 
     @contextlib.contextmanager
-    def get_view(self, record):
+    def _get_view(self, record):
         c, t = record.code, record.localtime
         view = self._account_view_per_child[c]
         yield view
         # take snapshot
         self._account_views_per_child[c][t] = copy.copy(view)
 
+    def _load_history(self):
+        """
+        加载历史流水记录
+        """
+        # TODO: allow loading from recent records
+        docs = self._store.load()
+        records = list(map(StockLedgerRecord.from_msg, docs))
+        for event in records:
+            self.handle_event(event)
+        return records
+
+    def save(self, record):
+        # TODO: save in background
+        # Do not save EVALUATION record
+        if record.subject == LedgerSubject.EVALUATION:
+            return
+        self._store.save(record)
 
     def put_event(self, event):
         if (not self._records) or event.localtime >=\
                 self._records[-1].localtime:
             self._records.append(event)
 
+            self.save(event)
             self.handle_event(event)
             self._unhandled += 1
         else:
@@ -263,7 +240,6 @@ class Accountant:
 
     def handle_event(self, event):
         # TODO: incremental calc
-
         if event.subject == LedgerSubject.TRANSACTION:
             self.on_security_transaction(event)
         elif event.subject == LedgerSubject.EVALUATION:
@@ -277,15 +253,8 @@ class Accountant:
             self.on_rights_offering(event)
         elif event.subject == LedgerSubject.COSTS:
             self.on_costs(event)
-
-        # self._cash_dict[event.localtime] = self._cash
-        # self._holding_dict[event.localtime] = self._holding
-        # self._costs_dict[event.localtime] = self._costs
-
-    def _handle_event(self):
-        # TODO: incremental calc
-        for event in self._records:
-            self.handle_event(event)
+        elif event.subject == LedgerSubject.CAPITAL:
+            self.on_capital_change(event)
 
     def get_cash_by_dataframe(self):
         records = list(map(lambda o: o.__dict__, self._records))
@@ -300,7 +269,7 @@ class Accountant:
             cash_ss.index = pd.to_datetime(cash_ss.index)
 
         return cash_ss
-    
+
     def get_holding_value_by_dataframe(self):
         records = list(map(lambda o: o.__dict__, self._records))
         df = pd.DataFrame(records)
@@ -322,25 +291,28 @@ class Accountant:
             holding_ss.index = pd.to_datetime(holding_ss.index)
 
         return holding_ss
-    
+
     def get_profit_by_dataframe(self):
         cash_ss = self.get_cash_by_dataframe()
         holding_ss = self.get_holding_value_by_dataframe()
-        profit = cash_ss + holding_ss
+        co_index = cash_ss.index.union(holding_ss.index)
+        
+        profit = cash_ss.reindex(co_index, method='ffill').fillna(0.)\
+            + holding_ss.reindex(co_index, method='ffill').fillna(0.)
         return profit
-    
+
     def get_account_view_by_code(self, code):
         return self._account_view_per_child[code]
-    
+
     def get_general_account_view(self):
-        gview = self._general_account_view
+        gview = AccountView()
         for view in self._account_view_per_child.values():
             gview.cash += view.cash
             gview.security_value += view.security_value
             gview.costs += view.costs
             gview.freeze += view.freeze
         return gview
-    
+
     def get_account_history_stats_by_code(self, code, as_dataframe=True):
 
         views = self._account_views_per_child[code]
@@ -348,8 +320,8 @@ class Accountant:
             docs = {k: v.to_dict() for k, v in views.items()}
             df = pd.DataFrame(docs).T
             return df
-        return views 
-    
+        return views
+
     def get_general_account_history_stats(self):
 
         dataframes = []
@@ -361,23 +333,21 @@ class Accountant:
                 common_index = stats.index
             else:
                 common_index = common_index.union(stats.index)
-        
-        _fill = lambda x: x.reindex(common_index, method='ffill').fillna(0.)
+
+        def _fill(x):
+            return x.reindex(common_index, method='ffill').fillna(0.)
+
         dataframes = list(map(_fill, dataframes))
 
         ret = sum(dataframes)
         return ret
-
-
-    def get_general_cash_records(self):
-        pass
 
     def on_evaluation(self, event):
         """
         Re-evalute account according to latest market price
 
         Quantity of evaluation record should always equal 0
-        so as not to fail the audit 
+        so as not to fail the audit
         """
         pos = self._positions[event.code]
         pre_price = pos.price
@@ -388,21 +358,31 @@ class Accountant:
 
         # calc evaluation increment
         increment = (cur_price - pre_price) * quantity
-        
-        with self.get_view(event) as view:
+
+        with self._get_view(event) as view:
             view.security_value += increment
+            # print(f'\r{event.code}\n: {view}', end='')
 
     def on_security_transaction(self, event):
 
-        with self.get_view(event) as view:
+        with self._get_view(event) as view:
 
             if event.category == LedgerCategory.CASH:
 
                 view.cash += event.quantity * event.price
 
-            if event.category == LedgerCategory.SECURITY:
+            elif event.category == LedgerCategory.SECURITY:
 
                 pos = self._positions[event.code]
+
+                # 更新剩余历史交易日持仓量
+                if event.date > pos.date:
+                    pos.yd_quantity = pos.quantity
+                    pos.localtime = event.localtime
+
+                if event.quantity < 0:
+                    pos.yd_quantity += event.quantity
+                    pos.localtime = event.localtime
 
                 # evaluation increment
                 eval_inc = (event.price - pos.price) * pos.quantity
@@ -414,18 +394,26 @@ class Accountant:
                 pos.price = event.price
                 pos.quantity += event.quantity
 
+            elif event.category == LedgerCategory.FREEZE:
+
+                view.freeze += event.quantity * event.price
+
+    def on_capital_change(self, event):
+        with self._get_view(event) as view:
+            view.cash += event.price * event.quantity
+
     def on_stock_dividend(self, event):
 
         value = event.quantity * event.price
 
-        with self.get_view(event) as view:
+        with self._get_view(event) as view:
             view.security_value += value
 
     def on_cash_dividend(self, event):
-        
+
         value = event.quantity * event.price
 
-        with self.get_view(event) as view:
+        with self._get_view(event) as view:
             view.cash += value
 
     def on_rights_offering(self, event):
@@ -435,8 +423,245 @@ class Accountant:
         # subtract from cash and add to costs
         value = event.quantity * event.price
 
-        with self.get_view(event) as view:
+        with self._get_view(event) as view:
             view.cash += value
             view.costs += -value
 
 
+class LedgerWriter:
+
+    def __init__(self, name):
+        self.name = name
+        self.accountant = Accountant(name)
+
+    @property
+    def localtime(self):
+        return datetime.datetime.now()
+
+    def write_order_record(self, order):
+        """
+        委托相关流水
+
+        资金在freeze于cash之间的划转记录
+        """
+        code = as_wind_code(order.code)
+        localtime = self.localtime.strftime('%Y-%m-%dT%H:%M:%S.%f')
+
+        # 委托本地提交后，冻结资金
+        if order.status == dtp_type.ORDER_STATUS_SUBMITTED:
+            # 冻结开仓委托占用资金
+            if order.order_side == dtp_type.ORDER_SIDE_BUY:
+                code = as_wind_code(order.code)
+                localtime = self.localtime.strftime('%Y-%m-%dT%H:%M:%S.%f')
+                frozen_value = float(order.price) * order.quantity
+
+                record = StockLedgerRecord()
+                record.subject = LedgerSubject.TRANSACTION
+                record.category = LedgerCategory.FREEZE
+                record.code = code
+                record.quantity = frozen_value
+                record.price = 1.
+                record.localtime = localtime
+                self.accountant.put_event(record)
+
+                record = StockLedgerRecord()
+                record.subject = LedgerSubject.TRANSACTION
+                record.category = LedgerCategory.CASH
+                record.code = code
+                record.quantity = -frozen_value
+                record.price = 1.
+                record.localtime = localtime
+                self.accountant.put_event(record)
+
+        # 委托本地提交后，仅冻结了买入委托占用资金
+        # 委托确认后，还须冻结交易费用
+        # FIXME: 可能不会有`PLACED`状态推送？
+
+        # 缺少已申报回报，则无法预先冻结交易费用，使得成交后冻结资金成为负值，
+        # 而可用资金也会等额增多。可在盘后增加一笔划转记录，
+        # 将多出的CASH转出，冲销掉FREEZE的负值
+        # 或者将（负冻结 + CASH）作为实际可用资金
+        elif order.status == dtp_type.ORDER_STATUS_PLACED:
+            if order.order_side == dtp_type.ORDER_SIDE_BUY:
+                order_freeze = order.price * order.quantity
+            else:
+                order_freeze = 0.
+            cost_freeze = order.freeze_amount - order_freeze
+
+            record = StockLedgerRecord()
+            record.subject = LedgerSubject.TRANSACTION
+            record.category = LedgerCategory.FREEZE
+            record.code = code
+            record.quantity = cost_freeze
+            record.price = 1.
+            record.localtime = localtime
+            self.accountant.put_event(record)
+
+            record = StockLedgerRecord()
+            record.subject = LedgerSubject.TRANSACTION
+            record.category = LedgerCategory.CASH
+            record.code = code
+            record.quantity = -cost_freeze
+            record.price = 1.
+            record.localtime = localtime
+            self.accountant.put_event(record)
+
+        # 委托撤销后（包含部成部撤），释放资金
+        elif order.status == dtp_type.ORDER_STATUS_CANCELLED:
+            # 开仓撤单：委托冻结 + 费用冻结 -> 可用资金
+            # 平仓撤单：费用冻结 -> 可用资金
+
+            record = StockLedgerRecord()
+            record.subject = LedgerSubject.TRANSACTION
+            record.category = LedgerCategory.FREEZE
+            record.code = code
+            record.quantity = order.freeze_amount
+            record.price = 1.
+            record.localtime = localtime
+            self.accountant.put_event(record)
+
+            record = StockLedgerRecord()
+            record.subject = LedgerSubject.TRANSACTION
+            record.category = LedgerCategory.CASH
+            record.code = code
+            record.quantity = -order.freeze_amount
+            record.price = 1.
+            record.localtime = localtime
+            self.accountant.put_event(record)
+
+        # 废单，释放资金
+        elif order.status == dtp_type.ORDER_STATUS_FAILED:
+            # 开仓废单：委托冻结 -> 可用资金
+            # 平仓废单：无
+            # FIXME: 交易所拒单？是否已经冻结了交易费用？
+            if order.order_side == dtp_type.ORDER_SIDE_BUY:
+
+                unfreeze = order.price * order.quantity
+
+                record = StockLedgerRecord()
+                record.subject = LedgerSubject.TRANSACTION
+                record.category = LedgerCategory.FREEZE
+                record.code = code
+                record.quantity = -unfreeze
+                record.price = 1.
+                record.localtime = localtime
+                self.accountant.put_event(record)
+
+                record = StockLedgerRecord()
+                record.subject = LedgerSubject.TRANSACTION
+                record.category = LedgerCategory.CASH
+                record.code = code
+                record.quantity = unfreeze
+                record.price = 1.
+                record.localtime = localtime
+                self.accountant.put_event(record)
+
+    def write_trade_record(self, trade):
+        """
+        成交相关流水
+
+        资金在cash于security_value之间的划转，以及交易费用记录
+        """
+        code = as_wind_code(trade.code)
+        localtime = self.localtime.strftime('%Y-%m-%dT%H:%M:%S.%f')
+        _sign = -1 if trade.order_side == dtp_type.ORDER_SIDE_BUY else 1
+        clear_amount = abs(trade.clear_amount)
+        cur_cost = abs(clear_amount - trade.fill_amount)
+
+        # 冻结资金解冻 -> 持仓市值 + 可用资金 + 交易费用
+        # 买入委托解冻的资金包括委托占用和费用冻结
+        # 卖出委托解冻的只有费用冻结
+        if trade.order_side == dtp_type.ORDER_SIDE_BUY:
+            unfreeze = trade.price * trade.fill_quantity + cur_cost
+        else:
+            unfreeze = cur_cost
+
+        record = StockLedgerRecord()
+        record.subject = LedgerSubject.TRANSACTION
+        record.category = LedgerCategory.FREEZE
+        record.code = code
+        record.quantity = -unfreeze
+        record.price = 1.
+        record.localtime = localtime
+        self.accountant.put_event(record)
+
+        # 持仓金额变动
+        record = StockLedgerRecord()
+        record.subject = LedgerSubject.TRANSACTION
+        record.category = LedgerCategory.SECURITY
+        record.code = code
+        record.quantity = trade.fill_quantity * -_sign
+        record.price = trade.fill_price
+        record.localtime = localtime
+        self.accountant.put_event(record)
+
+        # 交易费用变动
+        record = StockLedgerRecord()
+        record.subject = LedgerSubject.COSTS
+        record.category = LedgerCategory.CASH
+        record.code = code
+        record.quantity = -cur_cost
+        record.price = 1.
+        record.localtime = localtime
+        self.accountant.put_event(record)
+
+        # 可用资金变动 <- 解冻资金 - 持仓市值增值 - 交易费用
+        # 成交价可能会优于委托价
+        overpayment = abs(trade.price - trade.fill_price) * trade.fill_quantity
+        record = StockLedgerRecord()
+        record.subject = LedgerSubject.TRANSACTION
+        record.category = LedgerCategory.CASH
+        record.code = code
+        record.quantity = overpayment + cur_cost
+        record.price = 1.
+        record.localtime = localtime
+        record.comment = 'overpayment&cost'
+        self.accountant.put_event(record)
+
+    def write_non_trading_activity_record(self, event):
+        """
+        非交易行为流水
+
+        主要包括个股的分红送转、配股等记录
+        """
+        raise NotImplementedError
+
+    def write_market_record(self, message):
+        """
+        估值行情记录
+        """
+        data = message['content']
+        code = data.szWindCode
+
+        if message.api_id == 'trade_feed':
+            price = data.nPirce
+        elif message.api_id == 'tick_feed':
+            price = data.nMatch
+        else:
+            raise RuntimeError(f'Invalid quote data: {message}')
+
+        localtime = self.localtime.strftime('%Y-%m-%dT%H:%M:%S.%f')
+
+        record = StockLedgerRecord()
+        record.subject = LedgerSubject.EVALUATION
+        record.category = LedgerCategory.SECURITY
+        record.code = code
+        record.quantity = 0.
+        record.price = price
+        record.localtime = localtime
+        self.accountant.put_event(record)
+
+    def write_capital_change_record(self, value):
+        """
+        账户资本金(出入金)记录
+        """
+        localtime = self.localtime.strftime('%Y-%m-%dT%H:%M:%S.%f')
+
+        record = StockLedgerRecord()
+        record.subject = LedgerSubject.CAPITAL
+        record.category = LedgerCategory.CASH
+        record.code = 'account'
+        record.quantity = value
+        record.price = 1.
+        record.localtime = localtime
+        self.accountant.put_event(record)

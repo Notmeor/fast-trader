@@ -10,12 +10,11 @@ from fast_trader.strategy import Strategy, StrategyFactory, to_timeint
 from fast_trader.utils import timeit, message2dict, int2datetime, attrdict
 
 
-
 class DemoStrategy(Strategy):
     """
     Demo
     """
-    
+
     strategy_id = 8
     strategy_name = 'Demo strategy'
 
@@ -76,13 +75,12 @@ class DemoStrategy(Strategy):
 
 if __name__ == '__main__':
 
-
     factory = StrategyFactory()
     strategy = factory.generate_strategy(
         DemoStrategy,
         strategy_id=DemoStrategy.strategy_id
     )
-    
+
     # 订阅行情
     tf = TradeFeed()
     tf.subscribe(['600056'])

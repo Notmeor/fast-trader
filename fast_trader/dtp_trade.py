@@ -40,14 +40,14 @@ class OrderResponse:
     """
     报单回报
     """
-    
+
     @staticmethod
     def from_msg(msg):
         ret = msg  # .copy()
         ret['freeze_amount'] = str2float(msg.freeze_amount)
         ret['price'] = str2float(msg.price)
         return ret
-        
+
 
 class TradeResponse:
     """
@@ -56,7 +56,7 @@ class TradeResponse:
 
     @staticmethod
     def from_msg(msg):
-        ret = msg  # .copy()
+        ret = msg
         ret['fill_price'] = str2float(msg.fill_price)
         ret['fill_amount'] = str2float(msg.fill_amount)
         ret['clear_amount'] = str2float(msg.clear_amount)
@@ -72,9 +72,50 @@ class CancellationResponse:
 
     @staticmethod
     def from_msg(msg):
-        ret = msg  # .copy()
+        ret = msg
         ret['freeze_amount'] = str2float(msg.freeze_amount)
         return ret
+
+
+class QueryOrderResponse:
+    """
+    报单查询相应
+    """
+
+    @staticmethod
+    def from_msg(msg):
+        ret = msg
+        ret['average_fill_price'] = str2float(msg.average_fill_price)
+        ret['clear_amount'] = str2float(msg.clear_amount)
+        ret['freeze_amount'] = str2float(msg.freeze_amount)
+        ret['price'] = str2float(msg.price)
+        ret['total_fill_amount'] = str2float(msg.total_fill_amount)
+        return ret
+
+
+class QueryTradeResponse:
+    """
+    成交查询相应
+    """
+
+    @staticmethod
+    def from_msg(msg):
+        ret = msg  # .copy()
+        ret['fill_price'] = str2float(msg.fill_price)
+        ret['fill_amount'] = str2float(msg.fill_amount)
+        return ret
+
+
+class QueryPositionResponse:
+    """
+    持仓查询相应
+    """
+
+    @staticmethod
+    def from_msg(msg):
+        msg['cost'] = str2float(msg.cost)
+        msg['market_value'] = str2float(msg.market_value)
+        return msg
 
 
 class Dispatcher:
@@ -109,6 +150,10 @@ class Dispatcher:
         self._req_processor.start()
         self._rsp_processor.start()
 
+    def join(self):
+        self._req_processor.join()
+        self._rsp_processor.join()
+
     def process_req(self):
 
         while self._running:
@@ -140,14 +185,14 @@ class Dispatcher:
             raise KeyError(
                 'handler {} already exists!'.format(handler_id))
         self._handlers[handler_id] = handler
-    
+
     def suspend(self):
         """
         When suspended, ignore all incoming/outgoing messages
         """
         self._service_suspended = True
         self.logger.warning('Mail service is currently suspended.')
-    
+
     def resume(self):
         self._service_suspended = False
 
@@ -475,7 +520,7 @@ class Trader:
         self._strategy_dict = OrderedDict()
 
         self.__api_bound = False
-        
+
         # order_exchange_id -> order_original_id
         self._order_id_mapping = {}
 
@@ -510,7 +555,7 @@ class Trader:
                 api_name = dtp_api_id.REQ_API_NAMES[api_id]
                 handler = getattr(broker, api_name)
                 dispatcher.bind('{}_req'.format(api_id), handler)
-            
+
             self.__api_bound = True
 
     def _set_number(self, number, max_number=None):
@@ -564,7 +609,7 @@ class Trader:
         self._strategies.append(strategy)
         self._strategy_dict[strategy.strategy_id] = strategy
         self._generate_initial_id(strategy)
-    
+
     def remove_strategy(self, strategy):
         # TODO: keep one only
         self._strategies.remove(strategy)
@@ -661,8 +706,8 @@ class Trader:
     @might_use_rest_api(might=settings['use_rest_api'],
                         api_name='restapi_place_order')
     def place_order(self, request_id, order_original_id, exchange,
-                   code, price, quantity, order_side,
-                   order_type=dtp_type.ORDER_TYPE_LIMIT):
+                    code, price, quantity, order_side,
+                    order_type=dtp_type.ORDER_TYPE_LIMIT):
         """
         报单委托
         """
@@ -792,38 +837,6 @@ class Trader:
             **kw
         )
         return self.dispatcher.put(mail)
-
-
-class PositionDetail:
-    """
-    交易标的持仓状态
-    """
-
-    # 代码
-    code = ''
-    # 交易所
-    exchange = ''
-    # 当前持仓
-    position = 0
-    # 昨日最终持仓
-    yd_last_position = 0
-    # 昨日持仓均价
-    yd_avg_price = 0
-
-    def __init__(self):
-        pass
-
-
-class AccountDetail:
-    """
-    账户详情
-    """
-    # 账号
-    account_no = ''
-    # 当前权益
-    current_capital = 0.
-    # 现金余额
-    balance = 0.
 
 
 if __name__ == '__main__':

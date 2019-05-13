@@ -46,7 +46,7 @@ class MarketFeed(object):
         _type = data.Type.Name(data.type).lower()
 
         return getattr(data, _type)
-    
+
     def _on_message(self, msg):
         data = self._parse_data(msg)
         if not isinstance(data, str):
@@ -54,12 +54,12 @@ class MarketFeed(object):
 
     def sub(self, topic):
         self._socket.subscribe(topic)
-    
+
     def _retrieve(self):
         while True:
             msg = self._queue.get()
             self._on_message(msg)
-    
+
     def _recv(self):
         msg = self._socket.recv()
         self._queue.put(msg)
@@ -233,7 +233,7 @@ class OrderFeed(QuoteFeed):
     逐笔报单
     """
     name = 'order_feed'
-    
+
     def format(self, data):
         ret = message2dict(data)
         price_fields = ['nPrice']

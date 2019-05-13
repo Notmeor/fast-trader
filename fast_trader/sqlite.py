@@ -7,6 +7,7 @@ import contextlib
 import warnings
 import collections
 import logging
+import json
 
 import math
 
@@ -49,7 +50,7 @@ class SqliteStore:
 
         if conn_id not in self._conns:
             self._conns[conn_id] = conn = sqlite3.connect(
-                self.db_name + '.db')
+                self.db_name)
 
             def dict_factory(cursor, row):
                 d = {}
@@ -194,14 +195,17 @@ class SqliteStore:
 
     @staticmethod
     def _format_condition(doc):
-        if not doc:
-            return 'TRUE'
-        s = str(doc)
-        formatted = s[2:-1].replace(
-            "': ", ' = ').replace(
-            ", '", ',').replace(
-            "= {'$like =", 'like').replace(
-            '}', '')
+        doc_ = doc.copy()
+
+        # support '$like' syntax, eg: {'code': {'$like': '600%'}}
+        like_exprs = []
+        for k, v in doc_.copy().items():
+            if isinstance(v, dict) and '$like' in v:
+                like_exprs.append(f'{k} like {json.dumps(v["$like"])}')
+                doc_.pop(k)
+
+        equal_exprs = [f'{i[0]}={json.dumps(i[1])}' for i in doc_.items()]
+        formatted = ' and '.join(like_exprs + equal_exprs)
         return formatted
 
     def update(self, query, document):
