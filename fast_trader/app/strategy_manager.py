@@ -271,6 +271,7 @@ class StrategyServer:
     def __init__(self):
         self.server_id = 1
         self.proc = None
+        self._pid = None
         self.logger = logging.getLogger('strategy_server')
 
     def start(self):
@@ -308,14 +309,22 @@ class StrategyServer:
 
         self.logger.info('strategy server已停止')
 
+    def restart(self):
+        self.stop()
+        time.sleep(2)
+        self.start()
+        time.sleep(2)
+
     def is_running(self):
         session = Session()
-        res = (session
-            .query(StrategyServerModel.last_heartbeat)
+        res = (
+            session
+            .query(StrategyServerModel)
             .filter_by(id=self.server_id)
             .all())
         if res:
             last_ts = res[0].last_heartbeat
+            self._pid = res[0].pid
             current_ts = get_current_ts()
             if current_ts < last_ts + SERVER_TIMEOUT_SECS:
                 return True
@@ -325,4 +334,3 @@ class StrategyServer:
 if __name__ == '__main__':
     # Do not edit!
     main()
-

@@ -296,7 +296,7 @@ class Accountant:
         cash_ss = self.get_cash_by_dataframe()
         holding_ss = self.get_holding_value_by_dataframe()
         co_index = cash_ss.index.union(holding_ss.index)
-        
+
         profit = cash_ss.reindex(co_index, method='ffill').fillna(0.)\
             + holding_ss.reindex(co_index, method='ffill').fillna(0.)
         return profit
