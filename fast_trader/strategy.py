@@ -41,6 +41,14 @@ class Market:
 
     def remove_strategy(self, strategy):
         self._strategies.remove(strategy)
+    
+    @staticmethod
+    def has_subscribed(strategy, message):
+        ds_name = message['api_id']
+
+        for ds in strategy.subscribed_datasources:
+            if ds.name == ds_name:
+                raise NotImplementedError
 
     def on_quote_message(self, message):
         for ea in self._strategies:
@@ -256,6 +264,7 @@ class Strategy(StrategyWatchMixin):
 
     def stop(self):
         self.remove_self()
+        self.logger.info('策略已终止')
 
     def remove_self(self):
         self.trader.remove_strategy(self)
@@ -529,10 +538,16 @@ class Strategy(StrategyWatchMixin):
 
         dispatcher = self.dispatcher
 
-        dispatcher.bind('{}_rsp'.format(name),
-                        self.market.on_quote_message)
+        # FIXME: bind once only
+        try:
+            dispatcher.bind('{}_rsp'.format(name),
+                            self.market.on_quote_message)
 
-        datasource.add_listener(dispatcher)
+            datasource.add_listener(dispatcher)
+
+        except Exception as e:
+            print(e)
+            pass
 
         self.subscribed_datasources.append(datasource)
 

@@ -11,7 +11,7 @@ import json
 
 import math
 
-from fast_trader.serializer import serializer, compress, decompress
+from fast_trader.serializer import serializer
 
 LOG = logging.getLogger('fast_trader.feed_store.sqlite')
 
@@ -157,8 +157,12 @@ class SqliteStore:
             with self._conn:
                 ret = self._conn.execute(statement).fetchall()
             return ret
+        
+        # xx
+        return _read()
 
         try:
+            # FIXME: raise if unable to open database file
             return _read()
         except sqlite3.OperationalError as e:
             self.reset_connection(exc=e)

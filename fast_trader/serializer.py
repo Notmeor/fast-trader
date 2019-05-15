@@ -1,15 +1,6 @@
 
 import hashlib
 import pickle
-import lz4.block
-
-
-def compress(b):
-    return lz4.block.compress(b, mode='fast')
-
-
-def decompress(b):
-    return lz4.block.decompress(b)
 
 
 class Serializer:

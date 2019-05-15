@@ -11,7 +11,23 @@ from fast_trader.settings import settings, Session
 from fast_trader.models import StrategyStatus
 from fast_trader.app.strategy_manager import StrategyLoader, StrategyServer
 
-
+class _StatusStore:
+    
+    def __init__(self):
+        from fast_trader.sqlite import SqliteStore
+        fields = ['pid', 'account_no', 'token', 'strategy_id',
+                  'strategy_name', 'running', 'start_time',
+                  'last_heartbeat']
+        db_name = settings['sqlalchemy_url'].split(':///')[1]
+        table_name = 'strategy_status'
+        self.store = SqliteStore(db_name, table_name, fields)
+    
+    def load_status(self, strategy_id):
+        stats = self.store.read({'strategy_id': strategy_id})
+        if stats:
+            return stats[0]
+        return {}
+        
 class StrategyProxy:
 
     def __init__(self, strategy_id, timeout=3):
@@ -78,8 +94,8 @@ class StrategyProxy:
         ret: bool
             策略启动成功返回`True`, 否则返回`False`
         """
-        if self.is_running():
-            return {'ret_code': 0, 'data': '策略运行中，无需重复启动'}
+#        if self.is_running():
+#            return {'ret_code': 0, 'data': '策略运行中，无需重复启动'}
 
         rsp = self.send_request({
             'strategy_id': self.strategy_id,
@@ -164,10 +180,11 @@ def get_strategy_list():
     ret = []
     session = Session()
     for s in strategies:
-        res = (session
-         .query(StrategyStatus)
-         .filter_by(strategy_id=s.strategy_id)
-         .all())
+        res = (
+            session
+            .query(StrategyStatus)
+            .filter_by(strategy_id=s.strategy_id)
+            .all())
         if res:
             ea = res[0]
             ret.append({

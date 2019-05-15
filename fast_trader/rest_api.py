@@ -132,9 +132,12 @@ def get_accounts():
     return request(url, headers=headers, body=body, method='get')
 
 
-def place_order(order):
+def place_order(order, account_no=None):
+    if account_no is None:
+        account_no = settings['account']
+
     url = settings['rest_api']['order'].format(
-        account_no=settings['account'])
+        account_no=account_no)
     headers = default_headers
     body = {}
     for k, v in order.to_dict().items():
@@ -143,7 +146,11 @@ def place_order(order):
     return request(url, headers=headers, body=body)
 
 
-def cancel_order(exchange, order_exchange_id, order_original_id=''):
+def cancel_order(exchange, order_exchange_id,
+                 order_original_id='', account_no=None):
+    if account_no is None:
+        account_no = settings['account']
+
     url = settings['rest_api']['cancel_order'].format(
         account_no=settings['account'])
     headers = default_headers
@@ -157,7 +164,10 @@ def cancel_order(exchange, order_exchange_id, order_original_id=''):
     return request(url, headers=headers, body=body)
 
 
-def place_batch_order(orders):
+def place_batch_order(orders, account_no=None):
+    if account_no is None:
+        account_no = settings['account']
+
     url = settings['rest_api']['batch_order'].format(
         account_no=settings['account'])
     headers = default_headers
@@ -173,7 +183,7 @@ def place_batch_order(orders):
     return request(url, headers=headers, body=body)
 
 
-def cancel_batch_order(p):
+def cancel_batch_order(p, account_no=None):
     """
     批量撤单
 
@@ -183,6 +193,9 @@ def cancel_batch_order(p):
             '1': []
         }
     """
+    if account_no is None:
+        account_no = settings['account']
+
     url = settings['rest_api']['cancel_batch'].format(
         account_no=settings['account'])
     headers = default_headers
@@ -190,12 +203,18 @@ def cancel_batch_order(p):
     return request(url, headers=headers, body=body)
 
 
-def cancel_all():
+def cancel_all(account_no=None):
+    if account_no is None:
+        account_no = settings['account']
+
     p = query_open_orders()
     cancel_batch_order(p)
 
 
-def query_capital():
+def query_capital(account_no=None):
+    if account_no is None:
+        account_no = settings['account']
+
     url = settings['rest_api']['query_capital'].format(
         account_no=settings['account'])
     headers = default_query_headers
@@ -203,7 +222,10 @@ def query_capital():
     return request(url, headers=headers, body=body, method='get')
 
 
-def query_positions():
+def query_positions(account_no=None):
+    if account_no is None:
+        account_no = settings['account']
+
     url = settings['rest_api']['query_positions'].format(
         account_no=settings['account'])
     headers = default_query_headers
@@ -211,7 +233,10 @@ def query_positions():
     return request(url, headers=headers, body=body, method='get')
 
 
-def query_fills():
+def query_fills(account_no=None):
+    if account_no is None:
+        account_no = settings['account']
+
     url = settings['rest_api']['query_fills'].format(
         account_no=settings['account'])
     headers = default_query_headers
@@ -219,7 +244,10 @@ def query_fills():
     return request(url, headers=headers, body=body, method='get')
 
 
-def query_orders():
+def query_orders(account_no=None):
+    if account_no is None:
+        account_no = settings['account']
+
     url = settings['rest_api']['query_orders'].format(
         account_no=settings['account'])
     headers = default_query_headers
@@ -227,7 +255,10 @@ def query_orders():
     return request(url, headers=headers, body=body, method='get')
 
 
-def query_open_orders():
+def query_open_orders(account_no=None):
+    if account_no is None:
+        account_no = settings['account']
+
     url = settings['rest_api']['query_open_orders'].format(
         account_no=settings['account'])
     headers = default_query_headers
@@ -235,7 +266,10 @@ def query_open_orders():
     return request(url, headers=headers, body=body, method='get')
 
 
-def make_pageable_query(method_name, page, size):
+def make_pageable_query(method_name, page, size, account_no=None):
+    if account_no is None:
+        account_no = settings['account']
+
     url = settings['rest_api'][method_name].format(
         account_no=settings['account'])
     url = f'{url}?page={page}&size={size}'
@@ -263,6 +297,9 @@ def _get_by_account(result, account_no, name):
 
 
 def handle_pagination(method_name, content_name, pagination, format_fn):
+    """
+    FIXME: by account_no
+    """
     size = pagination['size']
     offset = pagination['offset']
     page = int((offset + 1) / size)
@@ -464,5 +501,4 @@ if __name__ == '__main__':
     order.price = '16'
     order.quantity = 300
     order.side = dtp_type.ORDER_SIDE_BUY
-
 
