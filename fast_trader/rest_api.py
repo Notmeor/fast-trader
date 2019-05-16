@@ -129,8 +129,7 @@ def request(url, headers, body, method='post'):
 
 
 def get_accounts():
-    url = settings['rest_api']['get_account'].format(
-        account_no=settings['account'])
+    url = settings['rest_api']['get_account']
     headers = default_query_headers
     body = {}
     return request(url, headers=headers, body=body, method='get')
@@ -156,7 +155,7 @@ def cancel_order(exchange, order_exchange_id,
         account_no = settings['account']
 
     url = settings['rest_api']['cancel_order'].format(
-        account_no=settings['account'])
+        account_no=account_no)
     headers = default_headers
     body = {
         "originalId": order_original_id,
@@ -173,7 +172,7 @@ def place_batch_order(orders, account_no=None):
         account_no = settings['account']
 
     url = settings['rest_api']['batch_order'].format(
-        account_no=settings['account'])
+        account_no=account_no)
     headers = default_headers
     body = []
 
@@ -201,7 +200,7 @@ def cancel_batch_order(p, account_no=None):
         account_no = settings['account']
 
     url = settings['rest_api']['cancel_batch'].format(
-        account_no=settings['account'])
+        account_no=account_no)
     headers = default_headers
     body = p
     return request(url, headers=headers, body=body)
@@ -211,8 +210,8 @@ def cancel_all(account_no=None):
     if account_no is None:
         account_no = settings['account']
 
-    p = query_open_orders()
-    cancel_batch_order(p)
+    p = query_open_orders(account_no=account_no)
+    cancel_batch_order(p, account_no=account_no)
 
 
 def query_capital(account_no=None):
@@ -220,10 +219,14 @@ def query_capital(account_no=None):
         account_no = settings['account']
 
     url = settings['rest_api']['query_capital'].format(
-        account_no=settings['account'])
+        account_no=account_no)
     headers = default_query_headers
     body = {}
-    return request(url, headers=headers, body=body, method='get')
+    ret = request(url, headers=headers, body=body, method='get')
+    # 查询特定账号的资金时，返回的依然是[]
+    if isinstance(ret, list):
+        return ret[0]
+    return ret
 
 
 def query_positions(account_no=None):
@@ -231,7 +234,7 @@ def query_positions(account_no=None):
         account_no = settings['account']
 
     url = settings['rest_api']['query_positions'].format(
-        account_no=settings['account'])
+        account_no=account_no)
     headers = default_query_headers
     body = {}
     return request(url, headers=headers, body=body, method='get')
@@ -242,7 +245,7 @@ def query_fills(account_no=None):
         account_no = settings['account']
 
     url = settings['rest_api']['query_fills'].format(
-        account_no=settings['account'])
+        account_no=account_no)
     headers = default_query_headers
     body = {}
     return request(url, headers=headers, body=body, method='get')
@@ -253,7 +256,7 @@ def query_orders(account_no=None):
         account_no = settings['account']
 
     url = settings['rest_api']['query_orders'].format(
-        account_no=settings['account'])
+        account_no=account_no)
     headers = default_query_headers
     body = {}
     return request(url, headers=headers, body=body, method='get')
@@ -264,7 +267,7 @@ def query_open_orders(account_no=None):
         account_no = settings['account']
 
     url = settings['rest_api']['query_open_orders'].format(
-        account_no=settings['account'])
+        account_no=account_no)
     headers = default_query_headers
     body = {}
     return request(url, headers=headers, body=body, method='get')
@@ -275,7 +278,7 @@ def make_pageable_query(method_name, page, size, account_no=None):
         account_no = settings['account']
 
     url = settings['rest_api'][method_name].format(
-        account_no=settings['account'])
+        account_no=account_no)
     url = f'{url}?page={page}&size={size}'
     headers = default_query_headers
     body = {}
@@ -397,9 +400,9 @@ def format_orders(stats):
 
 def restapi_login(trader, account, password, *args, **kw):
     stats = _get_by_account(
-            get_accounts(), settings['account'], 'cashAccountNo')
+            get_accounts(), account, 'cashAccountNo')
     if stats['loginStatus'] == 1:
-        trader._account_no = settings['account']
+        trader._account_no = account
         trader._logined = True
         trader._token = user_meta['token']
         print('Login success')
@@ -429,8 +432,7 @@ def restapi_place_batch_order(trader, request_id, orders):
 
 
 def restapi_query_capital(trader, **kw):
-    capitals = query_capital()
-    stats = _get_by_account(capitals, settings['account'], 'accountNo')
+    stats = query_capital(trader.account_no)
     capital = {
         'account_no': stats['accountId'],
         'available': stats['available'],

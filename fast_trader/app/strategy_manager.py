@@ -10,6 +10,7 @@ import importlib
 import threading
 import subprocess
 import psutil
+import collections
 
 import sqlalchemy.orm.exc as orm_exc
 
@@ -243,6 +244,9 @@ class Manager_:
         self._load_strategy_settings()
         self._factory = None
         self._strategies = {}
+        
+        # 缓存历史资金查询记录
+        self._capital_records = collections.defaultdict(list)
 
         self._heartbeat_thread = threading.Thread(target=self.send_heartbeat)
 
@@ -321,9 +325,13 @@ class Manager_:
         return rest_api.get_accounts()
 
     def get_capital(self, account_no):
-        # FIXME: by account_no
-        return rest_api.query_capital()
+        cap = rest_api.query_capital(account_no=account_no)            
+        self._capital_records[account_no].append(cap)
+        return cap
 
+    def get_history_capital_records(self, account_no):
+        return self._capital_records[account_no]
+        
     def add_strategy(self, strategy):
         self._strategies[strategy.strategy_id] = strategy
 
@@ -442,6 +450,9 @@ class Manager_:
 
             elif request['api_name'] == 'get_capital':
                 return self.get_capital(**request['kw'])
+
+            elif request['api_name'] == 'get_history_capital_records':
+                return self.get_history_capital_records(**request['kw'])
 
             elif request['api_name'] == 'start_strategy':
                 return self.start_strategy(**request['kw'])
