@@ -634,7 +634,7 @@ class LedgerWriter:
         code = data.szWindCode
 
         if message.api_id == 'trade_feed':
-            price = data.nPirce
+            price = data.nPrice
         elif message.api_id == 'tick_feed':
             price = data.nMatch
         else:

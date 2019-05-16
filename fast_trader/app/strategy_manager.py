@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import os
-os.environ['FAST_TRADER_CONFIG'] = \
-    '/Users/eisenheim/Documents/git/fast-trader/tmp/config.yaml'
 
 import datetime
 import time
