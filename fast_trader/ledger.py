@@ -447,6 +447,9 @@ class LedgerWriter:
         code = as_wind_code(order.code)
         localtime = self.localtime.strftime('%Y-%m-%dT%H:%M:%S.%f')
 
+        # FIXME: 部分成交时，顶点柜台不会更新freeze_amount
+        order_freeze_amount = order.freeze_amount
+
         # 委托本地提交后，冻结资金
         if order.status == dtp_type.ORDER_STATUS_SUBMITTED:
             # 冻结开仓委托占用资金
@@ -486,7 +489,7 @@ class LedgerWriter:
                 order_freeze = order.price * order.quantity
             else:
                 order_freeze = 0.
-            cost_freeze = order.freeze_amount - order_freeze
+            cost_freeze = order_freeze_amount - order_freeze
 
             record = StockLedgerRecord()
             record.subject = LedgerSubject.TRANSACTION
@@ -515,7 +518,7 @@ class LedgerWriter:
             record.subject = LedgerSubject.TRANSACTION
             record.category = LedgerCategory.FREEZE
             record.code = code
-            record.quantity = order.freeze_amount
+            record.quantity = order_freeze_amount
             record.price = 1.
             record.localtime = localtime
             self.accountant.put_event(record)
@@ -524,7 +527,7 @@ class LedgerWriter:
             record.subject = LedgerSubject.TRANSACTION
             record.category = LedgerCategory.CASH
             record.code = code
-            record.quantity = -order.freeze_amount
+            record.quantity = -order_freeze_amount
             record.price = 1.
             record.localtime = localtime
             self.accountant.put_event(record)
@@ -634,7 +637,7 @@ class LedgerWriter:
         code = data.szWindCode
 
         if message.api_id == 'trade_feed':
-            price = data.nPirce
+            price = data.nPrice
         elif message.api_id == 'tick_feed':
             price = data.nMatch
         else:

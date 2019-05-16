@@ -21,8 +21,8 @@ ctp_feed_channel: 'tcp://192.168.221.82:9504'
 sync_channel_port: 'tcp://192.168.221.37:9833'
 # 异步请求
 async_channel_port: 'tcp://192.168.221.37:9831'
-# 异步响应推送
-rsp_channel_port: 'tcp://192.168.221.37:9832'
+# 柜台推送
+rsp_channel_port: 'tcp://192.168.221.67:12432'
 # 风控消息
 risk_channel_port: 'tcp://192.168.221.36:9402'
 
@@ -39,17 +39,17 @@ use_rest_api: True
 rest_api:
   # kay_file: 'c:/Users/{user}/AppData/Roaming/Kay/.kay'
   kay_file: '/home/jovyan/work/fast-trader/tmp/kay.txt'
-  get_account: 'https://192.168.221.39/api/entrust-free/accounts'
-  order: 'https://192.168.221.39/api/entrust-free/accounts/{account_no}/orders'
-  cancel_order: 'https://192.168.221.39/api/entrust-free/accounts/{account_no}/order_cancellations'
-  batch_order: 'https://192.168.221.39/api/entrust-free/accounts/{account_no}/batchOrder'
-  cancel_batch: 'https://192.168.221.39/api/entrust-free/accounts/{account_no}/batchCancel'
+  get_account: 'https://192.168.221.39:444/api/entrust-free/accounts'
+  order: 'https://192.168.221.39:444/api/entrust-free/accounts/{account_no}/orders'
+  cancel_order: 'https://192.168.221.39:444/api/entrust-free/accounts/{account_no}/order_cancellations'
+  batch_order: 'https://192.168.221.39:444/api/entrust-free/accounts/{account_no}/batchOrder'
+  cancel_batch: 'https://192.168.221.39:444/api/entrust-free/accounts/{account_no}/batchCancel'
   
-  query_capital: 'https://192.168.221.39/api/counter-cache/query/capitals/{account_no}'
-  query_positions: 'https://192.168.221.39/api/counter-cache/query/positions/{account_no}'
-  query_fills: 'https://192.168.221.39/api/counter-cache/query/fills/{account_no}'
-  query_orders: 'https://192.168.221.39/api/counter-cache/query/orders/{account_no}'
-  query_open_orders: 'https://192.168.221.39/api/counter-cache/query/cancelableorders/{account_no}'
+  query_capital: 'https://192.168.221.39:444/api/counter-cache/query/capitals/{account_no}'
+  query_positions: 'https://192.168.221.39:444/api/counter-cache/query/positions/{account_no}'
+  query_fills: 'https://192.168.221.39:444/api/counter-cache/query/fills/{account_no}'
+  query_orders: 'https://192.168.221.39:444/api/counter-cache/query/orders/{account_no}'
+  query_open_orders: 'https://192.168.221.39:444/api/counter-cache/query/cancelableorders/{account_no}'
 
 
 working_dir: ''

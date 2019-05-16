@@ -557,6 +557,8 @@ class Trader:
                 dispatcher.bind('{}_req'.format(api_id), handler)
 
             self.__api_bound = True
+        else:
+            self.logger.warning('Trader alreadly has been bound')
 
     def _set_number(self, number, max_number=None):
         """

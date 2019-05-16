@@ -492,6 +492,7 @@ class Strategy(StrategyWatchMixin):
         """
         查询策略持仓
         """
+        # FIXME: return account positions when bound to main account
         positions = self._ledger_writer.accountant._positions
         ret = []
         for code, pos in positions.items():
@@ -500,6 +501,7 @@ class Strategy(StrategyWatchMixin):
             p['available_quantity'] = pos.sellable_quantity
             p['balance'] = pos.quantity
             p['buy_quantity'] = None
+            p['sell_quantity'] = None
             p['code'] = code
             p['cost'] = None
             p['exchange'] = self.get_exchange(code)

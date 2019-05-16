@@ -57,7 +57,7 @@ class attrdict(dict):
 
     def __setattr__(self, key, value):
         raise AttributeError('Assignment not allowed')
-    
+
     def copy(self):
         return attrdict(self)
 
@@ -66,11 +66,8 @@ class Mail(attrdict):
 
     def __init__(self, api_type, api_id, **kw):
 
-#        if api_type == 'req':
-#            kw['request_id'] = str(uuid.uuid1())
-
         if 'handler_id' not in kw:
-            kw['handler_id'] = '{}_{}'.format(api_id, api_type)
+            kw['handler_id'] = f'{api_id}_{api_typ}'
 
         if 'sync' not in kw:
             kw['sync'] = False
@@ -84,6 +81,13 @@ class Mail(attrdict):
         })
 
         self.update(kw)
+
+    @property
+    def handler_id(self):
+        if 'handler_id' in self:
+            return self['handler_id']
+        handler_id = f'{self["api_id"]}_{self["api_type"]}'
+        return handler_id
 
 
 def get_mac_address():
