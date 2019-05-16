@@ -713,8 +713,7 @@ class Trader:
         """
         # 报价转为str类型
         price_ = price
-        # xx
-        print('here!!!')
+
         mail = Mail(
             api_type='req',
             api_id=dtp_api_id.PLACE_ORDER,
