@@ -64,7 +64,7 @@ strategy_directory: '{fast_trader_home}/strategies'
 
 
 # 账号
-account: '011000106328'
+account_no: '011000106328'
 # 密码
 password: '111111'
 

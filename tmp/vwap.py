@@ -32,14 +32,14 @@ class VwapStrategy(Strategy):
         tk.subscribe(['600000', '600519', '002230', '600056'])
         self.add_datasource(tk)
         
-        self.available_cash_per_stock = defaultdict(lambda: 100000.)
+        self.available_cash_per_stock = defaultdict(lambda: 1000000.)
         self._xx = []
 
     def on_market_snapshot(self, data):
         """
         响应快照行情
         """
-
+        return
         code = data.szCode
         price = data.nAskPrice_0
         # 卖一量的20%作为当次买入量

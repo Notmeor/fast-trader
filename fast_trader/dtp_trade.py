@@ -182,6 +182,8 @@ class Dispatcher:
 
     def bind(self, handler_id, handler, override=False):
         if not override and handler_id in self._handlers:
+            if handler == self._handlers[handler_id]:
+                return
             raise KeyError(
                 'handler {} already exists!'.format(handler_id))
         self._handlers[handler_id] = handler
@@ -217,7 +219,9 @@ class Dispatcher:
             raise Exception('Invalid message: {}'.format(mail))
 
     def dispatch(self, mail):
-        return self._handlers[mail['handler_id']](mail)
+        handler_id = mail['handler_id']
+        if handler_id in self._handlers:
+            return self._handlers[handler_id](mail)
 
 
 class DTPType:
@@ -262,8 +266,7 @@ class DTP:
         self.dispatcher = dispatcher or Queue()
 
         self.__settings = settings.copy()
-        # FIXME: param
-        self._account_no = settings['account']
+
         self._ctx = zmq_context.CONTEXT
 
         # 同步查询通道
@@ -277,7 +280,8 @@ class DTP:
         # 异步查询响应通道
         self._async_resp_channel = self._ctx.socket(zmq.SUB)
         self._async_resp_channel.connect(settings['rsp_channel_port'])
-        self._async_resp_channel.subscribe('{}'.format(self._account_no))
+        self._async_resp_channel.subscribe('')
+        # self._async_resp_channel.subscribe('{}'.format(self._account_no))
 
         ## 风控推送通道
         #self._risk_report_channel = self._ctx.socket(zmq.SUB)
@@ -297,18 +301,15 @@ class DTP:
 
     def _populate_message(self, cmsg, attrs):
 
-        for attr, value in attrs.items():
-            name = attr
-            if attr == 'account':
-                name = 'account_no'
+        for name, value in attrs.items():
 
             if isinstance(value, list):
-                repeated = getattr(cmsg, attr)
+                repeated = getattr(cmsg, name)
                 for i in value:
                     item = repeated.add()
                     self._populate_message(item, i)
             elif isinstance(value, dict):
-                nv = getattr(cmsg, attr)
+                nv = getattr(cmsg, name)
                 self._populate_message(nv, value)
             else:
                 if hasattr(cmsg, name):
@@ -319,7 +320,7 @@ class DTP:
         header = dtp_struct.RequestHeader()
         header.request_id = mail['request_id']
         header.api_id = mail['api_id']
-        header.account_no = mail['account']
+        header.account_no = mail['account_no']
         header.ip = self.__settings['ip']
         header.mac = self.__settings['mac']
         header.harddisk = self.__settings['harddisk']
@@ -378,6 +379,7 @@ class DTP:
                 mail = Mail(
                     api_id=api_id,
                     api_type='rsp',
+                    handler_id=f'{body.account_no}_{api_id}_rsp',
                     sync=sync
                 )
 
@@ -409,7 +411,7 @@ class DTP:
         header.token = mail['token']
         header.request_id = mail['request_id']
         header.api_id = mail['api_id']
-        header.account_no = mail['account']
+        header.account_no = mail['account_no']
         header.ip = self.__settings['ip']
         header.mac = self.__settings['mac']
         header.harddisk = self.__settings['harddisk']
@@ -440,7 +442,8 @@ class DTP:
             header = dtp_struct.ReportHeader()
             header.ParseFromString(report_header)
 
-            rsp_type = DTPType.get_proto_type(header.api_id)
+            api_id = header.api_id
+            rsp_type = DTPType.get_proto_type(api_id)
 
             try:
                 body = rsp_type()
@@ -451,8 +454,9 @@ class DTP:
                 continue
 
             mail = Mail(
-                api_id=header.api_id,
-                api_type='rsp'
+                api_id=api_id,
+                api_type='rsp',
+                handler_id=f'{body.account_no}_{api_id}_rsp',
             )
 
             mail['header'] = message2dict(header)
@@ -549,12 +553,13 @@ class Trader:
             dispatcher, broker = self.dispatcher, self.broker
 
             for api_id in dtp_api_id.RSP_API_NAMES:
-                dispatcher.bind('{}_rsp'.format(api_id), self._on_response)
+                dispatcher.bind(f'{self.account_no}_{api_id}_rsp',
+                                self._on_response)
 
             for api_id in dtp_api_id.REQ_API_NAMES:
                 api_name = dtp_api_id.REQ_API_NAMES[api_id]
                 handler = getattr(broker, api_name)
-                dispatcher.bind('{}_req'.format(api_id), handler)
+                dispatcher.bind(f'{api_id}_req', handler)
 
             self.__api_bound = True
         else:
@@ -653,11 +658,15 @@ class Trader:
     def on_logout(self, mail):
         self.logger.info('登出账户 {}'.format(self.account_no))
 
-    @might_use_rest_api(might=settings['use_rest_api'], api_name='restapi_login')
-    def login(self, account, password, sync=True, **kw):
+    @might_use_rest_api(might=settings['use_rest_api'],
+                        api_name='restapi_login')
+    def login(self, account_no, password, sync=True, **kw):
 
-        self._account_no = account
-        ret = self.login_account(account=account,
+        self._account_no = account_no
+
+        self.start()
+
+        ret = self.login_account(account_no=account_no,
                                  password=password,
                                  sync=True, **kw)
 
@@ -692,7 +701,7 @@ class Trader:
             api_type='req',
             api_id=dtp_api_id.LOGOUT_ACCOUNT_REQUEST,
             request_id=kw['request_id'],
-            account=self._account_no,
+            account_no=self._account_no,
             token=self._token
         )
         self.dispatcher.put(mail)
@@ -719,7 +728,7 @@ class Trader:
         mail = Mail(
             api_type='req',
             api_id=dtp_api_id.PLACE_ORDER,
-            account=self._account_no,
+            account_no=self._account_no,
             token=self._token,
             request_id=request_id,
             order_original_id=order_original_id,
@@ -760,7 +769,7 @@ class Trader:
         mail = Mail(
             api_type='req',
             api_id=dtp_api_id.CANCEL_ORDER,
-            account=self._account_no,
+            account_no=self._account_no,
             token=self._token,
             **kw
         )
@@ -775,7 +784,7 @@ class Trader:
         mail = Mail(
             api_type='req',
             api_id=dtp_api_id.QUERY_ORDERS_REQUEST,
-            account=self._account_no,
+            account_no=self._account_no,
             token=self._token,
             **kw
         )
@@ -790,7 +799,7 @@ class Trader:
         mail = Mail(
             api_type='req',
             api_id=dtp_api_id.QUERY_FILLS_REQUEST,
-            account=self._account_no,
+            account_no=self._account_no,
             token=self._token,
             **kw
         )
@@ -805,7 +814,7 @@ class Trader:
         mail = Mail(
             api_type='req',
             api_id=dtp_api_id.QUERY_POSITION_REQUEST,
-            account=self._account_no,
+            account_no=self._account_no,
             token=self._token,
             **kw
         )
@@ -820,7 +829,7 @@ class Trader:
         mail = Mail(
             api_type='req',
             api_id=dtp_api_id.QUERY_CAPITAL_REQUEST,
-            account=self._account_no,
+            account_no=self._account_no,
             token=self._token,
             **kw
         )
@@ -833,7 +842,7 @@ class Trader:
         mail = Mail(
             api_type='req',
             api_id=dtp_api_id.QUERY_RATION_REQUEST,
-            account=self._account_no,
+            account_no=self._account_no,
             token=self._token,
             **kw
         )
@@ -845,6 +854,6 @@ if __name__ == '__main__':
     trader = Trader()
     trader.start()
     trader.login(
-        account=settings['account'],
+        account_no=settings['account_no'],
         password=settings['password'],
     )

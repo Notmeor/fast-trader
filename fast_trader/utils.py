@@ -82,12 +82,12 @@ class Mail(attrdict):
 
         self.update(kw)
 
-    @property
-    def handler_id(self):
-        if 'handler_id' in self:
-            return self['handler_id']
-        handler_id = f'{self["api_id"]}_{self["api_type"]}'
-        return handler_id
+#    @property
+#    def handler_id(self):
+#        if 'handler_id' in self:
+#            return self['handler_id']
+#        handler_id = f'{self["api_id"]}_{self["api_type"]}'
+#        return handler_id
 
 
 def get_mac_address():

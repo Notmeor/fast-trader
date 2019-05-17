@@ -41,7 +41,7 @@ class Market:
 
     def remove_strategy(self, strategy):
         self._strategies.remove(strategy)
-    
+
     @staticmethod
     def has_subscribed(strategy, message):
         ds_name = message['api_id']
@@ -67,8 +67,9 @@ def as_order_msg(order):
     }[order.order_side]
 
     status = {
-        dtp_type.ORDER_STATUS_PLACING: '委托成功',
+        dtp_type.ORDER_STATUS_PLACING: '正报',
         dtp_type.ORDER_STATUS_PLACED: '已申报',
+        dtp_type.ORDER_STATUS_PARTIAL_FILLED: '部分成交',
         dtp_type.ORDER_STATUS_FAILED: '废单',
     }.get(order.status, str(order.status))
 
@@ -145,7 +146,8 @@ class StrategyWatchMixin:
 
             (self._session
                 .query(StrategyStatus)
-                .filter_by(strategy_id=self.strategy_id)
+                .filter_by(strategy_id=self.strategy_id,
+                           account_no=self.account_no)
                 .update({'last_heartbeat': ts}))
 
             self._session.commit()
@@ -159,14 +161,16 @@ class StrategyWatchMixin:
         res = (
             session
             .query(StrategyStatus)
-            .filter_by(strategy_id=self.strategy_id)
+            .filter_by(strategy_id=self.strategy_id,
+                       account_no=self.account_no)
             .all()
         )
         if len(res) > 0:
             stats = res[0]
             if stats.is_running():
-                err_msg = (f'strategy_id={stats.strategy_id}的' +
-                           f'策略正在运行: {stats.strategy_name}')
+                err_msg = (f'账号{self.account_no}下该策略正在运行: '
+                           f'strategy_id={self.strategy_id}, '
+                           f'strategy_name={stats.strategy_name}')
                 self.logger.error(f'策略初始化失败: {err_msg}')
                 raise RuntimeError(err_msg)
         session.close()
@@ -175,20 +179,21 @@ class StrategyWatchMixin:
 class Strategy(StrategyWatchMixin):
 
     strategy_name = 'unnamed'
-    strategy_id = -1
-    trader_id = 1
+    # strategy_id = -1
+    # trader_id = 1
 
-    def __init__(self, strategy_id=None):
+    def __init__(self, strategy_id, account_no):
+
+        self._account_no = account_no
+        self.strategy_id = strategy_id
 
         self.logger = logging.getLogger(
-            f'strategy<id={strategy_id};name={self.strategy_name}>')
+            f'strategy<no={account_no};id={strategy_id};'
+            f'name={self.strategy_name}>')
 
         if self.strategy_id < 0 or not isinstance(self.strategy_id, int):
             raise RuntimeError(
                 f'`strategy_id`应为非0整数，当前取值：{self.strategy_id}')
-
-        if strategy_id is not None:
-            self.strategy_id = strategy_id
 
         # 验证是否已存在同id的策略正在运行
         self._check_strategy_status()
@@ -205,8 +210,6 @@ class Strategy(StrategyWatchMixin):
         # order_exchange_id -> order_original_id
         self._order_id_mapping = {}
 
-        self._ledger_writer = LedgerWriter(name=f'strategy_{self.strategy_id}')
-
     def set_dispatcher(self, dispatcher):
         self.dispatcher = dispatcher
 
@@ -219,6 +222,13 @@ class Strategy(StrategyWatchMixin):
             market = Market()
         self.market = market
         market.add_strategy(self)
+
+    def set_ledger_writer(self, ledger_writer=None):
+        if ledger_writer is None:
+            self._ledger_writer = LedgerWriter(
+                name=f'ledger_{self.trader.account_no}_{self.strategy_id}')
+        else:
+            self._ledger_writer = ledger_writer
 
     def set_initial_capital(self, value):
         view = self.get_account_view()
@@ -235,22 +245,17 @@ class Strategy(StrategyWatchMixin):
 
     def start(self):
 
-        self.trader.start()
-
-        self._account_no = settings['account']
-        self.trader.login(
-            account=settings['account'],
-            password=settings['password'],
-            request_id=self.generate_request_id(),
-            sync=True)
-
         if self.trader.logined:
             self._started = True
-            self.on_start()
-            self.logger.info('策略启动成功')
+
+            self.set_ledger_writer()
 
             # 更新策略状态的本地记录
             self._mark_strategy_as_started()
+
+            self.logger.info('策略启动成功')
+
+            self.on_start()
 
             # 启动行情线程
             self.start_market()
@@ -258,7 +263,7 @@ class Strategy(StrategyWatchMixin):
             return {'ret_code': 0, 'data': None}
 
         else:
-            err_msg = '策略启动失败 账户<{}>未成功登录'.format(self.account_no)
+            err_msg = f'策略启动失败 账户<{self.account_no}>未成功登录'
             self.logger.warning(err_msg)
             return {'ret_code': -1, 'err_msg': err_msg}
 
@@ -298,7 +303,11 @@ class Strategy(StrategyWatchMixin):
 
     @property
     def account_no(self):
-        return self.trader._account_no
+        return self._account_no
+
+    @property
+    def global_ident(self):
+        return f'{self.account_no}_{self.strategy_id}'
 
     def get_account_view(self, code=None):
         """
@@ -687,12 +696,15 @@ class Strategy(StrategyWatchMixin):
 
         # NOTE: 委托回报可能晚于成交回报
         # 抛弃过期委托回报
-        try:
+        # FIXME: 本地委托记录_orders中可能无该记录（如重启）
+        if order_detail:
             if order_detail.status > order.status:
                 self.logger.warning(f'Expired order response: {order}')
                 return
-        except:
-            import pdb;pdb.set_trace()
+        else:
+            self.logger.warning(f'original_id={original_id}, exchange_id='
+                                f'{order.order_exchange_id}: 本地未发现该报单'
+                                f'记录，可能来自异地报单，或在交易中进行过策略重启')
 
         order_detail.update(order)
 
@@ -898,13 +910,39 @@ class StrategyFactory:
         # 行情通道
         self.market = Market()
 
-        self.trader = Trader(self.dispatcher, self.dtp, trader_id)
+        # trader与账号一一对应
+        self.traders = {}
+        # self.trader = Trader(self.dispatcher, self.dtp, trader_id)
 
-    def generate_strategy(self, StrategyCls, strategy_id):
+    def generate_strategy(self, StrategyCls, strategy_id, account_no):
 
-        strategy = StrategyCls(strategy_id)
+        strategy = StrategyCls(strategy_id, account_no)
 
-        strategy.set_trader(self.trader)
+        if account_no not in self.traders:
+            trader = Trader(
+                dispatcher=self.dispatcher,
+                broker=self.dtp,
+                trader_id=self.trader_id,
+            )
+
+            # 使用rest_api的情况下，实际并不需要登录，直接通过接口获取token
+            def _get_password(account_no):
+                if settings['use_rest_api'] is True:
+                    password = ''
+                else:
+                    password = settings['credentials'][account_no]
+                return password
+
+            trader.login(
+                account_no=account_no,
+                password=_get_password(account_no),
+                sync=True
+            )
+            self.traders[account_no] = trader
+        else:
+            trader = self.traders[account_no]
+
+        strategy.set_trader(trader)
 
         strategy.set_dispatcher(self.dispatcher)
 

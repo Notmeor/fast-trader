@@ -137,7 +137,7 @@ def get_accounts():
 
 def place_order(order, account_no=None):
     if account_no is None:
-        account_no = settings['account']
+        account_no = settings['acocunt_no']
 
     url = settings['rest_api']['order'].format(
         account_no=account_no)
@@ -152,7 +152,7 @@ def place_order(order, account_no=None):
 def cancel_order(exchange, order_exchange_id,
                  order_original_id='', account_no=None):
     if account_no is None:
-        account_no = settings['account']
+        account_no = settings['acocunt_no']
 
     url = settings['rest_api']['cancel_order'].format(
         account_no=account_no)
@@ -169,7 +169,7 @@ def cancel_order(exchange, order_exchange_id,
 
 def place_batch_order(orders, account_no=None):
     if account_no is None:
-        account_no = settings['account']
+        account_no = settings['acocunt_no']
 
     url = settings['rest_api']['batch_order'].format(
         account_no=account_no)
@@ -197,7 +197,7 @@ def cancel_batch_order(p, account_no=None):
         }
     """
     if account_no is None:
-        account_no = settings['account']
+        account_no = settings['acocunt_no']
 
     url = settings['rest_api']['cancel_batch'].format(
         account_no=account_no)
@@ -208,7 +208,7 @@ def cancel_batch_order(p, account_no=None):
 
 def cancel_all(account_no=None):
     if account_no is None:
-        account_no = settings['account']
+        account_no = settings['acocunt_no']
 
     p = query_open_orders(account_no=account_no)
     cancel_batch_order(p, account_no=account_no)
@@ -216,7 +216,7 @@ def cancel_all(account_no=None):
 
 def query_capital(account_no=None):
     if account_no is None:
-        account_no = settings['account']
+        account_no = settings['acocunt_no']
 
     url = settings['rest_api']['query_capital'].format(
         account_no=account_no)
@@ -231,7 +231,7 @@ def query_capital(account_no=None):
 
 def query_positions(account_no=None):
     if account_no is None:
-        account_no = settings['account']
+        account_no = settings['acocunt_no']
 
     url = settings['rest_api']['query_positions'].format(
         account_no=account_no)
@@ -242,7 +242,7 @@ def query_positions(account_no=None):
 
 def query_fills(account_no=None):
     if account_no is None:
-        account_no = settings['account']
+        account_no = settings['acocunt_no']
 
     url = settings['rest_api']['query_fills'].format(
         account_no=account_no)
@@ -253,7 +253,7 @@ def query_fills(account_no=None):
 
 def query_orders(account_no=None):
     if account_no is None:
-        account_no = settings['account']
+        account_no = settings['acocunt_no']
 
     url = settings['rest_api']['query_orders'].format(
         account_no=account_no)
@@ -264,22 +264,10 @@ def query_orders(account_no=None):
 
 def query_open_orders(account_no=None):
     if account_no is None:
-        account_no = settings['account']
+        account_no = settings['acocunt_no']
 
     url = settings['rest_api']['query_open_orders'].format(
         account_no=account_no)
-    headers = default_query_headers
-    body = {}
-    return request(url, headers=headers, body=body, method='get')
-
-
-def make_pageable_query(method_name, page, size, account_no=None):
-    if account_no is None:
-        account_no = settings['account']
-
-    url = settings['rest_api'][method_name].format(
-        account_no=account_no)
-    url = f'{url}?page={page}&size={size}'
     headers = default_query_headers
     body = {}
     return request(url, headers=headers, body=body, method='get')
@@ -303,7 +291,20 @@ def _get_by_account(result, account_no, name):
         result))
 
 
-def handle_pagination(method_name, content_name, pagination, format_fn):
+def make_pageable_query(method_name, page, size, account_no=None):
+    if account_no is None:
+        account_no = settings['acocunt_no']
+
+    url = settings['rest_api'][method_name].format(
+        account_no=account_no)
+    url = f'{url}?page={page}&size={size}'
+    headers = default_query_headers
+    body = {}
+    return request(url, headers=headers, body=body, method='get')
+
+
+def handle_pagination(method_name, content_name,
+                      pagination, format_fn, account_no):
     """
     FIXME: by account_no
     """
@@ -311,7 +312,8 @@ def handle_pagination(method_name, content_name, pagination, format_fn):
     offset = pagination['offset']
     page = int((offset + 1) / size)
 
-    result = make_pageable_query(method_name, page, size)
+    result = make_pageable_query(method_name, page,
+                                 size, account_no=account_no)
 
     content = format_fn(result)
 
@@ -398,29 +400,32 @@ def format_orders(stats):
     return orders
 
 
-def restapi_login(trader, account, password, *args, **kw):
+def restapi_login(trader, account_no, password, *args, **kw):
     stats = _get_by_account(
-            get_accounts(), account, 'cashAccountNo')
+            get_accounts(), account_no, 'cashAccountNo')
     if stats['loginStatus'] == 1:
-        trader._account_no = account
+        trader._account_no = account_no
         trader._logined = True
         trader._token = user_meta['token']
-        print('Login success')
+        print('连接账户成功')
     else:
-        print('Login failed')
+        print('连接账户失败')
+
+    trader.start()
 
 
 def restapi_place_order(trader, order_type=dtp_type.ORDER_TYPE_LIMIT, **kw):
     kw['order_type'] = order_type
     order = _get_order_obj(kw)
-    place_order(order)
+    place_order(order, account_no=trader.account_no)
 
 
 def restapi_cancel_order(trader, **kw):
     exchange = kw['exchange']
     order_exchange_id = kw['order_exchange_id']
     cancel_order(exchange=exchange,
-                 order_exchange_id=order_exchange_id)
+                 order_exchange_id=order_exchange_id,
+                 account_no=trader.account_no)
 
 
 def restapi_place_batch_order(trader, request_id, orders):
@@ -428,7 +433,8 @@ def restapi_place_batch_order(trader, request_id, orders):
     for kw in orders:
         order = _get_order_obj(kw)
         order_objs.append(order)
-    place_batch_order(order_objs)
+    place_batch_order(order_objs, account_no=trader.account_no)
+
 
 def restapi_query_capital(trader, **kw):
     stats = query_capital(trader.account_no)
@@ -449,7 +455,8 @@ def restapi_query_positions(trader, **kw):
         method_name='query_positions',
         content_name='position_list',
         pagination=kw['pagination'],
-        format_fn=format_positions
+        format_fn=format_positions,
+        account_no=trader.account_no
     )
 
 
@@ -458,7 +465,8 @@ def restapi_query_fills(trader, **kw):
         method_name='query_fills',
         content_name='fill_list',
         pagination=kw['pagination'],
-        format_fn=format_fills
+        format_fn=format_fills,
+        account_no=trader.account_no
     )
 
 
@@ -467,7 +475,8 @@ def restapi_query_orders(trader, **kw):
         method_name='query_orders',
         content_name='order_list',
         pagination=kw['pagination'],
-        format_fn=format_orders
+        format_fn=format_orders,
+        account_no=trader.account_no
     )
 
 
@@ -476,7 +485,8 @@ def restapi_query_open_orders(trader, **kw):
         method_name='query_open_orders',
         content_name='order_list',
         pagination=kw['pagination'],
-        format_fn=format_orders
+        format_fn=format_orders,
+        account_no=trader.account_no
     )
 
 

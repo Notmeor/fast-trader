@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import os
-os.environ['FAST_TRADER_CONFIG'] = \
-    '/Users/eisenheim/Documents/git/fast-trader/tmp/config.yaml'
 
 import datetime
 import time
@@ -37,7 +35,7 @@ class StrategyNotFound(Exception):
     pass
 
 
-class Manager_:
+class Manager:
 
     def __init__(self):
         self._ctx = zmq.Context()
@@ -143,12 +141,12 @@ class Manager_:
         return self._capital_records[account_no]
 
     def add_strategy(self, strategy):
-        self._strategies[strategy.strategy_id] = strategy
+        k = (strategy.account_no, strategy.strategy_id)
+        self._strategies[k] = strategy
 
     def get_strategy(self, account_no, strategy_id):
-        # FIXME: by acc
         try:
-            return self._strategies[strategy_id]
+            return self._strategies[(account_no, strategy_id)]
         except KeyError:
             raise StrategyNotFound('策略未启动')
 
@@ -183,13 +181,12 @@ class Manager_:
         return ret
 
     def start_strategy(self, strategy_id, account_no):
-        # FIXME: by acc
         try:
-            if strategy_id in self._strategies:
+            if (account_no, strategy_id) in self._strategies:
                 strategy = self.get_strategy(account_no, strategy_id)
                 # return {'ret_code': -1, 'err_msg': 'Already running'}
             else:
-                strategy = self.instantiate_strategy(strategy_id)
+                strategy = self.instantiate_strategy(account_no, strategy_id)
 
                 ret = strategy.start()
                 if ret['ret_code'] != 0:
@@ -312,19 +309,6 @@ class Manager_:
         }
         return ret
 
-    def _operate(self, account_no, request):
-
-        try:
-            strategy = self.get_strategy(account_no, request['strategy_id'])
-            if request['token'] != strategy.trader._token:
-                return {'ret_code': -1, 'err_msg': 'token错误'}
-
-            ret = getattr(strategy, request['api_name'])(**request['kw'])
-            return {'ret_code': 0, 'data': ret}
-
-        except Exception as e:
-            return {'ret_code': -1, 'err_msg': repr(e)}
-
     def handle_request(self, request):
 
         try:
@@ -379,7 +363,7 @@ class Manager_:
                               exc_info=True)
             return {'ret_code': -1, 'err_msg': repr(e)}
 
-    def instantiate_strategy(self, strategy_id):
+    def instantiate_strategy(self, account_no, strategy_id):
         ss = StrategyLoader().load()
         try:
             StrategyCls = next(
@@ -389,7 +373,8 @@ class Manager_:
 
         strategy = self.factory.generate_strategy(
             StrategyCls,
-            strategy_id=strategy_id
+            strategy_id=strategy_id,
+            account_no=account_no,
         )
         return strategy
 
@@ -413,7 +398,6 @@ class Manager_:
                 ret = self.handle_request(request)
                 self.send(ret)
                 self.logger.info(f'sent: {ret}')
-
 
 
 class StrategyLoader:
