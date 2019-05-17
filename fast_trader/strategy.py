@@ -687,9 +687,12 @@ class Strategy(StrategyWatchMixin):
 
         # NOTE: 委托回报可能晚于成交回报
         # 抛弃过期委托回报
-        if order_detail.status > order.status:
-            self.logger.warning(f'Expired order response: {order}')
-            return
+        try:
+            if order_detail.status > order.status:
+                self.logger.warning(f'Expired order response: {order}')
+                return
+        except:
+            import pdb;pdb.set_trace()
 
         order_detail.update(order)
 

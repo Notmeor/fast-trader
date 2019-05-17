@@ -448,7 +448,8 @@ class LedgerWriter:
         localtime = self.localtime.strftime('%Y-%m-%dT%H:%M:%S.%f')
 
         # FIXME: 部分成交时，顶点柜台不会更新freeze_amount
-        order_freeze_amount = order.freeze_amount
+        if 'freeze_amount' in order:
+            order_freeze_amount = order.freeze_amount
 
         # 委托本地提交后，冻结资金
         if order.status == dtp_type.ORDER_STATUS_SUBMITTED:

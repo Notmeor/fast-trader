@@ -67,7 +67,7 @@ class Mail(attrdict):
     def __init__(self, api_type, api_id, **kw):
 
         if 'handler_id' not in kw:
-            kw['handler_id'] = f'{api_id}_{api_typ}'
+            kw['handler_id'] = f'{api_id}_{api_type}'
 
         if 'sync' not in kw:
             kw['sync'] = False

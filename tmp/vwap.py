@@ -29,7 +29,7 @@ class VwapStrategy(Strategy):
 
         # 订阅行情
         tk = TickFeed()
-        tk.subscribe(['600000', '600519', '002230'])
+        tk.subscribe(['600000', '600519', '002230', '600056'])
         self.add_datasource(tk)
         
         self.available_cash_per_stock = defaultdict(lambda: 100000.)
@@ -39,7 +39,7 @@ class VwapStrategy(Strategy):
         """
         响应快照行情
         """
-        return
+
         code = data.szCode
         price = data.nAskPrice_0
         # 卖一量的20%作为当次买入量
@@ -88,10 +88,10 @@ if __name__ == '__main__':
     ea = strategy
     acc = ea._ledger_writer.accountant
 
-    strategy_1 = factory.generate_strategy(
-        VwapStrategy,
-        strategy_id=VwapStrategy.strategy_id + 1
-    )
-
-    strategy_1.start()
+#    strategy_1 = factory.generate_strategy(
+#        VwapStrategy,
+#        strategy_id=VwapStrategy.strategy_id + 1
+#    )
+#
+#    strategy_1.start()
 
