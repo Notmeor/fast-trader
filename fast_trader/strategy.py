@@ -685,9 +685,15 @@ class Strategy(StrategyWatchMixin):
 
         # NOTE: 委托回报可能晚于成交回报
         # 抛弃过期委托回报
-        if order_detail.status > order.status:
-            self.logger.warning(f'Expired order response: {order}')
-            return
+        # FIXME: 本地委托记录_orders中可能无该记录（如重启）
+        if order_detail:
+            if order_detail.status > order.status:
+                self.logger.warning(f'Expired order response: {order}')
+                return
+        else:
+            self.logger.warning(f'original_id={original_id}, exchange_id='
+                                f'{order.order_exchange_id}: 本地未发现该报单'
+                                f'记录，可能来自异地报单，或在交易中进行过策略重启')
 
         order_detail.update(order)
 
