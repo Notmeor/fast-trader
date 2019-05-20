@@ -119,6 +119,8 @@ def get_win_user_documents_dir():
 
 
 def as_wind_code(code, exchange=None):
+    if '.' in code:
+        return code
     if exchange is None:
         if code.startswith('6'):
             return code + '.SH'

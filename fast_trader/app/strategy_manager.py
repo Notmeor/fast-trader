@@ -19,7 +19,7 @@ import pandas as pd
 from fast_trader.settings import settings, Session, SqlLogHandler
 from fast_trader.strategy import Strategy, StrategyFactory
 from fast_trader.models import StrategyStatus, StrategyServerModel
-from fast_trader.utils import timeit, get_current_ts, attrdict
+from fast_trader.utils import timeit, get_current_ts, attrdict, as_wind_code
 
 from fast_trader.dtp_trade import (OrderResponse, TradeResponse,
                                    CancellationResponse,
@@ -312,6 +312,8 @@ class Manager:
             amount['sold_amount'] = 0.
 
         amount.loc['total'] = amount.sum()
+        amount['code'] = amount['code'].apply(as_wind_code)
+
         ret = amount.to_dict(orient='index')
         return ret
 
