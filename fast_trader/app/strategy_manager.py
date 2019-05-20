@@ -298,6 +298,8 @@ class Manager:
                               'sold_amount': 0.}}
 
         df = pd.DataFrame(trades)
+        df['code'] = df['code'].apply(as_wind_code)
+
         df['side'] = pd.np.where(
             df.order_side == 1,
             'bought_amount',
@@ -312,7 +314,6 @@ class Manager:
             amount['sold_amount'] = 0.
 
         amount.loc['total'] = amount.sum()
-        amount['code'] = amount['code'].apply(as_wind_code)
 
         ret = amount.to_dict(orient='index')
         return ret
