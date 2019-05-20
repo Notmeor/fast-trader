@@ -43,8 +43,6 @@ class Manager:
         self._sock = self._ctx.socket(zmq.REP)
         host = settings['strategy_manager_host']
         port = settings['strategy_manager_port']
-        # xx
-        port = 5700
         conn = f"tcp://{host}:{port}"
         self._sock.bind(conn)
 
