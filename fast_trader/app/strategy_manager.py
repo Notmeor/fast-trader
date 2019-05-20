@@ -292,8 +292,12 @@ class Manager:
         ret = strategy.get_trades()
         return ret
 
-    def get_traded_amount(self, account_no):
-        df = pd.DataFrame(self.get_trades(account_no))
+    def _calc_traded_amount(self, trades):
+        if len(trades) == 0:
+            return {'total': {'bought_amount': 0.,
+                              'sold_amount': 0.}}
+
+        df = pd.DataFrame(trades)
         df['side'] = pd.np.where(
             df.order_side == 1,
             'bought_amount',
@@ -301,21 +305,24 @@ class Manager:
         df['amount'] = df.fill_amount
         amount = df.groupby(['code', 'side'])['amount']\
             .sum().unstack().fillna(0.)
+
+        if 'bought_amount' not in amount.columns:
+            amount['bought_amount'] = 0.
+        if 'sold_amount' not in amount.columns:
+            amount['sold_amount'] = 0.
+
         amount.loc['total'] = amount.sum()
         ret = amount.to_dict(orient='index')
         return ret
 
+    def get_traded_amount(self, account_no):
+        trades = self.get_trades(account_no)
+        ret = self._calc_traded_amount(trades)
+        return ret
+
     def get_strategy_traded_amount(self, account_no, strategy_id):
-        df = pd.DataFrame(self.get_strategy_trades(account_no, strategy_id))
-        df['side'] = pd.np.where(
-            df.order_side == 1,
-            'bought_amount',
-            'sold_amount')
-        df['amount'] = df.fill_amount
-        amount = df.groupby(['code', 'side'])['amount']\
-            .sum().unstack().fillna(0.)
-        amount.loc['total'] = amount.sum()
-        ret = amount.to_dict(orient='index')
+        trades = self.get_strategy_trades(account_no, strategy_id)
+        ret = self._calc_traded_amount(trades)
         return ret
 
     def handle_request(self, request):
