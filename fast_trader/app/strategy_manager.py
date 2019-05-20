@@ -14,11 +14,12 @@ import collections
 import functools
 
 import sqlalchemy.orm.exc as orm_exc
+import pandas as pd
 
 from fast_trader.settings import settings, Session, SqlLogHandler
 from fast_trader.strategy import Strategy, StrategyFactory
 from fast_trader.models import StrategyStatus, StrategyServerModel
-from fast_trader.utils import timeit, get_current_ts
+from fast_trader.utils import timeit, get_current_ts, attrdict
 
 from fast_trader.dtp_trade import (OrderResponse, TradeResponse,
                                    CancellationResponse,
@@ -257,7 +258,7 @@ class Manager:
     def get_positions(self, account_no):
         handle = functools.partial(
             rest_api.restapi_query_positions,
-            trader=None)
+            trader=attrdict(account_no=account_no))
         positions = self._get_all_pages(handle)
         ret = [QueryPositionResponse.from_msg(pos) for pos in positions]
         return ret
@@ -265,7 +266,7 @@ class Manager:
     def get_orders(self, account_no):
         handle = functools.partial(
             rest_api.restapi_query_orders,
-            trader=None)
+            trader=attrdict(account_no=account_no))
         orders = self._get_all_pages(handle)
         ret = [QueryOrderResponse.from_msg(order) for order in orders]
         return ret
@@ -273,7 +274,7 @@ class Manager:
     def get_trades(self, account_no):
         handle = functools.partial(
             rest_api.restapi_query_fills,
-            trader=None)
+            trader=attrdict(account_no=account_no))
         trades = self._get_all_pages(handle)
         ret = [QueryTradeResponse.from_msg(trade) for trade in trades]
         return ret
@@ -294,19 +295,29 @@ class Manager:
         return ret
 
     def get_traded_amount(self, account_no):
-        # FIXME:
-        ret = {
-            'buy_amount': 600000.,
-            'sell_amount': 400000.
-        }
+        df = pd.DataFrame(self.get_trades(account_no))
+        df['side'] = pd.np.where(
+            df.order_side == 1,
+            'bought_amount',
+            'sold_amount')
+        df['amount'] = df.fill_amount
+        amount = df.groupby(['code', 'side'])['amount']\
+            .sum().unstack().fillna(0.)
+        amount.loc['total'] = amount.sum()
+        ret = amount.to_dict(orient='index')
         return ret
 
     def get_strategy_traded_amount(self, account_no, strategy_id):
-        # FIXME:
-        ret = {
-            'buy_amount': 70000.,
-            'sell_amount': 30000.
-        }
+        df = pd.DataFrame(self.get_strategy_trades(account_no, strategy_id))
+        df['side'] = pd.np.where(
+            df.order_side == 1,
+            'bought_amount',
+            'sold_amount')
+        df['amount'] = df.fill_amount
+        amount = df.groupby(['code', 'side'])['amount']\
+            .sum().unstack().fillna(0.)
+        amount.loc['total'] = amount.sum()
+        ret = amount.to_dict(orient='index')
         return ret
 
     def handle_request(self, request):
