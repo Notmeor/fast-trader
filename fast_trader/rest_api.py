@@ -55,14 +55,10 @@ class RestSettings:
         # 设定账户
         try:
             accounts = get_accounts()
+#            settings.set({'account': accounts[0]['cashAccountNo']})
 #            if len(accounts) > 1:
-#                raise RuntimeError('存在多个交易账户，需指定具体交易账号')
-#            else:
-#                settings.set({'account': accounts[0]['cashAccountNo']})
-            settings.set({'account': accounts[0]['cashAccountNo']})
-            if len(accounts) > 1:
-                self.logger.warning(
-                    f'存在多个账号，默认使用{settings["account"]}')
+#                self.logger.warning(
+#                    f'存在多个账号，默认使用{settings["account"]}')
         except:
             self.logger.error('读取账号失败', exc_info=True)
         else:
