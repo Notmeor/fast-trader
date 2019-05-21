@@ -356,6 +356,12 @@ class Manager:
             elif api_name == 'get_history_capital_records':
                 return self.get_history_capital_records(**request['kw'])
 
+            elif api_name == 'get_capital_of_all_accounts':
+                return self.get_capital(**request['kw'])
+
+            elif api_name == 'get_history_capital_records_of_all_accounts':
+                return self.get_history_capital_records(**request['kw'])
+
             elif api_name == 'start_strategy':
                 return self.start_strategy(**request['kw'])
 
