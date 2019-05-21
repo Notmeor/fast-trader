@@ -54,6 +54,7 @@ class Manager:
 
         # 缓存历史资金查询记录
         self._capital_records = collections.defaultdict(list)
+        self._capital_records_all = []
 
         self._heartbeat_thread = threading.Thread(target=self.send_heartbeat)
 
@@ -133,11 +134,21 @@ class Manager:
 
     def get_capital(self, account_no):
         cap = rest_api.query_capital(account_no=account_no)
-        self._capital_records[account_no].append(cap)
         return cap
 
     def get_history_capital_records(self, account_no):
+        cap = rest_api.query_capital(account_no=account_no)
+        self._capital_records[account_no].append(cap)
         return self._capital_records[account_no]
+
+    def get_capital_of_all_accounts(self):
+        caps = rest_api.query_capitals()
+        return caps
+
+    def get_history_capital_records_of_all_accounts(self):
+        caps = rest_api.query_capitals()
+        self._capital_records_all.append(caps)
+        return self._capital_records_all
 
     def add_strategy(self, strategy):
         k = (strategy.account_no, strategy.strategy_id)
@@ -150,7 +161,7 @@ class Manager:
             raise StrategyNotFound('策略未启动')
 
     @staticmethod
-    def get_strategy_list():
+    def get_strategy_list(account_no):
         loader = StrategyLoader()
         strategies = loader.load()
 
@@ -160,11 +171,13 @@ class Manager:
             res = (
                 session
                 .query(StrategyStatus)
-                .filter_by(strategy_id=s.strategy_id)
+                .filter_by(strategy_id=s.strategy_id,
+                           account_no=account_no)
                 .all())
             if res:
                 ea = res[0]
                 ret.append({
+                    'account_no': account_no,
                     'strategy_name': ea.strategy_name,
                     'strategy_id': ea.strategy_id,
                     'running': ea.is_running(),
@@ -172,6 +185,7 @@ class Manager:
                 })
             else:
                 ret.append({
+                    'account_no': account_no,
                     'strategy_name': s.strategy_name,
                     'strategy_id': s.strategy_id,
                     'running': False,

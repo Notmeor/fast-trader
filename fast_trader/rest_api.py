@@ -229,6 +229,18 @@ def query_capital(account_no=None):
     return ret
 
 
+def query_capitals():
+    """
+    查询所有账户资金
+    """
+    url = settings['rest_api']['query_capital'].format(
+        account_no='')
+    headers = default_query_headers
+    body = {}
+    ret = request(url, headers=headers, body=body, method='get')
+    return ret
+
+
 def query_positions(account_no=None):
     if account_no is None:
         account_no = settings['acocunt_no']
