@@ -7,6 +7,7 @@ import collections
 import contextlib
 import copy
 import pandas as pd
+import logging
 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import String, Column, Integer, Float, Boolean, Enum
@@ -194,6 +195,8 @@ class Accountant:
 
         self._records = self._load_history()
 
+        self.logger = logging.getLogger('ledger')
+
     @contextlib.contextmanager
     def _get_view(self, record):
         c, t = record.code, record.localtime
@@ -229,7 +232,9 @@ class Accountant:
             self.handle_event(event)
             self._unhandled += 1
         else:
-            raise RuntimeError('Got outdated ledger record')
+            # FIXME:
+            # raise RuntimeError('Got outdated ledger record')
+            self.logger.warning('Got outdated ledger record')
             # # allow insertion of missing events
             # length = len(self._records)
             # for i in range(length):
