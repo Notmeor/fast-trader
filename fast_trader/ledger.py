@@ -195,7 +195,7 @@ class Accountant:
 
         self._records = self._load_history()
 
-        self.logger = logging.getLogger('ledger')
+        self.logger = logging.getLogger('dispatcher')
 
     @contextlib.contextmanager
     def _get_view(self, record):
@@ -233,8 +233,10 @@ class Accountant:
             self._unhandled += 1
         else:
             # FIXME:
-            # raise RuntimeError('Got outdated ledger record')
-            self.logger.warning('Got outdated ledger record')
+            try:
+                raise RuntimeError('Got outdated ledger record')
+            except:
+                self.logger.error('Got outdated ledger record', exc_info=True)
             # # allow insertion of missing events
             # length = len(self._records)
             # for i in range(length):
