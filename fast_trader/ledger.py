@@ -195,7 +195,7 @@ class Accountant:
 
         self._records = self._load_history()
 
-        self.logger = logging.getLogger('dispatcher')
+        self.logger = logging.getLogger('dtp')
 
     @contextlib.contextmanager
     def _get_view(self, record):

@@ -117,7 +117,7 @@ logging:
     
     loggers:
 
-        dispathcer:
+        dispatcher:
             level: DEBUG
             handlers: [info_file_handler, error_file_handler, console]
             propagate: no
