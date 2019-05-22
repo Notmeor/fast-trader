@@ -39,6 +39,8 @@ class StrategyNotFound(Exception):
 class Manager:
 
     def __init__(self):
+
+        self.write_pid_file()
         self._ctx = zmq.Context()
         self._sock = self._ctx.socket(zmq.REP)
         host = settings['strategy_manager_host']
@@ -60,6 +62,12 @@ class Manager:
 
         self.logger = logging.getLogger('strategy_manager')
         self.logger.addHandler(SqlLogHandler())
+
+    @staticmethod
+    def write_pid_file(pid=None):
+        path = os.path.join(os.getenv('FAST_TRADER_HOME'), 'server.pid')
+        with open(path, 'w') as f:
+            f.write(str(pid or os.getpid()))
 
     def _load_strategy_settings(self):
         if settings['use_rest_api'] is True:
@@ -481,11 +489,12 @@ class StrategyServer:
     def __init__(self):
         self.server_id = 1
         self.proc = None
-        self._pid = None
+        self.pid = None
         self.logger = logging.getLogger('strategy_server')
 
     def start(self):
         if self.is_running():
+            Manager.write_pid_file(self.pid)
             self.logger.warning('strategy server正在运行中, 无需重复启动')
             return
 
@@ -534,7 +543,7 @@ class StrategyServer:
             .all())
         if res:
             last_ts = res[0].last_heartbeat
-            self._pid = res[0].pid
+            self.pid = res[0].pid
             current_ts = get_current_ts()
             if current_ts < last_ts + SERVER_TIMEOUT_SECS:
                 return True
