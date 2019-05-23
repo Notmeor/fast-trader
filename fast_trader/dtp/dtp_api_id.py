@@ -38,6 +38,7 @@ REQ_API_NAMES = {
 
 
 RSP_API_NAMES = {
+    'on_strategy_start': 'on_start',
     LOGIN_ACCOUNT_RESPONSE: 'on_login',
     LOGOUT_ACCOUNT_RESPONSE: 'on_logout',
     QUERY_ORDERS_RESPONSE: 'on_order_query',

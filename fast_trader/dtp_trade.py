@@ -627,7 +627,8 @@ class Trader:
         api_id = mail['api_id']
 
         # TODO: might be opt out
-        mail.body['message'] = mail.header.message
+        if 'header' in mail:
+            mail.body['message'] = mail.header.message
 
         if api_id == dtp_api_id.LOGIN_ACCOUNT_RESPONSE:
             self.on_login(mail)

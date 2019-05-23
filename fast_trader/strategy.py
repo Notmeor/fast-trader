@@ -21,8 +21,8 @@ from fast_trader.dtp_trade import (OrderResponse, TradeResponse,
 from fast_trader.models import StrategyStatus
 
 from fast_trader.settings import settings, Session
-from fast_trader.utils import (timeit, message2tuple, attrdict, as_wind_code,
-                               get_current_ts)
+from fast_trader.utils import (Mail, timeit, message2tuple, attrdict,
+                               as_wind_code, get_current_ts)
 
 from fast_trader.ledger import LedgerWriter
 
@@ -182,10 +182,14 @@ class Strategy(StrategyWatchMixin):
     # strategy_id = -1
     # trader_id = 1
 
-    def __init__(self, strategy_id, account_no):
+    def __init__(self, strategy_id, account_no, live_forever=False):
 
         self._account_no = account_no
         self.strategy_id = strategy_id
+
+        # 策略声明周期是否为永久，为否则每次启动均作为新策略运行，
+        # 不会加载历史状态
+        self.live_forever = live_forever
 
         self.logger = logging.getLogger(
             f'strategy<no={account_no};id={strategy_id};'
@@ -226,7 +230,8 @@ class Strategy(StrategyWatchMixin):
     def set_ledger_writer(self, ledger_writer=None):
         if ledger_writer is None:
             self._ledger_writer = LedgerWriter(
-                name=f'ledger_{self.trader.account_no}_{self.strategy_id}')
+                name=f'ledger_{self.trader.account_no}_{self.strategy_id}',
+                restore_history=self.live_forever)
         else:
             self._ledger_writer = ledger_writer
 
@@ -255,10 +260,10 @@ class Strategy(StrategyWatchMixin):
 
             self.logger.info('策略启动成功')
 
-            self.on_start()
-
             # 启动行情线程
             self.start_market()
+
+            self._send_on_start_event()
 
             return {'ret_code': 0, 'data': None}
 
@@ -275,6 +280,18 @@ class Strategy(StrategyWatchMixin):
         self.trader.remove_strategy(self)
         self.market.remove_strategy(self)
         self._started = False
+
+    def _send_on_start_event(self):
+        # 借用order_original_id标记该消息归属
+        order_id = self.generate_order_id()
+        api_type = 'rsp'
+        api_id = 'on_strategy_start'
+        handler_id = f'{self.account_no}_{api_id}_{api_type}'
+        mail = Mail(api_type=api_type,
+                    api_id=api_id,
+                    order_original_id=order_id,
+                    handler_id=handler_id)
+        self.dispatcher.put(mail)
 
     def start_market(self):
 
@@ -350,7 +367,7 @@ class Strategy(StrategyWatchMixin):
 
     def _check_owner(self, obj):
         """
-        判断该查询响应数据是否属于当前策略
+        判断响应数据是否属于当前策略
         """
 
         id_range = self._id_whole_range
@@ -593,6 +610,9 @@ class Strategy(StrategyWatchMixin):
             data = message['content']
             self.on_market_index(data)
 
+    def _on_start(self, message):
+        self.on_start()
+
     def on_start(self):
         """
         策略启动
@@ -699,6 +719,7 @@ class Strategy(StrategyWatchMixin):
         # FIXME: 本地委托记录_orders中可能无该记录（如重启）
         if order_detail:
             if order_detail.status > order.status:
+                self._ledger_writer.write_order_record(order)
                 self.logger.warning(f'Expired order response: {order}')
                 return
         else:

@@ -178,8 +178,9 @@ class Accountant:
 
     # TODO: memoize
 
-    def __init__(self, name):
+    def __init__(self, name, restore_history=True):
         self.name = name
+        self.should_restore_history = restore_history
 
         ddict = collections.defaultdict
         self._positions = ddict(HoldingPosition)
@@ -195,7 +196,7 @@ class Accountant:
 
         self._records = self._load_history()
 
-        self.logger = logging.getLogger('dtp')
+        self.logger = logging.getLogger('ledger')
 
     @contextlib.contextmanager
     def _get_view(self, record):
@@ -209,6 +210,8 @@ class Accountant:
         """
         加载历史流水记录
         """
+        if not self.should_restore_history:
+            return []
         # TODO: allow loading from recent records
         docs = self._store.load()
         records = list(map(StockLedgerRecord.from_msg, docs))
@@ -437,9 +440,9 @@ class Accountant:
 
 class LedgerWriter:
 
-    def __init__(self, name):
+    def __init__(self, name, restore_history=True):
         self.name = name
-        self.accountant = Accountant(name)
+        self.accountant = Accountant(name, restore_history=restore_history)
 
     @property
     def localtime(self):
@@ -454,9 +457,7 @@ class LedgerWriter:
         code = as_wind_code(order.code)
         localtime = self.localtime.strftime('%Y-%m-%dT%H:%M:%S.%f')
 
-        # FIXME: 部分成交时，顶点柜台不会更新freeze_amount
-        if 'freeze_amount' in order:
-            order_freeze_amount = order.freeze_amount
+        # NOTE: 部分成交时，顶点柜台不会更新freeze_amount
 
         # 委托本地提交后，冻结资金
         if order.status == dtp_type.ORDER_STATUS_SUBMITTED:
@@ -497,7 +498,7 @@ class LedgerWriter:
                 order_freeze = order.price * order.quantity
             else:
                 order_freeze = 0.
-            cost_freeze = order_freeze_amount - order_freeze
+            cost_freeze = order.freeze_amount - order_freeze
 
             record = StockLedgerRecord()
             record.subject = LedgerSubject.TRANSACTION
@@ -526,7 +527,7 @@ class LedgerWriter:
             record.subject = LedgerSubject.TRANSACTION
             record.category = LedgerCategory.FREEZE
             record.code = code
-            record.quantity = order_freeze_amount
+            record.quantity = order.freeze_amount
             record.price = 1.
             record.localtime = localtime
             self.accountant.put_event(record)
@@ -535,7 +536,7 @@ class LedgerWriter:
             record.subject = LedgerSubject.TRANSACTION
             record.category = LedgerCategory.CASH
             record.code = code
-            record.quantity = -order_freeze_amount
+            record.quantity = -order.freeze_amount
             record.price = 1.
             record.localtime = localtime
             self.accountant.put_event(record)
