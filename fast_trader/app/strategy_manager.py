@@ -222,11 +222,10 @@ class Manager:
             return {'ret_code': -1, 'err_msg': repr(e)}
 
     def stop_strategy(self, strategy_id, account_no):
-        # FIXME: by acc
         try:
             strategy = self.get_strategy(account_no, strategy_id)
             strategy.stop()
-            self._strategies.pop(strategy_id)
+            self._strategies.pop((account_no, strategy_id))
 
             session = Session()
             (
