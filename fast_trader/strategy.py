@@ -16,7 +16,7 @@ from fast_trader.dtp import type_pb2 as dtp_type
 from fast_trader.dtp_trade import (OrderResponse, TradeResponse,
                                    CancellationResponse,
                                    QueryOrderResponse, QueryTradeResponse,
-                                   QueryPositionResponse)
+                                   QueryPositionResponse, TimerTask)
 
 from fast_trader.models import StrategyStatus
 
@@ -908,6 +908,24 @@ class Strategy(StrategyWatchMixin):
         for order in orders:
             self.cancel_order(**order)
 
+    def run_at_time(self, time, func, args=None, kw=None):
+        task = TimerTask(
+            schedule=time,
+            some_callable=func,
+            args=args,
+            kw=kw)
+
+        self.dispatcher.timer.add_task(task)
+
+    def run_at_intervals(self, interval, func, args=None, kw=None):
+        task = TimerTask(
+            schedule=interval,
+            some_callable=func,
+            args=args,
+            kw=kw)
+
+        self.dispatcher.timer.add_task(task)
+
 
 class StrategyFactory:
     """
@@ -935,9 +953,9 @@ class StrategyFactory:
         self.traders = {}
         # self.trader = Trader(self.dispatcher, self.dtp, trader_id)
 
-    def generate_strategy(self, StrategyCls, strategy_id, account_no):
+    def generate_strategy(self, strategy_cls, strategy_id, account_no):
 
-        strategy = StrategyCls(strategy_id, account_no)
+        strategy = strategy_cls(strategy_id, account_no)
 
         if account_no not in self.traders:
             trader = Trader(

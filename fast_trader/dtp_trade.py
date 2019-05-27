@@ -118,6 +118,79 @@ class QueryPositionResponse:
         return msg
 
 
+class TimerTask:
+
+    def __init__(self, schedule, some_callable, args=None, kw=None):
+
+        _valid_schedule_types = (datetime.timedelta, datetime.datetime)
+        if isinstance(schedule, datetime.timedelta):
+            self.type = 'interval'
+        elif isinstance(schedule, datetime.datetime):
+            self.type = 'once'
+        else:
+            raise TypeError(f'`schedule` has to be one of'
+                            f'{_valid_schedule_types}), got {type(schedule)}')
+
+        self.schedule = schedule
+        self.callable = some_callable
+        self.args = args or ()
+        self.kw = kw or {}
+
+        self._last_time = self.now
+        self._finished = False
+
+    @property
+    def now(self):
+        return datetime.datetime.now()
+
+    def is_finished(self):
+        return self._finished
+
+    def time_to_run(self):
+        if self._finished:
+            return False
+
+        now = datetime.datetime.now()
+        if self.type == 'interval':
+            target_time = self._last_time + self.schedule
+        else:
+            target_time = self.schedule
+
+        if now >= target_time:
+            return True
+
+        return False
+
+    def execute(self):
+        try:
+            self.callable(*self.args, **self.kw)
+        finally:
+            if self.type == 'once':
+                self._finished = True
+            else:
+                # FIXME: should interval task be exed exactly same times
+                # as all intervals elapsed
+                self._last_time = self.now
+
+
+class Timer:
+
+    def __init__(self):
+        self.tasks = []
+
+    def click(self):
+
+        for task in self.tasks:
+            if task.time_to_run():
+                task.execute()
+
+    def add_task(self, task):
+        self.tasks.append(task)
+
+    def remove_task(self, task):
+        raise NotImplementedError
+
+
 class Dispatcher:
 
     def __init__(self, **kw):
@@ -132,6 +205,8 @@ class Dispatcher:
 
         self._rsp_processor = None
         self._req_processor = None
+
+        self.timer = Timer()
 
         self._running = False
         self._service_suspended = False
@@ -179,6 +254,9 @@ class Dispatcher:
                 time.sleep(0.0001)
             except Exception as e:
                 self.logger.error(str(e), exc_info=True)
+
+            # signal timer event
+            self.timer.click()
 
     def bind(self, handler_id, handler, override=False):
         if not override and handler_id in self._handlers:

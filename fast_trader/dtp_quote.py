@@ -65,7 +65,9 @@ class MarketFeed(object):
         self._queue.put(msg)
 
     def _start(self):
-
+        # FIXME: could only sub to less than 1000 topics
+        # 1) try creating sock in sub thread
+        # 2) try batching every 100 subs and sleeping in between
         self._socket.connect(self.url)
 
         if self.subscribed_all:
