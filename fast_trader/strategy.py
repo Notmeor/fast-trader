@@ -10,7 +10,8 @@ import pandas as pd
 
 from fast_trader.dtp_trade import DTP, Trader, Dispatcher
 from fast_trader.dtp_quote import (Transaction, Snapshot,
-                                   MarketOrder, Index, OrderQueue)
+                                   MarketOrder, Index, OrderQueue,
+                                   FEED_TYPE_NAME_MAPPING)
 
 from fast_trader.dtp import type_pb2 as dtp_type
 from fast_trader.dtp_trade import (OrderResponse, TradeResponse,
@@ -31,10 +32,36 @@ from fast_trader.ledger import LedgerWriter
 dtp_type.ORDER_STATUS_SUBMITTED = -1
 
 
+class Subscription:
+
+    def __init__(self, name=''):
+        self.name = name
+        self.subscribed_all = False
+        self.subscribed_codes = []
+
+    def has_subscribed(self, code):
+        if self.subscribed_all:
+            return True
+        if code in self.subscribed_codes:
+            return True
+        return False
+
+
 class Market:
 
     def __init__(self):
+        self.datasources = {}
         self._strategies = []
+        self._started = False
+
+    def start(self):
+        for ds in self.datasources.values():
+            ds.start()
+        self._started = True
+
+    @property
+    def started(self):
+        return self._started
 
     def add_strategy(self, strategy):
         self._strategies.append(strategy)
@@ -42,17 +69,74 @@ class Market:
     def remove_strategy(self, strategy):
         self._strategies.remove(strategy)
 
-    @staticmethod
-    def has_subscribed(strategy, message):
-        ds_name = message['api_id']
+    def subscribe(self, feed_type, codes):
 
-        for ds in strategy.subscribed_datasources:
-            if ds.name == ds_name:
-                raise NotImplementedError
+        if feed_type.name not in self.datasources:
+            self._start_streamer(feed_type)
 
-    def on_quote_message(self, message):
+        streamer = self.datasources[feed_type.name]
+        if codes is None:
+            streamer.subsribe_all()
+        else:
+            streamer.subscribe(codes)
+
+    def subsribe_all(self, feed_type):
+        self.subscribe(feed_type, codes=None)
+
+    def put(self, message):
+        # TODO: 期货类FuturesFeed, OptionsFeed 字段名称不一致
+
+        code = message['content']['szCode']
+        feed_name = message['api_id']
+        feed_type = FEED_TYPE_NAME_MAPPING[feed_name]
         for ea in self._strategies:
-            ea.on_quote_message(message)
+            if ea.started and ea.has_subscribed(feed_type, code):
+                ea.on_quote_message(message)
+
+    def _start_streamer(self, feed_type):
+        streamer = feed_type()
+        streamer.add_listener(self)
+        self.datasources[feed_type.name] = streamer
+        if self._started:
+            streamer.start()
+
+
+class _limitedattrdict(attrdict):
+    fields = {}
+
+    def __init__(self, **kw):
+        _fields = self.fields.copy()
+        for k in kw:
+            if k in self.fields:
+                _fields[k] = kw[k]
+        super().__init__(**_fields)
+
+
+class PlacedOrder(_limitedattrdict):
+    """
+    报单返回结构
+
+    报单委托的返回类型，会根据回报更新，汇总了报单
+    回报与撤单回报的状态信息
+    """
+
+    fields = dict(
+        account_no=None,  # str, 账号
+        code=None,  # str, 证券代码
+        exchange=None,  # int, 交易所
+        order_exchange_id=None,  # str, 交易所委托编号
+        order_original_id=None,  # str, 客户报单编号
+        price=None,  # float, 委托价格
+        quantity=None,  # int, 委托数量
+        order_side=None,  # int, 交易方向
+        status=None,  # int, 委托状态
+        total_fill_quantity=None,  # int, 总成交数量
+        cancelled_quantity=None,  # int, 总撤单数量
+        freeze_amount=None,  # float, 冻结金额
+        message=None,  # str, 备注
+        placed_time=None,  # str, 委托时间
+        placed_local_time=None  # int, 委托本地时间
+    )
 
 
 def to_timeint(dt):
@@ -94,6 +178,37 @@ def as_trade_msg(trade):
         f'委托价格={trade.fill_price}, 本次成交数量={trade.fill_quantity}, '\
         f'已成交数量={trade.total_fill_quantity}, 总委托数量={trade.quantity}'
     return msg
+
+
+class StrategyMdSubMixin:
+
+    def subscribe(self, feed_type, codes):
+        if not hasattr(self, '_md_subscriptions'):
+            self._md_subscriptions = {}
+
+        feed_name = feed_type.name
+        if feed_name not in self._md_subscriptions:
+            self._md_subscriptions[feed_name] = Subscription(name=feed_name)
+        sub = self._md_subscriptions[feed_name]
+
+        if codes is None:
+            sub.subscribed_all = True
+            self.market.subscribe_all(feed_type)
+        else:
+            if isinstance(codes, str):
+                codes = [codes]
+            for c in codes:
+                if c not in sub.subscribed_codes:
+                    sub.subscribed_codes.append(c)
+            self.market.subscribe(feed_type, codes)
+
+    def subscribe_all(self, feed_type):
+        self.subscribe(self, feed_type, codes=None)
+
+    def has_subscribed(self, feed_type, code):
+        sub = self._md_subscriptions[feed_type.name]
+        ret = sub.has_subscribed(code)
+        return ret
 
 
 class StrategyWatchMixin:
@@ -176,7 +291,7 @@ class StrategyWatchMixin:
         session.close()
 
 
-class Strategy(StrategyWatchMixin):
+class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
 
     strategy_name = 'unnamed'
     # strategy_id = -1
@@ -187,7 +302,7 @@ class Strategy(StrategyWatchMixin):
         self._account_no = account_no
         self.strategy_id = strategy_id
 
-        # 策略声明周期是否为永久，为否则每次启动均作为新策略运行，
+        # 策略生命周期是否为永久，为否则每次启动均作为新策略运行，
         # 不会加载历史状态
         self.live_forever = live_forever
 
@@ -206,7 +321,7 @@ class Strategy(StrategyWatchMixin):
 
         self._positions = {}
         self._orders = collections.defaultdict(attrdict)
-        self._trades = collections.defaultdict(attrdict)
+        self._trades = collections.defaultdict(dict)
         self._request_id_history = []
 
         self.subscribed_datasources = []
@@ -251,19 +366,19 @@ class Strategy(StrategyWatchMixin):
     def start(self):
 
         if self.trader.logined:
-            self._started = True
 
             self.set_ledger_writer()
 
             # 更新策略状态的本地记录
             self._mark_strategy_as_started()
 
-            self.logger.info('策略启动成功')
-
-            # 启动行情线程
-            self.start_market()
+            # 启动行情订阅
+            self.market.start()
 
             self._send_on_start_event()
+
+            self._started = True
+            self.logger.info('策略启动成功')
 
             return {'ret_code': 0, 'data': None}
 
@@ -275,6 +390,10 @@ class Strategy(StrategyWatchMixin):
     def stop(self):
         self.remove_self()
         self.logger.info('策略已终止')
+
+    @property
+    def started(self):
+        return self._started
 
     def remove_self(self):
         self.trader.remove_strategy(self)
@@ -557,30 +676,30 @@ class Strategy(StrategyWatchMixin):
             .reset_index(drop=True)
         return trades
 
-    def add_datasource(self, datasource):
-        """
-        添加行情数据源
-        """
-
-        name = datasource.name
-
-        dispatcher = self.dispatcher
-
-        # FIXME: bind once only
-        try:
-            dispatcher.bind('{}_rsp'.format(name),
-                            self.market.on_quote_message)
-
-            datasource.add_listener(dispatcher)
-
-        except Exception as e:
-            print(e)
-            pass
-
-        self.subscribed_datasources.append(datasource)
-
-        if self._started:
-            datasource.start()
+#    def add_datasource(self, datasource):
+#        """
+#        添加行情数据源
+#        """
+#
+#        name = datasource.name
+#
+#        dispatcher = self.dispatcher
+#
+#        # FIXME: bind once only
+#        try:
+#            dispatcher.bind('{}_rsp'.format(name),
+#                            self.market.on_quote_message)
+#
+#            datasource.add_listener(dispatcher)
+#
+#        except Exception as e:
+#            print(e)
+#            pass
+#
+#        self.subscribed_datasources.append(datasource)
+#
+#        if self._started:
+#            datasource.start()
 
     def on_quote_message(self, message):
 
@@ -671,7 +790,7 @@ class Strategy(StrategyWatchMixin):
             # FIXME: strategy might start before trade responses and after
             # order responses
             order_detail = self._orders[original_id]
-            order_detail.update(trade)
+            # order_detail.update(trade)
 
             # 成交时，可能只会收到成交回报，而不会收到报单回报
             # 此时手动更新order_status
@@ -683,10 +802,14 @@ class Strategy(StrategyWatchMixin):
             elif trade.total_fill_quantity == trade.quantity:
                 order_detail['status'] = dtp_type.ORDER_STATUS_FILLED
 
+            # 可能已收到成交回报，但未收到任何报单回报，更新order_exchange_id
+            order_detail['order_exchange_id'] = trade.order_exchange_id
+
         if msg.body.fill_status != 1:
             self.logger.error(msg)
         else:
-            self._trades[trade.order_original_id] = trade
+            trades_by_order_id = self._trades[trade.order_original_id]
+            trades_by_order_id[trade.fill_exchange_id] = trade
 
             # 写入账户流水
             self._ledger_writer.write_trade_record(trade)
@@ -721,17 +844,15 @@ class Strategy(StrategyWatchMixin):
             if order_detail.status > order.status:
                 self._ledger_writer.write_order_record(order)
                 self.logger.warning(f'Expired order response: {order}')
-                return
+
+            else:
+                order_detail.update(order)
+                self._ledger_writer.write_order_record(order)
+                self.on_order(order)
         else:
             self.logger.warning(f'original_id={original_id}, exchange_id='
                                 f'{order.order_exchange_id}: 本地未发现该报单'
                                 f'记录，可能来自异地报单，或在交易中进行过策略重启')
-
-        order_detail.update(order)
-
-        self._ledger_writer.write_order_record(order)
-
-        self.on_order(order)
 
     def on_order(self, data):
         """

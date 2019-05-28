@@ -714,7 +714,7 @@ class Trader:
             self.on_logout(mail)
         else:
             for ea in self._strategies:
-                if ea._check_owner(mail):
+                if ea.started and ea._check_owner(mail):
                     getattr(ea, dtp_api_id.RSP_API_NAMES[api_id])(mail)
 
     @property

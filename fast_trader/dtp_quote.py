@@ -28,6 +28,7 @@ class MarketFeed(object):
         self._socket = self._ctx.socket(zmq.SUB)
         self._socket.setsockopt(zmq.RCVHWM, 0)
         self._socket.setsockopt(zmq.RCVBUF, 102400)
+
         self._queue = queue.Queue()
         self._running = False
 
@@ -64,18 +65,27 @@ class MarketFeed(object):
         msg = self._socket.recv()
         self._queue.put(msg)
 
-    def _start(self):
-        # FIXME: could only sub to less than 1000 topics
-        # 1) try creating sock in sub thread
-        # 2) try batching every 100 subs and sleeping in between
-        self._socket.connect(self.url)
-
-        if self.subscribed_all:
-            self.sub('')
-        else:
-            for code in self.subscribed_codes:
-                topic = self._to_topic(code)
+    def _do_sub_in_background(self, codes):
+        """
+        Calling `socket.subscribe` in a blocking way results
+        in only part of desired topics being successfully
+        subscribed, especially when there are over 1000 topics.
+        This might result from some buffer overload on the
+        server side.
+        """
+        def _subscribe():
+            codes_to_subscribe = codes[:]
+            while codes_to_subscribe:
+                topic = self._to_topic(codes_to_subscribe.pop())
                 self.sub(topic)
+                time.sleep(0.001)
+
+        _suber = threading.Thread(target=_subscribe)
+        _suber.start()
+
+    def _start(self):
+
+        self._socket.connect(self.url)
         self._running = True
 
         while self._running:
@@ -84,8 +94,7 @@ class MarketFeed(object):
                 self._recv()
 
     def on_data(self, data):
-
-        print(data, '\n')
+        raise NotImplementedError
 
 
 class QuoteFeed(MarketFeed):
@@ -110,12 +119,8 @@ class QuoteFeed(MarketFeed):
 
     def start(self):
 
-        if not self.subscribed_codes:
-            if self.subscribed_all:
-                self.logger.warning('已订阅全市场{}行情!'.format(self.name))
-            else:
-                self.logger.warning('当前订阅列表为空!')
-                return
+        if self.subscribed_all:
+            self.logger.warning('已订阅全市场{}行情!'.format(self.name))
 
         if self.is_running():
             return
@@ -139,18 +144,16 @@ class QuoteFeed(MarketFeed):
         return topic
 
     def subscribe(self, code):
-
-        if isinstance(code, list):
-            for c in code:
-                self.subscribe(c)
-        elif isinstance(code, str):
-            if code in self.subscribed_codes:
-                return
-            self.subscribed_codes.append(code)
-
+        if isinstance(code, str):
+            codes = [code]
         else:
-            raise TypeError(
-                'Expected `list` or `str`, got `{}`'.format(type(code)))
+            codes = code
+
+        for c in codes:
+            if c not in self.subscribed_codes:
+                self.subscribed_codes.append(c)
+        if codes:
+            self._do_sub_in_background(codes)
 
     def subscribe_all(self):
         self.sub('')
@@ -281,6 +284,17 @@ class FuturesFeed(QuoteFeed):
     def format(self, data):
         ret = message2dict(data)
         return ret
+
+
+FEED_TYPE_NAME_MAPPING = {
+    'tick_feed': TickFeed,
+    'trade_feed': TradeFeed,
+    'order_feed': OrderFeed,
+    'order_queue': QueueFeed,
+    'index_feed': IndexFeed,
+    'options_feed': OptionsFeed,
+    'ctp_feed': FuturesFeed
+}
 
 
 def get_pb_fields(proto_type):
