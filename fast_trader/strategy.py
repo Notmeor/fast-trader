@@ -297,14 +297,14 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
     # strategy_id = -1
     # trader_id = 1
 
-    def __init__(self, strategy_id, account_no, live_forever=False):
+    def __init__(self, strategy_id, account_no, persistent=True):
 
         self._account_no = account_no
         self.strategy_id = strategy_id
 
         # 策略生命周期是否为永久，为否则每次启动均作为新策略运行，
         # 不会加载历史状态
-        self.live_forever = live_forever
+        self.persistent = persistent
 
         self.logger = logging.getLogger(
             f'strategy<no={account_no};id={strategy_id};'
@@ -346,7 +346,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         if ledger_writer is None:
             self._ledger_writer = LedgerWriter(
                 name=f'ledger_{self.trader.account_no}_{self.strategy_id}',
-                restore_history=self.live_forever)
+                restore_history=self.persistent)
         else:
             self._ledger_writer = ledger_writer
 
@@ -411,11 +411,6 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
                     order_original_id=order_id,
                     handler_id=handler_id)
         self.dispatcher.put(mail)
-
-    def start_market(self):
-
-        for ds in self.subscribed_datasources:
-            ds.start()
 
     def add_cash(self, value):
         """
@@ -670,36 +665,15 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         """
         acc = self._ledger_writer.accountant
         df = pd.DataFrame(list(map(lambda x: x.__dict__, acc._records)))
+
+        if df.empty:
+            return df
+
         trades = df\
             .query("subject == 'transaction' and category == 'security'")\
             .loc[:, ['code', 'quantity', 'price', 'localtime']]\
             .reset_index(drop=True)
         return trades
-
-#    def add_datasource(self, datasource):
-#        """
-#        添加行情数据源
-#        """
-#
-#        name = datasource.name
-#
-#        dispatcher = self.dispatcher
-#
-#        # FIXME: bind once only
-#        try:
-#            dispatcher.bind('{}_rsp'.format(name),
-#                            self.market.on_quote_message)
-#
-#            datasource.add_listener(dispatcher)
-#
-#        except Exception as e:
-#            print(e)
-#            pass
-#
-#        self.subscribed_datasources.append(datasource)
-#
-#        if self._started:
-#            datasource.start()
 
     def on_quote_message(self, message):
 
@@ -1074,9 +1048,11 @@ class StrategyFactory:
         self.traders = {}
         # self.trader = Trader(self.dispatcher, self.dtp, trader_id)
 
-    def generate_strategy(self, strategy_cls, strategy_id, account_no):
+    def generate_strategy(self, strategy_cls, strategy_id,
+                          account_no, persistent=False):
 
         strategy = strategy_cls(strategy_id, account_no)
+        strategy.persistent = persistent
 
         if account_no not in self.traders:
             trader = Trader(

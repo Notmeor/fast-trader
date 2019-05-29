@@ -576,7 +576,7 @@ class LedgerWriter:
         """
         code = as_wind_code(trade.code)
         localtime = self.localtime.strftime('%Y-%m-%dT%H:%M:%S.%f')
-        _sign = -1 if trade.order_side == dtp_type.ORDER_SIDE_BUY else 1
+        _sign = 1 if trade.order_side == dtp_type.ORDER_SIDE_BUY else -1
         clear_amount = abs(trade.clear_amount)
         cur_cost = abs(clear_amount - trade.fill_amount)
 
@@ -602,10 +602,22 @@ class LedgerWriter:
         record.subject = LedgerSubject.TRANSACTION
         record.category = LedgerCategory.SECURITY
         record.code = code
-        record.quantity = trade.fill_quantity * -_sign
+        record.quantity = trade.fill_quantity * _sign
         record.price = trade.fill_price
         record.localtime = localtime
         self.accountant.put_event(record)
+
+        # 卖出成交，持仓价值 -> 可用余额
+        if trade.order_side == dtp_type.ORDER_SIDE_SELL:
+            transfer_value = trade.fill_quantity * -_sign * trade.fill_price
+            record = StockLedgerRecord()
+            record.subject = LedgerSubject.TRANSACTION
+            record.category = LedgerCategory.CASH
+            record.code = code
+            record.quantity = transfer_value
+            record.price = 1.
+            record.localtime = localtime
+            self.accountant.put_event(record)
 
         # 交易费用变动
         record = StockLedgerRecord()
