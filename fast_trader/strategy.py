@@ -766,29 +766,36 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
             order_detail = self._orders[original_id]
             # order_detail.update(trade)
 
-            # 成交时，可能只会收到成交回报，而不会收到报单回报
-            # 此时手动更新order_status
-            if 0 < trade.total_fill_quantity < trade.quantity:
-                if order_detail.status not in [
-                        dtp_type.ORDER_STATUS_PARTIAL_CANCELLED]:
-                    order_detail['status'] = \
-                        dtp_type.ORDER_STATUS_PARTIAL_FILLED
-            elif trade.total_fill_quantity == trade.quantity:
-                order_detail['status'] = dtp_type.ORDER_STATUS_FILLED
+            # FIXME: handle report from previous session
+            if order_detail:
+                # 成交时，可能只会收到成交回报，而不会收到报单回报
+                # 此时手动更新order_status
+                if 0 < trade.total_fill_quantity < trade.quantity:
+                    if order_detail.status not in [
+                            dtp_type.ORDER_STATUS_PARTIAL_CANCELLED]:
+                        order_detail['status'] = \
+                            dtp_type.ORDER_STATUS_PARTIAL_FILLED
+                elif trade.total_fill_quantity == trade.quantity:
+                    order_detail['status'] = dtp_type.ORDER_STATUS_FILLED
 
-            # 可能已收到成交回报，但未收到任何报单回报，更新order_exchange_id
-            order_detail['order_exchange_id'] = trade.order_exchange_id
+                # 可能已收到成交回报，但未收到任何报单回报，更新order_exchange_id
+                order_detail['order_exchange_id'] = trade.order_exchange_id
 
-        if msg.body.fill_status != 1:
-            self.logger.error(msg)
-        else:
-            trades_by_order_id = self._trades[trade.order_original_id]
-            trades_by_order_id[trade.fill_exchange_id] = trade
+                if msg.body.fill_status != 1:
+                    self.logger.error(msg)
+                else:
+                    trades_by_order_id = self._trades[trade.order_original_id]
+                    trades_by_order_id[trade.fill_exchange_id] = trade
 
-            # 写入账户流水
-            self._ledger_writer.write_trade_record(trade)
+                    # 写入账户流水
+                    self._ledger_writer.write_trade_record(trade)
 
-            self.on_trade(trade)
+                    self.on_trade(trade)
+
+            else:
+                self.logger.warning(f'original_id={original_id}, exchange_id='
+                                    f'{trade.order_exchange_id}: 本地未发现该报单'
+                                    f'记录，可能来自异地报单，或在交易中进行过策略重启')
 
     def on_trade(self, data):
         """
