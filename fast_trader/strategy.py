@@ -49,7 +49,9 @@ class Subscription:
 
 class Market:
 
-    def __init__(self):
+    def __init__(self, dispatcher):
+
+        self.dispatcher = dispatcher
         self.datasources = {}
         self._strategies = []
         self._started = False
@@ -83,9 +85,8 @@ class Market:
     def subsribe_all(self, feed_type):
         self.subscribe(feed_type, codes=None)
 
-    def put(self, message):
+    def on_quote_message(self, message):
         # TODO: 期货类FuturesFeed, OptionsFeed 字段名称不一致
-
         code = message['content']['szCode']
         feed_name = message['api_id']
         feed_type = FEED_TYPE_NAME_MAPPING[feed_name]
@@ -95,7 +96,12 @@ class Market:
 
     def _start_streamer(self, feed_type):
         streamer = feed_type()
-        streamer.add_listener(self)
+
+        # 注册dispatcher
+        streamer.add_listener(self.dispatcher)
+        self.dispatcher.bind(f'{streamer.name}_rsp',
+                             self.on_quote_message)
+
         self.datasources[feed_type.name] = streamer
         if self._started:
             streamer.start()
@@ -177,6 +183,19 @@ def as_trade_msg(trade):
         f'证券代码={trade.code}, 方向={drc}, '\
         f'委托价格={trade.fill_price}, 本次成交数量={trade.fill_quantity}, '\
         f'已成交数量={trade.total_fill_quantity}, 总委托数量={trade.quantity}'
+    return msg
+
+
+def as_cancellation_msg(canc):
+    drc = {
+        dtp_type.ORDER_SIDE_BUY: '买入',
+        dtp_type.ORDER_SIDE_SELL: '卖出',
+    }[canc.order_side]
+
+    msg = f'已撤单，委托编号={canc.order_exchange_id}, '\
+        f'证券代码={canc.code}, 方向={drc}, '\
+        f'委托数量={canc.quantity}, 已成交数量={canc.total_fill_quantity}, '\
+        f'已撤单数量={canc.cancelled_quantity}'
     return msg
 
 
@@ -329,9 +348,6 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         # order_exchange_id -> order_original_id
         self._order_id_mapping = {}
 
-    def set_dispatcher(self, dispatcher):
-        self.dispatcher = dispatcher
-
     def set_trader(self, trader):
         self.trader = trader
         self.trader.add_strategy(self)
@@ -410,7 +426,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
                     api_id=api_id,
                     order_original_id=order_id,
                     handler_id=handler_id)
-        self.dispatcher.put(mail)
+        self.trader.dispatcher.put(mail)
 
     def add_cash(self, value):
         """
@@ -796,6 +812,8 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
                 self.logger.warning(f'original_id={original_id}, exchange_id='
                                     f'{trade.order_exchange_id}: 本地未发现该报单'
                                     f'记录，可能来自异地报单，或在交易中进行过策略重启')
+        else:
+            self.logger.warning(f'成交回报错误: {msg.header}, {msg.body}')
 
     def on_trade(self, data):
         """
@@ -809,6 +827,11 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         """
         order = OrderResponse.from_msg(msg.body)
 
+        # FIXME: 暂时生产上的版本，柜台拒单，status依然返回UNDEFINED
+        if msg.header.code == dtp_type.RESPONSE_CODE_FORBIDDEN and\
+                order.status == dtp_type.ORDER_STATUS_UNDEFINED:
+            order['status'] = dtp_type.ORDER_STATUS_FAILED
+
         self._order_id_mapping[order['order_exchange_id']] =\
             order['order_original_id']
 
@@ -818,18 +841,27 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         original_id = order.order_original_id
         order_detail = self._orders[original_id]
 
-        # NOTE: 委托回报可能晚于成交回报
-        # 抛弃过期委托回报
         # FIXME: 本地委托记录_orders中可能无该记录（如重启）
         if order_detail:
-            if order_detail.status > order.status:
-                self._ledger_writer.write_order_record(order)
-                self.logger.warning(f'Expired order response: {order}')
 
+            if msg.header.code != dtp_type.RESPONSE_CODE_OK:
+
+                if order.status == dtp_type.ORDER_STATUS_FAILED:
+                    order_detail['status'] = dtp_type.ORDER_STATUS_FAILED
+                else:
+                    self.logger.warning(f'委托回报错误: {msg.header}, {msg.body}')
             else:
-                order_detail.update(order)
-                self._ledger_writer.write_order_record(order)
-                self.on_order(order)
+
+                # NOTE: 委托回报可能晚于成交回报
+                # 抛弃过期委托回报
+                if order_detail.status > order.status:
+                    self._ledger_writer.write_order_record(order)
+                    self.logger.warning(f'Expired order response: {order}')
+
+                else:
+                    order_detail.update(order)
+                    self._ledger_writer.write_order_record(order)
+                    self.on_order(order)
         else:
             self.logger.warning(f'original_id={original_id}, exchange_id='
                                 f'{order.order_exchange_id}: 本地未发现该报单'
@@ -866,16 +898,23 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         """
         data = CancellationResponse.from_msg(msg.body)
 
-        self.logger.info(f'已撤单, 委托编号={data.order_exchange_id}')
-
         if msg.header.code == dtp_type.RESPONSE_CODE_OK:
+            self.logger.info(as_cancellation_msg(data))
+
             original_id = data.order_original_id
             order_detail = self._orders[original_id]
             order_detail.update(data)
 
-        self._ledger_writer.write_order_record(data)
+            self._ledger_writer.write_order_record(data)
 
-        self.on_order_cancelation(data)
+            self.on_order_cancelation(data)
+
+        # 撤单时可能已完成成交，此时返回撤单失败状态
+        else:
+            if data.status == dtp_type.ORDER_STATUS_FAILED:
+                self.logger.info(f'无法撤单, 委托编号={data.order_exchange_id}')
+            else:
+                self.logger.info(f'撤单错误：{msg.header}, {msg.body}')
 
     def on_order_cancelation(self, msg):
         """
@@ -1049,11 +1088,10 @@ class StrategyFactory:
         self.dtp = DTP(self.dispatcher)
 
         # 行情通道
-        self.market = Market()
+        self.market = Market(self.dispatcher)
 
         # trader与账号一一对应
         self.traders = {}
-        # self.trader = Trader(self.dispatcher, self.dtp, trader_id)
 
     def generate_strategy(self, strategy_cls, strategy_id,
                           account_no, persistent=False):
@@ -1086,9 +1124,6 @@ class StrategyFactory:
             trader = self.traders[account_no]
 
         strategy.set_trader(trader)
-
-        strategy.set_dispatcher(self.dispatcher)
-
         strategy.set_market(self.market)
 
         return strategy
