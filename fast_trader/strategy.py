@@ -17,7 +17,8 @@ from fast_trader.dtp import type_pb2 as dtp_type
 from fast_trader.dtp_trade import (OrderResponse, TradeResponse,
                                    CancellationResponse,
                                    QueryOrderResponse, QueryTradeResponse,
-                                   QueryPositionResponse, TimerTask)
+                                   QueryPositionResponse, TimerTask,
+                                   str2float)
 
 from fast_trader.models import StrategyStatus
 
@@ -932,6 +933,11 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         order['status'] = dtp_type.ORDER_STATUS_SUBMITTED
         order['placed_localtime'] = to_timeint(datetime.datetime.now())
         order = attrdict(order)
+
+        # 委托接口中传入的价格可能为`str`类型,转为`float`
+        if isinstance(order['price'], str):
+            order['price'] = str2float(order['price'])
+
         self._orders[order.order_original_id] = order
 
         # 本地报单后，发出一个order submitted事件
