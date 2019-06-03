@@ -1056,7 +1056,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
             args=args,
             kw=kw)
 
-        self.dispatcher.timer.add_task(task)
+        self.trader.dispatcher.timer.add_task(task)
 
     def run_at_intervals(self, interval, func, args=None, kw=None):
         task = TimerTask(
@@ -1065,7 +1065,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
             args=args,
             kw=kw)
 
-        self.dispatcher.timer.add_task(task)
+        self.trader.dispatcher.timer.add_task(task)
 
 
 class StrategyFactory:
