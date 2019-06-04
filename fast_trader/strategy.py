@@ -327,7 +327,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         self.persistent = persistent
 
         self.logger = logging.getLogger(
-            f'strategy<no={account_no};id={strategy_id};'
+            f'strategy.<no={account_no};id={strategy_id};'
             f'name={self.strategy_name}>')
 
         if self.strategy_id < 0 or not isinstance(self.strategy_id, int):
@@ -934,7 +934,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         order['placed_localtime'] = to_timeint(datetime.datetime.now())
         order = attrdict(order)
 
-        # 委托接口中传入的价格可能为`str`类型,转为`float`
+        # 委托接口中传入的价格可能为`str`类型, 转为`float`
         if isinstance(order['price'], str):
             order['price'] = str2float(order['price'])
 
