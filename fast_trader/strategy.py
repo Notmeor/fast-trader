@@ -787,11 +787,13 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
             if order_detail:
                 # 成交时，可能只会收到成交回报，而不会收到报单回报
                 # 此时手动更新order_status
+                # FIXME: 成交回报暂无法保证顺序，只能使用fill_quantity字段累加出总成交量
                 if 0 < trade.total_fill_quantity < trade.quantity:
                     if order_detail.status not in [
                             dtp_type.ORDER_STATUS_PARTIAL_CANCELLED]:
-                        order_detail['status'] = \
-                            dtp_type.ORDER_STATUS_PARTIAL_FILLED
+                        if order_detail.status < dtp_type.ORDER_STATUS_PARTIAL_FILLED:
+                            order_detail['status'] = \
+                                dtp_type.ORDER_STATUS_PARTIAL_FILLED
                 elif trade.total_fill_quantity == trade.quantity:
                     order_detail['status'] = dtp_type.ORDER_STATUS_FILLED
 
