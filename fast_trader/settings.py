@@ -13,7 +13,8 @@ def load_config(path=None):
     if path is None:
         path = os.getenv('FAST_TRADER_CONFIG')
     if path is None:
-        dirname = os.path.dirname(__file__)
+        _dir = os.path.dirname
+        dirname = _dir(_dir(__file__))
         path = os.path.join(dirname, 'config.yaml')
     with open(path, 'r', encoding='UTF-8') as f:
         conf = yaml.load(f)
@@ -26,7 +27,7 @@ class Settings:
         self._lock = threading.Lock()
         self._default_settings = self._format(load_config())
         self._custom_settings = self._default_settings.copy()
-    
+
     def _format(self, conf):
         conf_str = str(conf).replace(
             '{fast_trader_home}', os.getenv('FAST_TRADER_HOME')).replace(
@@ -119,4 +120,3 @@ def setup_logging():
         logging.basicConfig(level=logging.INFO)
 
 setup_logging()
-
