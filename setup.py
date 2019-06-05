@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 setup(
     name='fast_trader',
     version='0.1.0',
-    packages=find_packages(include=["fast_trader"]),
+    packages=find_packages(),
     author='notmeor',
     author_email='kevin.inova@gmail.com',
     description='',
