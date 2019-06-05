@@ -386,15 +386,15 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
 
             self.set_ledger_writer()
 
-            # 更新策略状态的本地记录
-            self._mark_strategy_as_started()
-
             # 启动行情订阅
             self.market.start()
 
             self._send_on_start_event()
 
             self._started = True
+            # 更新策略状态的本地记录
+            self._mark_strategy_as_started()
+
             self.logger.info('策略启动成功')
 
             return {'ret_code': 0, 'data': None}
