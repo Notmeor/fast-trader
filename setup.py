@@ -9,6 +9,8 @@ setup(
     author='notmeor',
     author_email='kevin.inova@gmail.com',
     description='',
+    include_package_data=True,
+    package_data={'': ['config.yaml']},
     install_requires=[
         'protobuf>=3.6.1',
         'inflection']

@@ -14,7 +14,7 @@ def load_config(path=None):
         path = os.getenv('FAST_TRADER_CONFIG')
     if path is None:
         _dir = os.path.dirname
-        dirname = _dir(_dir(__file__))
+        dirname = _dir(__file__)
         path = os.path.join(dirname, 'config.yaml')
     with open(path, 'r', encoding='UTF-8') as f:
         conf = yaml.load(f)
