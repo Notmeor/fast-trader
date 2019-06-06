@@ -23,6 +23,7 @@ from fast_trader.dtp import ext_type_pb2 as dtp_type_
 from fast_trader.id_pool import _id_pool
 from fast_trader.utils import timeit, attrdict, message2dict, Mail
 from fast_trader.settings import settings, setup_logging
+from fast_trader import rest_api
 from fast_trader.rest_api import might_use_rest_api
 
 # setup_logging()
@@ -346,6 +347,8 @@ class DTP:
         self.__settings = settings.copy()
 
         self._ctx = zmq_context.CONTEXT
+        
+        self._accounts = []
 
         # 同步查询通道
         self._sync_req_resp_channel = self._ctx.socket(zmq.REQ)
@@ -358,7 +361,14 @@ class DTP:
         # 异步查询响应通道
         self._async_resp_channel = self._ctx.socket(zmq.SUB)
         self._async_resp_channel.connect(settings['rsp_channel_port'])
-        self._async_resp_channel.subscribe('')
+        
+        if settings['use_rest_api']:
+            for item in rest_api.get_accounts():
+                account_no = item['cashAccountNo']
+                self._accounts.append(account_no)
+                self._async_resp_channel.subscribe(account_no)
+        else:
+            self._async_resp_channel.subscribe('')
         # self._async_resp_channel.subscribe('{}'.format(self._account_no))
 
         ## 风控推送通道

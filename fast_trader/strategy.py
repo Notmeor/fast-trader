@@ -201,10 +201,11 @@ def as_cancellation_msg(canc):
 
 
 class StrategyMdSubMixin:
+    
+    def __init__(self):
+        self._md_subscriptions = {}
 
     def subscribe(self, feed_type, codes):
-        if not hasattr(self, '_md_subscriptions'):
-            self._md_subscriptions = {}
 
         feed_name = feed_type.name
         if feed_name not in self._md_subscriptions:
@@ -226,7 +227,11 @@ class StrategyMdSubMixin:
         self.subscribe(self, feed_type, codes=None)
 
     def has_subscribed(self, feed_type, code):
-        sub = self._md_subscriptions[feed_type.name]
+        feed_name = feed_type.name
+        if feed_name not in self._md_subscriptions:
+            return False
+
+        sub = self._md_subscriptions[feed_name]
         ret = sub.has_subscribed(code)
         return ret
 
@@ -318,6 +323,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
     # trader_id = 1
 
     def __init__(self, strategy_id, account_no, persistent=True):
+        StrategyMdSubMixin.__init__(self)
 
         self._account_no = account_no
         self.strategy_id = strategy_id
