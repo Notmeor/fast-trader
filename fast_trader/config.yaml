@@ -58,7 +58,7 @@ sqlalchemy_url: 'sqlite:///{fast_trader_home}/fast_trader.db'
 sqlite_ledger: '{fast_trader_home}/ledger.db'
 sqlite_market_quote: '{fast_trader_home}/market_quote.db'
 
-strategy_manager_host: '127.0.0.1'
+strategy_manager_host: '0.0.0.0'
 strategy_manager_port: 5600
 strategy_directory: '{fast_trader_home}/strategies'
 
