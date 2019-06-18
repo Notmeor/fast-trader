@@ -8,12 +8,12 @@ import logging
 import collections
 import pandas as pd
 
-from fast_trader.dtp_trade import DTP, Trader, Dispatcher
+
 from fast_trader.dtp_quote import (Transaction, Snapshot,
                                    MarketOrder, Index, OrderQueue,
                                    FEED_TYPE_NAME_MAPPING)
 
-from fast_trader.dtp import type_pb2 as dtp_type
+from fast_trader.dtp_trade import DTP, Trader, Dispatcher, dtp_type
 from fast_trader.dtp_trade import (OrderResponse, TradeResponse,
                                    CancellationResponse,
                                    QueryOrderResponse, QueryTradeResponse,
@@ -151,11 +151,18 @@ def to_timeint(dt):
             dt.second * 1000 + int(dt.microsecond / 1000))
 
 
+ORDER_SIDE_EXPR = {
+    dtp_type.ORDER_SIDE_UNDEFINED: '未知',
+    dtp_type.ORDER_SIDE_BUY: '买入',
+    dtp_type.ORDER_SIDE_SELL: '卖出',
+    dtp_type.ORDER_SIDE_CREATION: 'TF申购',
+    dtp_type.ORDER_SIDE_REDEMPTON: 'ETF赎回',
+    dtp_type.ORDER_SIDE_REVERSE_REPO: '质押式逆回购(国债逆回购)',
+}
+
+
 def as_order_msg(order):
-    drc = {
-        dtp_type.ORDER_SIDE_BUY: '买入',
-        dtp_type.ORDER_SIDE_SELL: '卖出',
-    }[order.order_side]
+    drc = ORDER_SIDE_EXPR[order.order_side]
 
     status = {
         dtp_type.ORDER_STATUS_PLACING: '正报',
@@ -175,10 +182,7 @@ def as_order_msg(order):
 
 
 def as_trade_msg(trade):
-    drc = {
-        dtp_type.ORDER_SIDE_BUY: '买入',
-        dtp_type.ORDER_SIDE_SELL: '卖出',
-    }[trade.order_side]
+    drc = ORDER_SIDE_EXPR[trade.order_side]
 
     msg = f'成交回报, 委托编号={trade.order_exchange_id}, '\
         f'证券代码={trade.code}, 方向={drc}, '\
@@ -188,10 +192,7 @@ def as_trade_msg(trade):
 
 
 def as_cancellation_msg(canc):
-    drc = {
-        dtp_type.ORDER_SIDE_BUY: '买入',
-        dtp_type.ORDER_SIDE_SELL: '卖出',
-    }[canc.order_side]
+    drc = ORDER_SIDE_EXPR[canc.order_side]
 
     msg = f'已撤单，委托编号={canc.order_exchange_id}, '\
         f'证券代码={canc.code}, 方向={drc}, '\
@@ -201,7 +202,7 @@ def as_cancellation_msg(canc):
 
 
 class StrategyMdSubMixin:
-    
+
     def __init__(self):
         self._md_subscriptions = {}
 
@@ -953,18 +954,43 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
 
         return order
 
-    def _insert_order(self, **kw):
+    def insert_order(self, code, price, quantity,
+                     order_side, exchange=None):
+        """
+        报单
+
+        Parameters
+        ----------
+        code: str
+            证券代码
+        price: float, str
+            价格
+        quantity: int
+            委托数量
+        order_side: dtp_type
+            dtp_type.ORDER_SIDE_BUY  # 买入、新股申购
+            dtp_type.ORDER_SIDE_SELL  # 卖出
+            dtp_type.ORDER_SIDE_CREATION  # ETF申购
+            dtp_type.ORDER_SIDE_REDEMPTON  # ETF赎回
+            dtp_type.ORDER_SIDE_REVERSE_REPO  # 质押式逆回购(国债逆回购)
+        exchange: dtp_type
+            dtp_type.EXCHANGE_SH_A  # 上海证券交易所
+            dtp_type.EXCHANGE_SZ_A  # 深圳证券交易所
+        """
+
         request_id = self.generate_request_id()
         order_original_id = self.generate_order_id()
-        exchange = kw['exchange'] or self.get_exchange(kw['code'])
-        price = str(kw['price'])
+        exchange = exchange or self.get_exchange(code)
+        price = str(price)
 
-        order = kw.copy()
-        order.update({
+        order = {
+            'code': code,
+            'quantity': quantity,
+            'order_side': order_side,
             'order_original_id': order_original_id,
             'exchange': exchange,
             'price': price,
-        })
+        }
 
         self.trader.place_order(request_id=request_id, **order)
 
@@ -992,19 +1018,19 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
 
     def buy_many(self, orders):
         """
-        批量买入
+        股票批量买入
         """
         return self._insert_many(dtp_type.ORDER_SIDE_BUY, orders)
 
     def sell_many(self, orders):
         """
-        批量买入
+        股票批量买入
         """
         return self._insert_many(dtp_type.ORDER_SIDE_SELL, orders)
 
     def buy(self, code, price, quantity, exchange=None):
         """
-        委托买入
+        股票委托买入
 
         Parameters
         ----------
@@ -1018,13 +1044,13 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         ret: int
             返回报单结构
         """
-        return self._insert_order(order_side=dtp_type.ORDER_SIDE_BUY,
-                                  code=code, price=price,
-                                  quantity=quantity, exchange=exchange)
+        return self.insert_order(order_side=dtp_type.ORDER_SIDE_BUY,
+                                 code=code, price=price,
+                                 quantity=quantity, exchange=exchange)
 
     def sell(self, code, price, quantity, exchange=None):
         """
-        委托卖出
+        股票委托卖出
 
         Parameters
         ----------
@@ -1038,9 +1064,9 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         ret: int
             返回报单结构
         """
-        return self._insert_order(order_side=dtp_type.ORDER_SIDE_SELL,
-                                  code=code, price=price,
-                                  quantity=quantity, exchange=exchange)
+        return self.insert_order(order_side=dtp_type.ORDER_SIDE_SELL,
+                                 code=code, price=price,
+                                 quantity=quantity, exchange=exchange)
 
     def cancel_order(self, **kw):
         """

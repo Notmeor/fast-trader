@@ -14,7 +14,7 @@ from sqlalchemy import String, Column, Integer, Float, Boolean, Enum
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from fast_trader.dtp import type_pb2 as dtp_type
+from fast_trader.dtp_trade import dtp_type
 from fast_trader.sqlite import SqliteStore
 from fast_trader.settings import settings
 from fast_trader.utils import timeit, as_wind_code

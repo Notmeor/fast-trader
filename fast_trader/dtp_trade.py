@@ -14,11 +14,14 @@ import uuid
 
 from fast_trader import zmq_context
 from fast_trader.dtp import dtp_api_id
-from fast_trader.dtp import api_pb2 as dtp_struct
-from fast_trader.dtp import type_pb2 as dtp_type
+#from fast_trader.dtp import api_pb2 as dtp_struct
+#from fast_trader.dtp import type_pb2 as dtp_type
+#
+#from fast_trader.dtp import ext_api_pb2 as dtp_struct_
+#from fast_trader.dtp import ext_type_pb2 as dtp_type_
 
-from fast_trader.dtp import ext_api_pb2 as dtp_struct_
-from fast_trader.dtp import ext_type_pb2 as dtp_type_
+from fast_trader.dtp import ext_api_pb2 as dtp_struct
+from fast_trader.dtp import ext_type_pb2 as dtp_type
 
 from fast_trader.id_pool import _id_pool
 from fast_trader.utils import timeit, attrdict, message2dict, Mail

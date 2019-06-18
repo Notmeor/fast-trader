@@ -113,7 +113,6 @@ def request(url, headers, body, method='post'):
     logger.info(f'{method.upper()} {urlsplit(url).path}: {body}')
     data = json.dumps(body)
     meth = getattr(session, method)
-
     r = meth(url, headers=headers, data=data, verify=False)
 
     if r.status_code not in [200, 201]:
@@ -517,8 +516,8 @@ rest_settings.reload()
 
 if __name__ == '__main__':
     order = Order()
-    order.code = '002222'
-    order.exchange = 1  # 上海1，深圳2
+    order.code = '002230'
+    order.exchange = 2  # 上海1，深圳2
     order.original_id = '10'  # 递增
     order.order_type = 1
     order.price = '16'
