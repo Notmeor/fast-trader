@@ -1142,7 +1142,7 @@ class StrategyFactory:
         if account_no not in self.traders:
             trader = Trader(
                 dispatcher=self.dispatcher,
-                broker=self.dtp,
+                trade_api=self.dtp,
                 trader_id=self.trader_id,
             )
 

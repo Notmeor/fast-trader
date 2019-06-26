@@ -11,6 +11,7 @@ import queue
 from queue import Queue
 from collections import OrderedDict
 import uuid
+import json
 
 from fast_trader import zmq_context
 from fast_trader.dtp import dtp_api_id
@@ -341,7 +342,7 @@ class DTPType:
         return cls.proto_structs[api_id]
 
 
-class DTP:
+class DTP_:
 
     def __init__(self, dispatcher=None):
 
@@ -350,7 +351,7 @@ class DTP:
         self.__settings = settings.copy()
 
         self._ctx = zmq_context.CONTEXT
-        
+
         self._accounts = []
 
         # 同步查询通道
@@ -364,7 +365,7 @@ class DTP:
         # 异步查询响应通道
         self._async_resp_channel = self._ctx.socket(zmq.SUB)
         self._async_resp_channel.connect(settings['rsp_channel_port'])
-        
+
         if settings['use_rest_api']:
             for item in rest_api.get_accounts():
                 account_no = item['cashAccountNo']
@@ -579,6 +580,161 @@ class DTP:
                 message2dict(header), message2dict(body)))
 
 
+import cmake_example as dtp_api
+class DTP_(dtp_api.Trader):
+
+    def __init__(self, dispatcher):
+
+        self.rest_api = dtp_api.RestApi()
+        self.accounts = [d['cashAccountNo'] for d in self.get_accounts()]
+
+        dtp_api.Trader.__init__(self, self.accounts)
+        self.dispatcher = dispatcher
+
+        self._messages = []
+
+    def on_message_bytes_(self, header_bytes, body_bytes):
+
+        header = dtp_struct.ReportHeader()
+        header.ParseFromString(header_bytes)
+
+        rsp_type = DTPType.get_proto_type(header.api_id)
+        body = rsp_type()
+        body.ParseFromString(body_bytes)
+
+        mail = Mail(
+            api_id=header.api_id,
+            api_type='rsp',
+            handler_id=f'{body.account_no}_{header.api_id}_rsp',
+        )
+
+        mail['header'] = message2dict(header)
+        mail['body'] = message2dict(body)
+
+        self.logger.info(mail)
+
+        self.dispatcher.put(mail)
+
+    def on_message_bytes(self, header_bytes, body_bytes):
+
+        header = dtp_struct.ReportHeader()
+        header.ParseFromString(header_bytes)
+
+        rsp_type = DTPType.get_proto_type(header.api_id)
+        body = rsp_type()
+        body.ParseFromString(body_bytes)
+        print(f'pid={os.getpid()}, tid={threading.get_ident()}')
+        print('message:', header.message)
+        print('id:', body.account_no)
+        self._messages.append((header, body))
+
+    def get_accounts(self):
+        j = self.rest_api.get_accounts()
+        ret = json.loads(j)
+        return ret
+
+    def get_capital(self, account_no):
+        j = self.rest_api.get_capital(account_no)
+        ret = json.loads(j)
+        return ret
+
+    def get_orders(self, account_no):
+        j = self.rest_api.get_orders(account_no)
+        ret = json.loads(j)
+        return ret
+
+    def get_trades(self, account_no):
+        j = self.rest_api.get_trades(account_no)
+        ret = json.loads(j)
+        return ret
+
+    def get_positions(self, account_no):
+        j = self.rest_api.get_positions(account_no)
+        ret = json.loads(j)
+        return ret
+
+    def place_order(self, order_req):
+        self.rest_api.place_order(order_req)
+
+    def place_batch_order(self, batch_order_req, account_no):
+        self.rest_api.place_batch_order(batch_order_req, account_no)
+
+    def cancel_order(self, order_cancelation_req):
+        self.rest_api.cancel_order(order_cancelation_req)
+
+
+class DTP(dtp_api.Trader):
+
+    def __init__(self, dispatcher):
+
+        self.rest_api = dtp_api.RestApi()
+        self.accounts = [d['cashAccountNo'] for d in self.get_accounts()]
+
+        dtp_api.Trader.__init__(self, self.accounts)
+        self.dispatcher = dispatcher
+
+        self._messages = []
+
+    def on_message_bytes(self, header_bytes, body_bytes):
+
+        header = dtp_struct.ReportHeader()
+        header.ParseFromString(header_bytes)
+
+        rsp_type = DTPType.get_proto_type(header.api_id)
+        body = rsp_type()
+        body.ParseFromString(body_bytes)
+
+        mail = Mail(
+            api_id=header.api_id,
+            api_type='rsp',
+            handler_id=f'{body.account_no}_{header.api_id}_rsp',
+        )
+
+        mail['header'] = message2dict(header)
+        mail['body'] = message2dict(body)
+
+        self.logger.info(mail)
+
+        self.dispatcher.put(mail)
+
+    def get_accounts(self):
+        j = self.rest_api.get_accounts()
+        ret = json.loads(j)
+        return ret
+
+    def get_capital(self, account_no):
+        j = self.rest_api.get_capital(account_no)
+        ret = json.loads(j)
+        return ret
+
+    def get_orders(self, account_no):
+        j = self.rest_api.get_orders(account_no)
+        ret = json.loads(j)
+        ret = sum(ret, [])
+        return ret
+
+    def get_trades(self, account_no):
+        j = self.rest_api.get_trades(account_no)
+        ret = json.loads(j)
+        ret = sum(ret, [])
+        return ret
+
+    def get_positions(self, account_no):
+        j = self.rest_api.get_positions(account_no)
+        ret = json.loads(j)
+        ret = sum(ret, [])
+        return ret
+
+    def place_order(self, order_req):
+        self.rest_api.place_order(order_req)
+
+    def place_batch_order(self, batch_order_req, account_no):
+        self.rest_api.place_batch_order(batch_order_req, account_no)
+
+    def cancel_order(self, order_cancelation_req):
+        self.rest_api.cancel_order(order_cancelation_req)
+
+
 class Order:
 
     exchange = dtp_type.EXCHANGE_SH_A
@@ -594,10 +750,10 @@ class Order:
 
 class Trader:
 
-    def __init__(self, dispatcher=None, broker=None, trader_id=0):
+    def __init__(self, dispatcher=None, trade_api=None, trader_id=0):
 
         self.dispatcher = dispatcher
-        self.broker = broker
+        self.trade_api = trade_api
 
         self.trader_id = trader_id
 
@@ -630,8 +786,8 @@ class Trader:
         if self.dispatcher is None:
             self.dispatcher = Dispatcher()
 
-        if self.broker is None:
-            self.broker = DTP(self.dispatcher)
+        if self.trade_api is None:
+            self.trade_api = DTP(self.dispatcher)
 
         self._bind()
 
@@ -641,7 +797,7 @@ class Trader:
 
         if not self.__api_bound:
 
-            dispatcher, broker = self.dispatcher, self.broker
+            dispatcher, trade_api = self.dispatcher, self.trade_api
 
             for api_id in dtp_api_id.RSP_API_NAMES:
                 dispatcher.bind(f'{self.account_no}_{api_id}_rsp',
@@ -649,7 +805,7 @@ class Trader:
 
             for api_id in dtp_api_id.REQ_API_NAMES:
                 api_name = dtp_api_id.REQ_API_NAMES[api_id]
-                handler = getattr(broker, api_name)
+                handler = getattr(trade_api, api_name)
                 dispatcher.bind(f'{api_id}_req', handler)
 
             self.__api_bound = True
@@ -739,206 +895,99 @@ class Trader:
         return self._logined
 
     def on_login(self, msg):
-        try:
-            self._token = msg['token']
-        except Exception as e:
-            self.logger.warning('登录失败', exc_info=True)
-            raise e
-
-        self.logger.info('登入账户 {}, {}'.format(self.account_no, msg))
+        raise NotImplementedError
 
     def on_logout(self, mail):
-        self.logger.info('登出账户 {}'.format(self.account_no))
+        raise NotImplementedError
 
-    @might_use_rest_api(might=settings['use_rest_api'],
-                        api_name='restapi_login')
     def login(self, account_no, password, sync=True, **kw):
-
-        self._account_no = account_no
-
-        self.start()
-
-        ret = self.login_account(account_no=account_no,
-                                 password=password,
-                                 sync=True, **kw)
-
-        if ret['ret_code'] != 0:
-            raise Exception(ret['err_message'])
-
-        if sync:
-
-            login_msg = ret['header']['message']
-
-            if ret['header']['code'] == dtp_type.RESPONSE_CODE_OK:
-                self._logined = True
-                self._token = ret['body']['token']
-
-                self.logger.info(
-                    '登录成功 <{}> {}'.format(self.account_no, login_msg))
-
-            else:
-                self.logger.warning(
-                    '登录失败 <{}> {}'.format(self.account_no, login_msg))
-
-            return ret
+        raise NotImplementedError
 
     def logout(self, **kw):
         """
         登出暂为空操作
         """
-        pass
+        raise NotImplementedError
 
     def logout_account(self, **kw):
-        mail = Mail(
-            api_type='req',
-            api_id=dtp_api_id.LOGOUT_ACCOUNT_REQUEST,
-            request_id=kw['request_id'],
-            account_no=self._account_no,
-            token=self._token
-        )
-        self.dispatcher.put(mail)
+        raise NotImplementedError
 
     def login_account(self, **kw):
-        mail = Mail(
-            api_type='req',
-            api_id=dtp_api_id.LOGIN_ACCOUNT_REQUEST,
-            **kw
-        )
-        return self.dispatcher.put(mail)
+        raise NotImplementedError
 
-    @might_use_rest_api(might=settings['use_rest_api'],
-                        api_name='restapi_place_order')
-    def place_order(self, request_id, order_original_id, exchange,
-                    code, price, quantity, order_side,
-                    order_type=dtp_type.ORDER_TYPE_LIMIT):
+    def place_order(self, **order):
         """
         报单委托
         """
-        # 报价转为str类型
-        price_ = price
+        order_req = dtp_api.OrderReq()
+        order_req.account_no = order['account_no']
+        order_req.code = order['code']
+        order_req.order_original_id = order['order_original_id']
+        order_req.exchange = order['exchange']
+        order_req.order_type = order['order_type']
+        order_req.order_side = order['order_side']
+        order_req.price = order['price']
+        order_req.quantity = order['quantity']
 
-        mail = Mail(
-            api_type='req',
-            api_id=dtp_api_id.PLACE_ORDER,
-            account_no=self._account_no,
-            token=self._token,
-            request_id=request_id,
-            order_original_id=order_original_id,
-            exchange=exchange,
-            code=code,
-            price=price_,
-            quantity=quantity,
-            order_side=order_side,
-            order_type=order_type
-        )
-        self.dispatcher.put(mail)
+        self.trade_api.place_order(order_req)
 
-        self.logger.info('报单委托 {}'.format(mail))
-
-    @might_use_rest_api(might=settings['use_rest_api'],
-                        api_name='restapi_place_batch_order')
-    def place_batch_order(self, request_id, orders):
+    def place_batch_order(self, orders):
         """
         批量下单
         """
+        batch_order_req = []
+        for order in orders:
+            order_req = dtp_api.OrderReq()
+            batch_order_req.append(order_req)
+            order_req.code = order['code']
+            order_req.order_original_id = order['order_original_id']
+            order_req.exchange = order['exchange']
+            order_req.order_type = order['order_type']
+            order_req.order_side = order['order_side']
+            order_req.price = order['price']
+            order_req.quantity = order['quantity']
 
-        mail = Mail(
-            api_type='req',
-            api_id=dtp_api_id.PLACE_BATCH_ORDER,
-            request_id=request_id,
-            token=self._token,
-            order_list=orders
-        )
-        self.dispatcher.put(mail)
-        self.logger.info('批量买入委托 {}'.format(mail))
+        self.trade_api.place_batch_order(batch_order_req, self.account_no)
 
-    @might_use_rest_api(might=settings['use_rest_api'],
-                        api_name='restapi_cancel_order')
-    def cancel_order(self, **kw):
+    def cancel_order(self, order_exchange_id, exchange):
         """
         撤单
         """
-        mail = Mail(
-            api_type='req',
-            api_id=dtp_api_id.CANCEL_ORDER,
-            account_no=self._account_no,
-            token=self._token,
-            **kw
-        )
-        self.dispatcher.put(mail)
+        order_cancelation_req = dtp_api.OrderCancelationReq()
+        order_cancelation_req.account_no = self.account_no
+        order_cancelation_req.exchange = exchange
+        order_cancelation_req.order_exchange_id = order_exchange_id
+        return self.trade_api.cancel_order(order_cancelation_req)
 
-    @might_use_rest_api(might=settings['use_rest_api'],
-                        api_name='restapi_query_orders')
     def query_orders(self, **kw):
         """
         查询订单
         """
-        mail = Mail(
-            api_type='req',
-            api_id=dtp_api_id.QUERY_ORDERS_REQUEST,
-            account_no=self._account_no,
-            token=self._token,
-            **kw
-        )
-        return self.dispatcher.put(mail)
+        return self.trade_api.get_orders(account_no=self.account_no)
 
-    @might_use_rest_api(might=settings['use_rest_api'],
-                        api_name='restapi_query_fills')
     def query_trades(self, **kw):
         """
         查询成交
         """
-        mail = Mail(
-            api_type='req',
-            api_id=dtp_api_id.QUERY_FILLS_REQUEST,
-            account_no=self._account_no,
-            token=self._token,
-            **kw
-        )
-        return self.dispatcher.put(mail)
+        return self.trade_api.get_trades(account_no=self.account_no)
 
-    @might_use_rest_api(might=settings['use_rest_api'],
-                        api_name='restapi_query_positions')
     def query_positions(self, **kw):
         """
         查询持仓
         """
-        mail = Mail(
-            api_type='req',
-            api_id=dtp_api_id.QUERY_POSITION_REQUEST,
-            account_no=self._account_no,
-            token=self._token,
-            **kw
-        )
-        return self.dispatcher.put(mail)
+        return self.trade_api.get_positions(account_no=self.account_no)
 
-    @might_use_rest_api(might=settings['use_rest_api'],
-                        api_name='restapi_query_capital')
     def query_capital(self, **kw):
         """
         查询账户资金
         """
-        mail = Mail(
-            api_type='req',
-            api_id=dtp_api_id.QUERY_CAPITAL_REQUEST,
-            account_no=self._account_no,
-            token=self._token,
-            **kw
-        )
-        return self.dispatcher.put(mail)
+        return self.trade_api.get_capital(account_no=self.account_no)
 
     def query_ration(self, **kw):
         """
         查询配售权益
         """
-        mail = Mail(
-            api_type='req',
-            api_id=dtp_api_id.QUERY_RATION_REQUEST,
-            account_no=self._account_no,
-            token=self._token,
-            **kw
-        )
-        return self.dispatcher.put(mail)
+        raise NotImplementedError
 
 
 if __name__ == '__main__':
