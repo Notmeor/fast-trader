@@ -27,8 +27,8 @@ from fast_trader.dtp import ext_type_pb2 as dtp_type
 from fast_trader.id_pool import _id_pool
 from fast_trader.utils import timeit, attrdict, message2dict, Mail
 from fast_trader.settings import settings, setup_logging
-from fast_trader import rest_api
-from fast_trader.rest_api import might_use_rest_api
+# from fast_trader import rest_api
+# from fast_trader.rest_api import might_use_rest_api
 
 # setup_logging()
 
@@ -122,6 +122,74 @@ class QueryPositionResponse:
         msg['market_value'] = str2float(msg.market_value)
         return msg
 
+
+def rename_position(item):
+
+    position = {
+        'available_quantity': item['availableQuantity'],
+        'balance': item['balance'],
+        'buy_quantity': item['buyQuantity'],
+        'code': item['code'],
+        'cost': item['cost'],
+        'exchange': item['exchange'],
+        'freeze_quantity': item['freezeQuantity'],
+        'market_value': item['marketValue'],
+        'name': item['name'],
+        'sell_quantity': item['sellQuantity']
+    }
+    position = attrdict(position)
+
+    return position
+
+
+def rename_trade(item):
+
+    fill = {
+        'clear_amount': item['clearAmount'],
+        'code': item['code'],
+        'exchange': item['exchange'],
+        'fill_amount': item['fillAmount'],
+        'fill_exchange_id': item['fillId'],
+        'fill_price': item['fillPrice'],
+        'fill_quantity': item['fillQuantity'],
+        'fill_status': item['fillType'],
+        'fill_time': item['fillTime'],
+        'name': item['name'],
+        'order_exchange_id': item['orderExchangeId'],
+        'order_original_id': item['orderOriginalId'],
+        'order_side': item['side']
+    }
+    fill = attrdict(fill)
+
+    return fill
+
+
+def rename_order(kw):
+
+    order = {
+        'account_no': kw['accountNo'],
+        'average_fill_price': kw['averageFillPrice'],
+        'clear_amount': kw['clearAmount'],
+        'code': kw['code'],
+        'exchange': kw['exchange'],
+        'freeze_amount': kw['freezeAmount'],
+        'name': kw['name'],
+        'order_exchange_id': kw['exchangeId'],
+        'order_original_id': kw['originalId'],
+        'order_side': kw['side'],
+        'order_time': kw['orderTime'],
+        'order_type': kw['orderType'],
+        'price': kw['price'],
+        'quantity': kw['quantity'],
+        'status': kw['orderStatus'],
+        'status_message': '',
+        'total_cancelled_quantity': kw['cancelQuantity'],
+        'total_fill_amount': kw['fillAmount'],
+        'total_fill_quantity': kw['fillQuantity']
+    }
+    order = attrdict(order)
+
+    return order
 
 class TimerTask:
 
@@ -592,6 +660,8 @@ class DTP_(dtp_api.Trader):
         self.dispatcher = dispatcher
 
         self._messages = []
+        
+        
 
     def on_message_bytes_(self, header_bytes, body_bytes):
 
@@ -673,7 +743,14 @@ class DTP(dtp_api.Trader):
         dtp_api.Trader.__init__(self, self.accounts)
         self.dispatcher = dispatcher
 
-        self._messages = []
+        self.logger = logging.getLogger('dtp')
+
+        self._counter_report_thread = threading.Thread(
+            target=self.process_counter_report)
+
+    def start_counter_report(self):
+        self.start()
+        self._counter_report_thread.start()
 
     def on_message_bytes(self, header_bytes, body_bytes):
 
@@ -753,7 +830,7 @@ class Trader:
     def __init__(self, dispatcher=None, trade_api=None, trader_id=0):
 
         self.dispatcher = dispatcher
-        self.trade_api = trade_api
+        self._trade_api = trade_api
 
         self.trader_id = trader_id
 
@@ -786,10 +863,12 @@ class Trader:
         if self.dispatcher is None:
             self.dispatcher = Dispatcher()
 
-        if self.trade_api is None:
-            self.trade_api = DTP(self.dispatcher)
+        if self._trade_api is None:
+            self._trade_api = DTP(self.dispatcher)
 
         self._bind()
+
+        self._trade_api.start_counter_report()
 
         self._started = True
 
@@ -797,16 +876,16 @@ class Trader:
 
         if not self.__api_bound:
 
-            dispatcher, trade_api = self.dispatcher, self.trade_api
+            dispatcher, _trade_api = self.dispatcher, self._trade_api
 
             for api_id in dtp_api_id.RSP_API_NAMES:
                 dispatcher.bind(f'{self.account_no}_{api_id}_rsp',
                                 self._on_response)
 
-            for api_id in dtp_api_id.REQ_API_NAMES:
-                api_name = dtp_api_id.REQ_API_NAMES[api_id]
-                handler = getattr(trade_api, api_name)
-                dispatcher.bind(f'{api_id}_req', handler)
+#            for api_id in dtp_api_id.REQ_API_NAMES:
+#                api_name = dtp_api_id.REQ_API_NAMES[api_id]
+#                handler = getattr(_trade_api, api_name)
+#                dispatcher.bind(f'{api_id}_req', handler)
 
             self.__api_bound = True
         else:
@@ -901,26 +980,25 @@ class Trader:
         raise NotImplementedError
 
     def login(self, account_no, password, sync=True, **kw):
-        raise NotImplementedError
+        """
+        登录
+        """
+        self._account_no = account_no
+        self._logined = True
+        self.start()
 
     def logout(self, **kw):
         """
         登出暂为空操作
         """
-        raise NotImplementedError
-
-    def logout_account(self, **kw):
-        raise NotImplementedError
-
-    def login_account(self, **kw):
-        raise NotImplementedError
+        pass
 
     def place_order(self, **order):
         """
         报单委托
         """
         order_req = dtp_api.OrderReq()
-        order_req.account_no = order['account_no']
+        order_req.account_no = self.account_no
         order_req.code = order['code']
         order_req.order_original_id = order['order_original_id']
         order_req.exchange = order['exchange']
@@ -929,7 +1007,7 @@ class Trader:
         order_req.price = order['price']
         order_req.quantity = order['quantity']
 
-        self.trade_api.place_order(order_req)
+        self._trade_api.place_order(order_req)
 
     def place_batch_order(self, orders):
         """
@@ -947,9 +1025,9 @@ class Trader:
             order_req.price = order['price']
             order_req.quantity = order['quantity']
 
-        self.trade_api.place_batch_order(batch_order_req, self.account_no)
+        self._trade_api.place_batch_order(batch_order_req, self.account_no)
 
-    def cancel_order(self, order_exchange_id, exchange):
+    def cancel_order(self, order_exchange_id, exchange, **kw):
         """
         撤单
         """
@@ -957,44 +1035,48 @@ class Trader:
         order_cancelation_req.account_no = self.account_no
         order_cancelation_req.exchange = exchange
         order_cancelation_req.order_exchange_id = order_exchange_id
-        return self.trade_api.cancel_order(order_cancelation_req)
+        return self._trade_api.cancel_order(order_cancelation_req)
 
     def query_orders(self, **kw):
         """
         查询订单
         """
-        return self.trade_api.get_orders(account_no=self.account_no)
+        mail = attrdict()
+        orders = self._trade_api.get_orders(account_no=self.account_no)
+        orders = list(map(rename_order, orders))
+        mail['body'] = orders
+        return mail
 
     def query_trades(self, **kw):
         """
         查询成交
         """
-        return self.trade_api.get_trades(account_no=self.account_no)
+        mail = attrdict()
+        trades = self._trade_api.get_trades(account_no=self.account_no)
+        trades = list(map(rename_trade, trades))
+        mail['body'] = trades
+        return mail
 
     def query_positions(self, **kw):
         """
         查询持仓
         """
-        return self.trade_api.get_positions(account_no=self.account_no)
+        positions = self._trade_api.get_positions(account_no=self.account_no)
+        positions = list(map(rename_position, positions))
+        mail['body'] = positions
+        return mail
 
     def query_capital(self, **kw):
         """
         查询账户资金
         """
-        return self.trade_api.get_capital(account_no=self.account_no)
+        mail = attrdict()
+        mail['body'] = self._trade_api.get_capital(
+            account_no=self.account_no)[0]
+        return mail
 
     def query_ration(self, **kw):
         """
         查询配售权益
         """
         raise NotImplementedError
-
-
-if __name__ == '__main__':
-
-    trader = Trader()
-    trader.start()
-    trader.login(
-        account_no=settings['account_no'],
-        password=settings['password'],
-    )

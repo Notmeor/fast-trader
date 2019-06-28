@@ -533,39 +533,11 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
 
         return False
 
-    def _get_all_pages(self, handle):
-        offset = 0
-        size = 200
-        all_objs = []
-        while True:
-            request_id = self.generate_request_id()
-            mail = handle(request_id=request_id,
-                          sync=True,
-                          pagination={
-                              'size': size,
-                              'offset': offset
-                          })
-
-            list_name = ''
-            for attr in ['order_list', 'fill_list', 'position_list']:
-                if hasattr(mail.body, attr):
-                    list_name = attr
-                    break
-
-            _objs = mail['body'].get(list_name, [])
-
-            all_objs.extend(_objs)
-            if len(_objs) < size:
-                break
-            offset = mail.body.pagination.offset
-
-        return all_objs
-
     def get_account_orders(self):
         """
         查询账户报单
         """
-        orders = self._get_all_pages(self.trader.query_orders)
+        orders = self.trader.query_orders()['body']
         ret = [QueryOrderResponse.from_msg(order) for order in orders]
         return ret
 
@@ -598,7 +570,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         """
         查询账户成交
         """
-        trades = self._get_all_pages(self.trader.query_trades)
+        trades = self.trader.query_trades()['body']
         ret = [QueryTradeResponse.from_msg(trade) for trade in trades]
         return ret
 
@@ -606,7 +578,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         """
         查询账户持仓
         """
-        positions = self._get_all_pages(self.trader.query_positions)
+        positions = self.trader.query_positions()['body']
         ret = [QueryPositionResponse.from_msg(pos) for pos in positions]
         return ret
 
@@ -955,7 +927,8 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         return order
 
     def insert_order(self, code, price, quantity,
-                     order_side, exchange=None):
+                     order_side, exchange=None,
+                     order_type=dtp_type.ORDER_TYPE_LIMIT):
         """
         报单
 
@@ -978,7 +951,6 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
             dtp_type.EXCHANGE_SZ_A  # 深圳证券交易所
         """
 
-        request_id = self.generate_request_id()
         order_original_id = self.generate_order_id()
         exchange = exchange or self.get_exchange(code)
         price = str(price)
@@ -990,16 +962,17 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
             'order_original_id': order_original_id,
             'exchange': exchange,
             'price': price,
+            'order_type': order_type
         }
 
-        self.trader.place_order(request_id=request_id, **order)
+        self.trader.place_order(**order)
 
         order = self._store_order(order)
 
         return order
 
     def _insert_many(self, order_side, orders):
-        request_id = self.generate_request_id()
+
         for order in orders:
             order_original_id = self.generate_order_id()
             if 'exchange' not in order:
@@ -1009,7 +982,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
             order['order_original_id'] = order_original_id
             order['price'] = str(order['price'])
 
-        self.trader.place_batch_order(request_id=request_id, orders=orders)
+        self.trader.place_batch_order(orders=orders)
 
         for order in orders:
             order = self._store_order(order)
@@ -1028,7 +1001,8 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         """
         return self._insert_many(dtp_type.ORDER_SIDE_SELL, orders)
 
-    def buy(self, code, price, quantity, exchange=None):
+    def buy(self, code, price, quantity,
+            exchange=None, order_type=dtp_type.ORDER_TYPE_LIMIT):
         """
         股票委托买入
 
@@ -1046,7 +1020,8 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         """
         return self.insert_order(order_side=dtp_type.ORDER_SIDE_BUY,
                                  code=code, price=price,
-                                 quantity=quantity, exchange=exchange)
+                                 quantity=quantity, exchange=exchange,
+                                 order_type=order_type)
 
     def sell(self, code, price, quantity, exchange=None):
         """
@@ -1081,8 +1056,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
             self.logger.warning('未提供 order_exchange_id , 无法撤单')
             return
 
-        request_id = self.generate_request_id()
-        self.trader.cancel_order(request_id=request_id, **kw)
+        self.trader.cancel_order(**kw)
 
     def cancel_all(self, **kw):
         orders = self.get_open_orders()
