@@ -24,7 +24,7 @@ from fast_trader.models import StrategyStatus
 
 from fast_trader.settings import settings, Session
 from fast_trader.utils import (Mail, timeit, message2tuple, attrdict,
-                               as_wind_code, get_current_ts)
+                               message2dict, as_wind_code, get_current_ts)
 
 from fast_trader.ledger import LedgerWriter
 
@@ -48,7 +48,7 @@ class Subscription:
         return False
 
 
-class Market:
+class Market_:
 
     def __init__(self, dispatcher):
 
@@ -106,6 +106,127 @@ class Market:
         self.datasources[feed_type.name] = streamer
         if self._started:
             streamer.start()
+
+
+import dtp_api
+from fast_trader.dtp_quote import quote_struct
+
+
+def recv_msg(qu):
+    self = QuoteFeed()
+    self.subscribe_all('trade_feed')
+    def put(m):
+        #print(m.content.szCode, qu.qsize())
+        qu.put(m)
+    self.add_callback(put)
+    self.start()
+        
+    
+def start_(self):
+    import multiprocessing
+    qu = multiprocessing.Queue()
+
+    proc = multiprocessing.Process(target=recv_msg, args=(qu,))
+    proc.start()
+
+
+class QuoteFeed(dtp_api.QuoteFeed):
+    
+    def __init__(self):
+        dtp_api.QuoteFeed.__init__(self)
+        self._callbacks = collections.OrderedDict()        
+    
+    def on_message_bytes(self, source_id, body_bytes):
+        data = quote_struct.MarketData()
+        data.ParseFromString(body_bytes)
+        _type = data.Type.Name(data.type).lower()
+        message = getattr(data, _type)
+        
+        # format
+        feed_type = FEED_TYPE_NAME_MAPPING[source_id]
+        message = feed_type.format(message)
+        
+        self.on_message(source_id, message)
+    
+    def on_message(self, source_id, msg):
+        mail = Mail(
+            api_id=source_id,
+            api_type='rsp',
+            content=msg)
+        
+        for cb in self._callbacks.values():
+            cb(mail)
+
+    @property
+    def callbacks(self):
+        return self._callbacks
+
+    def add_callback(self, cb, name=None):
+        """
+        添加回调
+
+        回调函数应有且仅有一个参数，用来接收行情数据
+        同名函数会相互覆盖
+        """
+        if name is None:
+            name = cb.__name__
+        self._callbacks[name] = cb
+
+    def remove_callback(self, cb_or_name):
+        if callable(cb_or_name):
+            name = cb_or_name.__name__
+        else:
+            name = cb_or_name
+        self._callbacks.pop(name)
+        
+        
+
+
+class Market:
+
+    def __init__(self, dispatcher):
+
+        self.dispatcher = dispatcher
+        self.datasources = {}
+        self._strategies = []
+        self._started = False
+        
+        self.quote_feed = QuoteFeed()
+
+    def start(self):
+        self.quote_feed.add_callback(self.on_quote_message)
+        self.quote_feed.start()
+        
+        self._started = True
+
+    @property
+    def started(self):
+        return self._started
+
+    def add_strategy(self, strategy):
+        self._strategies.append(strategy)
+
+    def remove_strategy(self, strategy):
+        self._strategies.remove(strategy)
+
+    def subscribe(self, feed_type, codes):
+        
+        if codes is None:
+            self.quote_feed.subsribe_all(feed_type.name, codes)
+        else:
+            self.quote_feed.subscribe(feed_type.name, codes)
+
+    def subsribe_all(self, feed_type):
+        self.subscribe(feed_type, codes=None)
+
+    def on_quote_message(self, message):
+        # TODO: 期货类FuturesFeed, OptionsFeed 字段名称不一致
+        code = message['content']['szCode']
+        feed_name = message['api_id']
+        feed_type = FEED_TYPE_NAME_MAPPING[feed_name]
+        for ea in self._strategies:
+            if ea.started and ea.has_subscribed(feed_type, code):
+                ea.on_quote_message(message)
 
 
 class _limitedattrdict(attrdict):

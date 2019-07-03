@@ -6,20 +6,14 @@ import datetime
 
 import threading
 import logging
-import zmq
+
 import queue
 from queue import Queue
 from collections import OrderedDict
 import uuid
 import json
 
-from fast_trader import zmq_context
 from fast_trader.dtp import dtp_api_id
-#from fast_trader.dtp import api_pb2 as dtp_struct
-#from fast_trader.dtp import type_pb2 as dtp_type
-#
-#from fast_trader.dtp import ext_api_pb2 as dtp_struct_
-#from fast_trader.dtp import ext_type_pb2 as dtp_type_
 
 from fast_trader.dtp import ext_api_pb2 as dtp_struct
 from fast_trader.dtp import ext_type_pb2 as dtp_type
@@ -27,8 +21,8 @@ from fast_trader.dtp import ext_type_pb2 as dtp_type
 from fast_trader.id_pool import _id_pool
 from fast_trader.utils import timeit, attrdict, message2dict, Mail
 from fast_trader.settings import settings, setup_logging
-# from fast_trader import rest_api
-# from fast_trader.rest_api import might_use_rest_api
+
+import dtp_api
 
 # setup_logging()
 
@@ -410,329 +404,6 @@ class DTPType:
         return cls.proto_structs[api_id]
 
 
-class DTP_:
-
-    def __init__(self, dispatcher=None):
-
-        self.dispatcher = dispatcher or Queue()
-
-        self.__settings = settings.copy()
-
-        self._ctx = zmq_context.CONTEXT
-
-        self._accounts = []
-
-        # 同步查询通道
-        self._sync_req_resp_channel = self._ctx.socket(zmq.REQ)
-        self._sync_req_resp_channel.connect(settings['sync_channel_port'])
-
-        # 异步查询通道
-        self._async_req_channel = self._ctx.socket(zmq.DEALER)
-        self._async_req_channel.connect(settings['async_channel_port'])
-
-        # 异步查询响应通道
-        self._async_resp_channel = self._ctx.socket(zmq.SUB)
-        self._async_resp_channel.connect(settings['rsp_channel_port'])
-
-        if settings['use_rest_api']:
-            for item in rest_api.get_accounts():
-                account_no = item['cashAccountNo']
-                self._accounts.append(account_no)
-                self._async_resp_channel.subscribe(account_no)
-        else:
-            self._async_resp_channel.subscribe('')
-        # self._async_resp_channel.subscribe('{}'.format(self._account_no))
-
-        ## 风控推送通道
-        #self._risk_report_channel = self._ctx.socket(zmq.SUB)
-        #self._risk_report_channel.connect(settings['risk_channel_port'])
-        #self._risk_report_channel.subscribe('{}'.format(self._account_no))
-
-        self.logger = logging.getLogger('dtp')
-
-        self.start()
-
-    def start(self):
-
-        self._running = True
-        threading.Thread(target=self.handle_counter_response).start()
-        # 柜台回报似乎已经包含了合规消息
-        # threading.Thread(target=self.handle_compliance_report).start()
-
-    def _populate_message(self, cmsg, attrs):
-
-        for name, value in attrs.items():
-
-            if isinstance(value, list):
-                repeated = getattr(cmsg, name)
-                for i in value:
-                    item = repeated.add()
-                    self._populate_message(item, i)
-            elif isinstance(value, dict):
-                nv = getattr(cmsg, name)
-                self._populate_message(nv, value)
-            else:
-                if hasattr(cmsg, name):
-                    setattr(cmsg, name, value)
-
-    def handle_sync_request(self, mail):
-
-        header = dtp_struct.RequestHeader()
-        header.request_id = mail['request_id']
-        header.api_id = mail['api_id']
-        header.account_no = mail['account_no']
-        header.ip = self.__settings['ip']
-        header.mac = self.__settings['mac']
-        header.harddisk = self.__settings['harddisk']
-
-        token = mail.get('token')
-        if token:
-            header.token = mail['token']
-
-        req_type = DTPType.get_proto_type(mail['api_id'])
-
-        body = req_type()
-
-        self._populate_message(body, mail)
-
-        mail.pop('password', None)
-        self.logger.info(mail)
-
-        try:
-            self._sync_req_resp_channel.send(
-                header.SerializeToString(), zmq.SNDMORE)
-            self._sync_req_resp_channel.send(
-                body.SerializeToString())
-        except zmq.ZMQError:
-            self.logger.error('查询响应中...', exc_info=True)
-
-        return self.handle_sync_response(
-            api_id=mail['api_id'], sync=mail['sync'])
-
-    def handle_sync_response(self, api_id, sync=False):
-
-        waited_time = 0
-
-        while waited_time < REQUEST_TIMEOUT:
-
-            try:
-                report_header = self._sync_req_resp_channel.recv(
-                    flags=zmq.NOBLOCK)
-
-                report_body = self._sync_req_resp_channel.recv(
-                    flags=zmq.NOBLOCK)
-
-            except zmq.ZMQError:
-                time.sleep(0.0001)
-                waited_time += 0.0001
-
-            else:
-                header = dtp_struct.ResponseHeader()
-                header.ParseFromString(report_header)
-
-                api_id = header.api_id
-                rsp_type = DTPType.get_proto_type(api_id)
-
-                body = rsp_type()
-                body.ParseFromString(report_body)
-
-                mail = Mail(
-                    api_id=api_id,
-                    api_type='rsp',
-                    handler_id=f'{body.account_no}_{api_id}_rsp',
-                    sync=sync
-                )
-
-                mail['header'] = message2dict(header)
-                mail['body'] = message2dict(body)
-
-                self.logger.info(mail.header)
-
-                if sync:
-                    return mail
-
-                return self.dispatcher.put(mail)
-
-        mail = Mail(
-            api_id=api_id,
-            api_type='rsp',
-            sync=sync,
-            ret_code=-1,
-            err_message='请求超时'
-        )
-        self.logger.error('请求超时 api_id={}'.format(api_id))
-        if sync:
-            return mail
-        return self.dispatcher.put(mail)
-
-    def handle_async_request(self, mail):
-
-        header = dtp_struct.RequestHeader()
-        header.token = mail['token']
-        header.request_id = mail['request_id']
-        header.api_id = mail['api_id']
-        header.account_no = mail['account_no']
-        header.ip = self.__settings['ip']
-        header.mac = self.__settings['mac']
-        header.harddisk = self.__settings['harddisk']
-
-        req_type = DTPType.get_proto_type(header.api_id)
-        body = req_type()
-
-        self._populate_message(body, mail)
-
-        self.logger.info(mail)
-
-        self._async_req_channel.send(
-            header.SerializeToString(), zmq.SNDMORE)
-
-        self._async_req_channel.send(
-            body.SerializeToString())
-
-    def handle_counter_response(self):
-
-        sock = self._async_resp_channel
-
-        while self._running:
-
-            topic = sock.recv()
-            report_header = sock.recv()
-            report_body = sock.recv()
-
-            header = dtp_struct.ReportHeader()
-            header.ParseFromString(report_header)
-
-            api_id = header.api_id
-            rsp_type = DTPType.get_proto_type(api_id)
-
-            try:
-                body = rsp_type()
-                body.ParseFromString(report_body)
-            except Exception:
-                self.logger.warning('未知响应 api_id={}, {}'.format(
-                    header.api_id, header.message))
-                continue
-
-            mail = Mail(
-                api_id=api_id,
-                api_type='rsp',
-                handler_id=f'{body.account_no}_{api_id}_rsp',
-            )
-
-            mail['header'] = message2dict(header)
-            mail['body'] = message2dict(body)
-
-            self.logger.info(mail)
-
-            self.dispatcher.put(mail)
-
-    def handle_compliance_report(self):
-        """
-        风控消息推送
-        """
-        sock = self._risk_report_channel
-
-        while self._running:
-
-            topic = sock.recv()
-            report_header = sock.recv()
-            report_body = sock.recv()
-
-            header = dtp_struct.ReportHeader()
-            header.ParseFromString(report_header)
-
-            body = dtp_struct.PlacedReport()
-            body.ParseFromString(report_body)
-
-            self.logger.info('合规风控 {}, {}'.format(
-                message2dict(header), message2dict(body)))
-
-
-import cmake_example as dtp_api
-class DTP_(dtp_api.Trader):
-
-    def __init__(self, dispatcher):
-
-        self.rest_api = dtp_api.RestApi()
-        self.accounts = [d['cashAccountNo'] for d in self.get_accounts()]
-
-        dtp_api.Trader.__init__(self, self.accounts)
-        self.dispatcher = dispatcher
-
-        self._messages = []
-        
-        
-
-    def on_message_bytes_(self, header_bytes, body_bytes):
-
-        header = dtp_struct.ReportHeader()
-        header.ParseFromString(header_bytes)
-
-        rsp_type = DTPType.get_proto_type(header.api_id)
-        body = rsp_type()
-        body.ParseFromString(body_bytes)
-
-        mail = Mail(
-            api_id=header.api_id,
-            api_type='rsp',
-            handler_id=f'{body.account_no}_{header.api_id}_rsp',
-        )
-
-        mail['header'] = message2dict(header)
-        mail['body'] = message2dict(body)
-
-        self.logger.info(mail)
-
-        self.dispatcher.put(mail)
-
-    def on_message_bytes(self, header_bytes, body_bytes):
-
-        header = dtp_struct.ReportHeader()
-        header.ParseFromString(header_bytes)
-
-        rsp_type = DTPType.get_proto_type(header.api_id)
-        body = rsp_type()
-        body.ParseFromString(body_bytes)
-        print(f'pid={os.getpid()}, tid={threading.get_ident()}')
-        print('message:', header.message)
-        print('id:', body.account_no)
-        self._messages.append((header, body))
-
-    def get_accounts(self):
-        j = self.rest_api.get_accounts()
-        ret = json.loads(j)
-        return ret
-
-    def get_capital(self, account_no):
-        j = self.rest_api.get_capital(account_no)
-        ret = json.loads(j)
-        return ret
-
-    def get_orders(self, account_no):
-        j = self.rest_api.get_orders(account_no)
-        ret = json.loads(j)
-        return ret
-
-    def get_trades(self, account_no):
-        j = self.rest_api.get_trades(account_no)
-        ret = json.loads(j)
-        return ret
-
-    def get_positions(self, account_no):
-        j = self.rest_api.get_positions(account_no)
-        ret = json.loads(j)
-        return ret
-
-    def place_order(self, order_req):
-        self.rest_api.place_order(order_req)
-
-    def place_batch_order(self, batch_order_req, account_no):
-        self.rest_api.place_batch_order(batch_order_req, account_no)
-
-    def cancel_order(self, order_cancelation_req):
-        self.rest_api.cancel_order(order_cancelation_req)
-
-
 class DTP(dtp_api.Trader):
 
     def __init__(self, dispatcher):
@@ -759,7 +430,12 @@ class DTP(dtp_api.Trader):
 
         rsp_type = DTPType.get_proto_type(header.api_id)
         body = rsp_type()
-        body.ParseFromString(body_bytes)
+        try:
+            body.ParseFromString(body_bytes)
+        except:
+            err_msg = f'err bytes: {body_bytes}, type={type(body_bytes)}, api_id={header.api_id}'
+            print(err_msg)
+            self.logger.error(err_msg)
 
         mail = Mail(
             api_id=header.api_id,
@@ -811,6 +487,88 @@ class DTP(dtp_api.Trader):
     def cancel_order(self, order_cancelation_req):
         self.rest_api.cancel_order(order_cancelation_req)
 
+
+class DTP_(dtp_api.Trader):
+    
+    def __init__(self, dispatcher):
+
+        self.rest_api = dtp_api.RestApi()
+        self.accounts = [d['cashAccountNo'] for d in self.get_accounts()]
+
+        dtp_api.Trader.__init__(self, self.accounts)
+        self.dispatcher = dispatcher
+
+        self.logger = logging.getLogger('dtp')
+
+        self._counter_report_thread = threading.Thread(
+            target=self.process_counter_report)
+        
+        print(f'init thread: {threading.get_ident()}')
+
+    def start_counter_report(self):
+        self.start()
+        self._counter_report_thread.start()
+
+    def on_message_bytes(self, header_bytes, body_bytes):
+
+        header = dtp_struct.ReportHeader()
+        header.ParseFromString(header_bytes)
+
+        rsp_type = DTPType.get_proto_type(header.api_id)
+        body = rsp_type()
+        try:
+            body.ParseFromString(body_bytes)
+        except:
+            err_msg = f'err bytes: {body_bytes}, type={type(body_bytes)}, api_id={header.api_id}'
+            print(err_msg)
+            self.logger.error(err_msg)
+
+        mail = Mail(
+            api_id=header.api_id,
+            api_type='rsp',
+            handler_id=f'{body.account_no}_{header.api_id}_rsp',
+        )
+
+        mail['header'] = message2dict(header)
+        mail['body'] = message2dict(body)
+        print(f'\rmessage: {mail.header.message}, {threading.get_ident()}', end='')
+
+    def get_accounts(self):
+        j = self.rest_api.get_accounts()
+        ret = json.loads(j)
+        return ret
+
+    def get_capital(self, account_no):
+        j = self.rest_api.get_capital(account_no)
+        ret = json.loads(j)
+        return ret
+
+    def get_orders(self, account_no):
+        j = self.rest_api.get_orders(account_no)
+        ret = json.loads(j)
+        ret = sum(ret, [])
+        return ret
+
+    def get_trades(self, account_no):
+        j = self.rest_api.get_trades(account_no)
+        ret = json.loads(j)
+        ret = sum(ret, [])
+        return ret
+
+    def get_positions(self, account_no):
+        j = self.rest_api.get_positions(account_no)
+        ret = json.loads(j)
+        ret = sum(ret, [])
+        return ret
+
+    def place_order(self, order_req):
+        self.rest_api.place_order(order_req)
+
+    def place_batch_order(self, batch_order_req, account_no):
+        self.rest_api.place_batch_order(batch_order_req, account_no)
+
+    def cancel_order(self, order_cancelation_req):
+        self.rest_api.cancel_order(order_cancelation_req)
 
 class Order:
 
@@ -947,6 +705,9 @@ class Trader:
         # TODO: keep one only
         self._strategies.remove(strategy)
         self._strategy_dict.pop(strategy.strategy_id)
+    
+    def set_account_no(self, account_no):
+        self._account_no = account_no
 
     def _on_response(self, mail):
 
@@ -983,7 +744,7 @@ class Trader:
         """
         登录
         """
-        self._account_no = account_no
+        self.set_account_no(account_no)
         self._logined = True
         self.start()
 
@@ -1061,6 +822,7 @@ class Trader:
         """
         查询持仓
         """
+        mail = attrdict()
         positions = self._trade_api.get_positions(account_no=self.account_no)
         positions = list(map(rename_position, positions))
         mail['body'] = positions

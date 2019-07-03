@@ -12,7 +12,6 @@ from collections import namedtuple
 import numpy as np
 import pandas as pd
 
-from fast_trader import zmq_context
 from fast_trader.dtp import quotation_pb2 as quote_struct
 from fast_trader.settings import settings
 from fast_trader.utils import timeit, message2dict, Mail
@@ -185,7 +184,8 @@ class TradeFeed(QuoteFeed):
     """
     name = 'trade_feed'
 
-    def format(self, data):
+    @staticmethod
+    def format(data):
         ret = message2dict(data)
         price_fields = ['nPrice']
         for field in price_fields:
@@ -199,7 +199,8 @@ class IndexFeed(QuoteFeed):
     """
     name = 'index_feed'
 
-    def format(self, data):
+    @staticmethod
+    def format(data):
         ret = message2dict(data)
         price_fields = [
             'nOpenIndex', 'nHighIndex', 'nLowIndex',
@@ -215,7 +216,8 @@ class TickFeed(QuoteFeed):
     """
     name = 'tick_feed'
 
-    def format(self, data):
+    @staticmethod
+    def format(data):
         ret = message2dict(data)
         price_fields = [
             'nAskPrice_0', 'nAskPrice_1', 'nAskPrice_2',
@@ -239,7 +241,8 @@ class OrderFeed(QuoteFeed):
     """
     name = 'order_feed'
 
-    def format(self, data):
+    @staticmethod
+    def format(data):
         ret = message2dict(data)
         price_fields = ['nPrice']
         for field in price_fields:
@@ -253,7 +256,8 @@ class QueueFeed(QuoteFeed):
     """
     name = 'queue_feed'
 
-    def format(self, data):
+    @staticmethod
+    def format(data):
         ret = message2dict(data)
         price_fields = ['nPrice']
         for field in price_fields:
@@ -267,7 +271,8 @@ class OptionsFeed(QuoteFeed):
     """
     name = 'options_feed'
 
-    def format(self, data):
+    @staticmethod
+    def format(data):
         ret = message2dict(data)
         price_fields = []
         for field in price_fields:
@@ -280,8 +285,9 @@ class FuturesFeed(QuoteFeed):
     期货ctp行情
     """
     name = 'ctp_feed'
-
-    def format(self, data):
+    
+    @staticmethod
+    def format(data):
         ret = message2dict(data)
         return ret
 

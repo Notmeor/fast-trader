@@ -1,7 +1,7 @@
 
 import os
-os.environ['FAST_TRADER_CONFIG'] = \
-    '/Users/eisenheim/Documents/git/fast-trader/tmp/config.yaml'
+#os.environ['FAST_TRADER_CONFIG'] = \
+#    '/Users/eisenheim/Documents/git/fast-trader/tmp/config.yaml'
 
 import time
 import threading
@@ -19,21 +19,22 @@ class TestTrader:
             dispatcher=self.dispatcher,
             trade_api=self.trade_api,
             trader_id=0)
+        self.trader.set_account_no('011000106328')
 
     def test_get_capital(self):
         capital = self.trader.query_capital()
         print('Capital: ', capital)
 
     def test_get_orders(self):
-        orders = self.trader.query_orders()
+        orders = self.trader.query_orders()['body']
         print('order count: ', len(orders))
 
     def test_get_trades(self):
-        trades = self.trader.query_trades()
+        trades = self.trader.query_trades()['body']
         print('trade count: ', len(trades))
 
     def test_get_positions(self):
-        positions = self.trader.query_positions()
+        positions = self.trader.query_positions()['body']
         print('pos count: ', len(positions))
 
     def test_place_order(self):
@@ -88,5 +89,5 @@ if __name__ == '__main__':
     test = TestTrader()
 
     test.run_all()
-    test.test_place_order()
-    test.test_place_batch_order()
+#    test.test_place_order()
+#    test.test_place_batch_order()

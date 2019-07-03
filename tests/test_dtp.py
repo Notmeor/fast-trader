@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import os
-os.environ['FAST_TRADER_CONFIG'] = \
-    '/Users/eisenheim/Documents/git/fast-trader/tmp/config.yaml'
+# os.environ['FAST_TRADER_CONFIG'] = \
+#     '/Users/eisenheim/Documents/git/fast-trader/tmp/config.yaml'
 
 import time
 import threading
@@ -86,30 +86,30 @@ if __name__ == '__main__':
     pass
     print(f'pid={os.getpid()}, tid={threading.get_ident()}')
     dtp = DTP_(Dispatcher())
-
+    
     dtp.start()
-    # dtp.process_counter_report()
+    dtp.process_counter_report()
         
-    def recv():
-        dtp = DTP_(Dispatcher())
-        dtp.start()
-        dtp.process_counter_report()
+#     def recv():
+#         dtp = DTP_(Dispatcher())
+#         dtp.start()
+#         dtp.process_counter_report()
     
-    counter_report_thread = threading.Thread(
-        target=dtp.process_counter_report)
+#     counter_report_thread = threading.Thread(
+#         target=dtp.process_counter_report)
     
-#    import multiprocessing
-#    counter_report_thread = multiprocessing.Process(
-#        target=recv)
+# #    import multiprocessing
+# #    counter_report_thread = multiprocessing.Process(
+# #        target=recv)
 
-    print('daemon: ', counter_report_thread.daemon)
-    counter_report_thread.start()
-    print('thread started...')
-    print(counter_report_thread)
+#     print('daemon: ', counter_report_thread.daemon)
+#     counter_report_thread.start()
+#     print('thread started...')
+#     print(counter_report_thread)
     
-    while True:
-        time.sleep(1)
-        print('------not blocked!!-----')
+#     while True:
+#         time.sleep(1)
+#         print('------not blocked!!-----')
 
 
     # counter_report_thread.join()

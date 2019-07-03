@@ -20,7 +20,11 @@ class DemoStrategy(Strategy):
         """
         响应策略启动
         """
+        self.subscribe(TickFeed, ['600056', '600036'])
         self.last_order = self.buy('002230', 14, 100)
+
+    def on_market_snapshot(self, data):
+        print(data)
 
     def on_order(self, order):
         """
