@@ -79,11 +79,11 @@ class Market:
 
         streamer = self.datasources[feed_type.name]
         if codes is None:
-            streamer.subsribe_all()
+            streamer.subscribe_all()
         else:
             streamer.subscribe(codes)
 
-    def subsribe_all(self, feed_type):
+    def subscribe_all(self, feed_type):
         self.subscribe(feed_type, codes=None)
 
     def on_quote_message(self, message):
@@ -225,7 +225,7 @@ class StrategyMdSubMixin:
             self.market.subscribe(feed_type, codes)
 
     def subscribe_all(self, feed_type):
-        self.subscribe(self, feed_type, codes=None)
+        self.subscribe(feed_type, codes=None)
 
     def has_subscribed(self, feed_type, code):
         feed_name = feed_type.name
