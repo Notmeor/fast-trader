@@ -1,3 +1,5 @@
+import os
+import threading
 import time, datetime
 from collections import defaultdict
 
@@ -20,24 +22,36 @@ class DemoStrategy(Strategy):
         """
         响应策略启动
         """
-        self.subscribe(TickFeed, ['600056', '600036'])
+        
+        print(f'启动响应:{(os.getpid(), threading.get_ident())}')
+        self.subscribe(TradeFeed, ['600052', '603629'])
+        self.subscribe_all(TradeFeed)
         self.last_order = self.buy('002230', 14, 100)
+        
+        def f():
+            print(datetime.datetime.now())
+        
+        self.run_at_intervals(interval=datetime.timedelta(seconds=2), func=f)
 
     def on_market_snapshot(self, data):
         print(data)
+    
+    def on_market_trade(self, data):
+        print(f'\n-----逐笔成交-----{(os.getpid(), threading.get_ident())}')
+        print(data.nTime, data.szWindCode, data.nPrice)
 
     def on_order(self, order):
         """
         响应报单回报
         """
-        print('\n-----报单回报-----')
+        print(f'\n-----报单回报-----{(os.getpid(), threading.get_ident())}')
         print(order)
 
     def on_trade(self, trade):
         """
         响应成交回报
         """
-        print('\n-----成交回报-----')
+        print(f'\n-----成交回报-----{(os.getpid(), threading.get_ident())}')
         print(trade)
 
         if self.last_order.status == dtp_type.ORDER_STATUS_PARTIAL_FILLED:
@@ -56,8 +70,9 @@ if __name__ == '__main__':
     factory = StrategyFactory()
     strategy = factory.generate_strategy(
         DemoStrategy,
-        strategy_id=DemoStrategy.strategy_id,
+        strategy_id=DemoStrategy.strategy_id + 1,
         account_no='011000106328',
     )
 
     strategy.start()
+    ea = strategy

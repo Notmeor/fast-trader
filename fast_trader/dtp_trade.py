@@ -3,12 +3,12 @@
 import os
 import time
 import datetime
-
+import queue
+import multiprocessing
 import threading
 import logging
 
-import queue
-from queue import Queue
+
 from collections import OrderedDict
 import uuid
 import json
@@ -185,6 +185,7 @@ def rename_order(kw):
 
     return order
 
+
 class TimerTask:
 
     def __init__(self, schedule, some_callable, args=None, kw=None):
@@ -258,15 +259,28 @@ class Timer:
         raise NotImplementedError
 
 
+class Mailbox:
+    
+    def __init__(self):
+        self._q = multiprocessing.Queue()
+    
+    def get(self, *args, **kw):
+        return self._q.get(*args, **kw)
+    
+    def put(self, item, *args, **kw):
+        self._q.put(item, *args, **kw)
+
+
+
 class Dispatcher:
 
     def __init__(self, **kw):
 
         self._handlers = {}
 
-        self._req_queue = Queue()
-        self._rsp_queue = Queue()
-        self._market_queue = Queue()
+        self._req_queue = queue.Queue()
+        self._rsp_queue = queue.Queue()
+        self._market_queue = queue.Queue()
 
         self.logger = logging.getLogger('dispatcher')
 
@@ -274,6 +288,8 @@ class Dispatcher:
         self._req_processor = None
 
         self.timer = Timer()
+        
+        self.mailbox = Mailbox()
 
         self._running = False
         self._service_suspended = False
@@ -286,10 +302,9 @@ class Dispatcher:
             return
 
         self._running = True
-        self._req_processor = threading.Thread(target=self.process_req)
+
         self._rsp_processor = threading.Thread(target=self.process_rsp)
 
-        self._req_processor.start()
         self._rsp_processor.start()
 
     def join(self):
@@ -304,21 +319,12 @@ class Dispatcher:
 
     def process_rsp(self):
 
-        # TODO: poll queues or zmq socks
         while self._running:
             try:
-                mail = self._rsp_queue.get(block=False)
+                mail = self.mailbox.get(timeout=0.0001)
                 self.dispatch(mail)
             except queue.Empty:
                 pass
-            except Exception as e:
-                self.logger.error(str(e), exc_info=True)
-
-            try:
-                mail = self._market_queue.get(block=False)
-                self.dispatch(mail)
-            except queue.Empty:
-                time.sleep(0.0001)
             except Exception as e:
                 self.logger.error(str(e), exc_info=True)
 
@@ -359,7 +365,8 @@ class Dispatcher:
         elif handler_id[0].isalpha():
             self._market_queue.put(mail)
         elif handler_id.endswith('_rsp'):
-            self._rsp_queue.put(mail)
+            #self._rsp_queue.put(mail)
+            self.mailbox.put(mail)
         else:
             raise Exception('Invalid message: {}'.format(mail))
 
@@ -416,11 +423,10 @@ class DTP(dtp_api.Trader):
 
         self.logger = logging.getLogger('dtp')
 
-        self._counter_report_thread = threading.Thread(
-            target=self.process_counter_report)
-
     def start_counter_report(self):
         self.start()
+        self._counter_report_thread = threading.Thread(
+            target=self.process_counter_report)
         self._counter_report_thread.start()
 
     def on_message_bytes(self, header_bytes, body_bytes):
@@ -446,7 +452,7 @@ class DTP(dtp_api.Trader):
         mail['header'] = message2dict(header)
         mail['body'] = message2dict(body)
 
-        self.logger.info(mail)
+        #self.logger.info(mail)
 
         self.dispatcher.put(mail)
 
@@ -570,6 +576,69 @@ class DTP_(dtp_api.Trader):
     def cancel_order(self, order_cancelation_req):
         self.rest_api.cancel_order(order_cancelation_req)
 
+
+class CounterReportProducer:
+    
+    def __init__(self):
+        self.mailbox = None
+        self.proc = None
+    
+    def set_mailbox(self, mailbox):
+        self.mailbox = mailbox
+    
+    def produce(self):
+        class Counter(dtp_api.Trader):
+        
+            def __init__(self):
+        
+                self.rest_api = dtp_api.RestApi()
+                self.accounts = [d['cashAccountNo'] 
+                                 for d in self.get_accounts()]
+                dtp_api.Trader.__init__(self, self.accounts)
+            
+            def set_mailbox(self, mailbox):
+                self.mailbox = mailbox
+            
+            def get_accounts(self):
+                j = self.rest_api.get_accounts()
+                ret = json.loads(j)
+                return ret
+        
+            def on_message_bytes(self, header_bytes, body_bytes):
+        
+                header = dtp_struct.ReportHeader()
+                header.ParseFromString(header_bytes)
+        
+                rsp_type = DTPType.get_proto_type(header.api_id)
+                body = rsp_type()
+                try:
+                    body.ParseFromString(body_bytes)
+                except:
+                    err_msg = f'err bytes: {body_bytes}, type={type(body_bytes)}, api_id={header.api_id}'
+                    print(err_msg)
+                    self.logger.error(err_msg)
+        
+                mail = Mail(
+                    api_id=header.api_id,
+                    api_type='rsp',
+                    handler_id=f'{body.account_no}_{header.api_id}_rsp',
+                )
+        
+                mail['header'] = message2dict(header)
+                mail['body'] = message2dict(body)
+                print('counter mail:', mail)
+                self.mailbox.put(mail)
+        
+        counter = Counter()
+        counter.set_mailbox(self.mailbox)
+        counter.start()
+        counter.process_counter_report()
+    
+    def start(self):
+        self.proc = multiprocessing.Process(target=self.produce)
+        self.proc.start()
+
+
 class Order:
 
     exchange = dtp_type.EXCHANGE_SH_A
@@ -612,6 +681,11 @@ class Trader:
 
         self.logger = logging.getLogger('trader')
         self.logger.debug('初始化 process_id={}'.format(os.getpid()))
+    
+    def start_counter_report(self):
+        self.counter_report_producer = CounterReportProducer()
+        self.counter_report_producer.set_mailbox(self.dispatcher.mailbox)
+        self.counter_report_producer.start()
 
     def start(self):
 
@@ -626,7 +700,8 @@ class Trader:
 
         self._bind()
 
-        self._trade_api.start_counter_report()
+        #self._trade_api.start_counter_report()
+        self.start_counter_report()
 
         self._started = True
 
@@ -634,11 +709,10 @@ class Trader:
 
         if not self.__api_bound:
 
-            dispatcher, _trade_api = self.dispatcher, self._trade_api
-
             for api_id in dtp_api_id.RSP_API_NAMES:
-                dispatcher.bind(f'{self.account_no}_{api_id}_rsp',
-                                self._on_response)
+                self.dispatcher.bind(
+                    f'{self.account_no}_{api_id}_rsp',
+                    self._on_response)
 
 #            for api_id in dtp_api_id.REQ_API_NAMES:
 #                api_name = dtp_api_id.REQ_API_NAMES[api_id]

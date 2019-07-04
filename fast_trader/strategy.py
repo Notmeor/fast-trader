@@ -4,6 +4,7 @@ import os
 import time
 import datetime
 import threading
+import multiprocessing
 import logging
 import collections
 import pandas as pd
@@ -127,8 +128,8 @@ def start_(self):
     qu = multiprocessing.Queue()
 
     proc = multiprocessing.Process(target=recv_msg, args=(qu,))
-    proc.start()
-
+    proc.start()            
+    
 
 class QuoteFeed(dtp_api.QuoteFeed):
     
@@ -152,6 +153,7 @@ class QuoteFeed(dtp_api.QuoteFeed):
         mail = Mail(
             api_id=source_id,
             api_type='rsp',
+            handler_id='quote_feed',
             content=msg)
         
         for cb in self._callbacks.values():
@@ -178,7 +180,41 @@ class QuoteFeed(dtp_api.QuoteFeed):
         else:
             name = cb_or_name
         self._callbacks.pop(name)
+
+
+class QuoteFeedProducer:
+    
+    def __init__(self):
+        self.proc = None
+        self.subscriptions = None
+        self.mailbox = None
+    
+    def set_subscriptions(self, subscriptions):
+        self.subscriptions = subscriptions
+    
+    def set_mailbox(self, mailbox):
+        self.mailbox = mailbox
+    
+    def produce(self):
+
+        qf = QuoteFeed()
+
+        for subscription in self.subscriptions.values():
+
+            for name, sub in subscription.items():
+                if sub.subscribed_all:
+                    qf.subscribe_all(name)
+                else:
+                    print(name, sub.subscribed_codes)
+                    qf.subscribe(name, sub.subscribed_codes)
         
+        qf.add_callback(self.mailbox.put)
+        
+        qf.start()
+    
+    def start(self):
+        self.proc = multiprocessing.Process(target=self.produce)
+        self.proc.start()
         
 
 
@@ -191,13 +227,33 @@ class Market:
         self._strategies = []
         self._started = False
         
-        self.quote_feed = QuoteFeed()
-
     def start(self):
-        self.quote_feed.add_callback(self.on_quote_message)
-        self.quote_feed.start()
+        if not self._started:
+            self.dispatcher.bind('quote_feed', self.on_quote_message)
+        
+        # FIXME: do not restart quote feed proc
+        # each time market.start gets called
+        try:
+            self.quote_feed_producer.proc.terminate()
+        except:
+            pass
+        finally:
+            self.quote_feed_producer = QuoteFeedProducer()
+            self.quote_feed_producer.set_mailbox(self.dispatcher.mailbox)
+            self.quote_feed_producer.set_subscriptions(self.get_subscriptions())
+            self.quote_feed_producer.start()
         
         self._started = True
+    
+    def stop(self):
+        self.quote_feed_producer.proc.terminate()
+        self._started = False
+
+    def get_subscriptions(self):
+        subs = collections.OrderedDict()
+        for ea in self._strategies:
+            subs[ea.strategy_id] = ea._md_subscriptions
+        return subs
 
     @property
     def started(self):
@@ -210,13 +266,11 @@ class Market:
         self._strategies.remove(strategy)
 
     def subscribe(self, feed_type, codes):
-        
-        if codes is None:
-            self.quote_feed.subsribe_all(feed_type.name, codes)
-        else:
-            self.quote_feed.subscribe(feed_type.name, codes)
+        # 暂不支持动态订阅与取消订阅
+        # 须在策略启动前确定好订阅范围
+        pass
 
-    def subsribe_all(self, feed_type):
+    def subscribe_all(self, feed_type):
         self.subscribe(feed_type, codes=None)
 
     def on_quote_message(self, message):
@@ -346,7 +400,7 @@ class StrategyMdSubMixin:
             self.market.subscribe(feed_type, codes)
 
     def subscribe_all(self, feed_type):
-        self.subscribe(self, feed_type, codes=None)
+        self.subscribe(feed_type, codes=None)
 
     def has_subscribed(self, feed_type, code):
         feed_name = feed_type.name
@@ -555,6 +609,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
                     api_id=api_id,
                     order_original_id=order_id,
                     handler_id=handler_id)
+        print('snd: ', mail)
         self.trader.dispatcher.put(mail)
 
     def add_cash(self, value):
@@ -822,6 +877,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
 
     def _on_start(self, message):
         self.on_start()
+        self.market.start()
 
     def on_start(self):
         """
