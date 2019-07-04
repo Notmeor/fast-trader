@@ -7,6 +7,7 @@ import threading
 import logging
 import collections
 import pandas as pd
+import sqlite3
 
 
 from fast_trader.dtp_quote import (Transaction, Snapshot,
@@ -284,12 +285,14 @@ class StrategyWatchMixin:
 
         while self._started:
             ts = get_current_ts()
-
-            (self._session
-                .query(StrategyStatus)
-                .filter_by(strategy_id=self.strategy_id,
-                           account_no=self.account_no)
-                .update({'last_heartbeat': ts}))
+            try:
+                (self._session
+                    .query(StrategyStatus)
+                    .filter_by(strategy_id=self.strategy_id,
+                            account_no=self.account_no)
+                    .update({'last_heartbeat': ts}))
+            except sqlite3.OperationalError:
+                pass
 
             self._session.commit()
             time.sleep(0.5)
@@ -333,9 +336,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         # 不会加载历史状态
         self.persistent = persistent
 
-        self.logger = logging.getLogger(
-            f'strategy.<no={account_no};id={strategy_id};'
-            f'name={self.strategy_name}>')
+        self._config_logger()
 
         if self.strategy_id < 0 or not isinstance(self.strategy_id, int):
             raise RuntimeError(
@@ -355,6 +356,27 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
 
         # order_exchange_id -> order_original_id
         self._order_id_mapping = {}
+
+    def _config_logger(self):
+        # self.logger = logging.getLogger(
+        #     f'strategy.<no={account_no};id={strategy_id};'
+        #     f'name={self.strategy_name}>')
+        td = datetime.date.today().strftime('%Y%m%d')
+        path = os.path.join(
+            os.getenv('FAST_TRADER_HOME'), 
+            f'logs/{self.account_no}_strategy{self.strategy_id}_{td}.log')
+        handler = logging.FileHandler(path, encoding='utf8')
+
+        try:
+            formatter = logging.Formatter(
+                settings['logging']['formatters']['user']['format'])
+        except:
+            formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+        handler.setFormatter(formatter)
+        self.logger = logging.getLogger(f'strategy.<{self.strategy_name}>')
+        self.logger.addHandler(handler)
 
     def set_trader(self, trader):
         self.trader = trader

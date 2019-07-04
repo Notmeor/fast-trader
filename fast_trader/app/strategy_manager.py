@@ -61,7 +61,7 @@ class Manager:
         self._heartbeat_thread = threading.Thread(target=self.send_heartbeat)
 
         self.logger = logging.getLogger('strategy_manager')
-        self.logger.addHandler(SqlLogHandler())
+        #self.logger.addHandler(SqlLogHandler())
 
     @staticmethod
     def write_pid_file(pid=None):
@@ -130,7 +130,7 @@ class Manager:
         if self._factory is None:
             self._factory = StrategyFactory(
                 factory_settings=self._strategy_settings)
-            self._factory.dtp.logger.addHandler(SqlLogHandler())
+            #self._factory.dtp.logger.addHandler(SqlLogHandler())
         return self._factory
 
     def update_settings(self, strategy_settings):
@@ -444,7 +444,10 @@ class Manager:
                 self.logger.info(f'received: {request}')
                 ret = self.handle_request(request)
                 self.send(ret)
-                self.logger.info(f'sent: {ret}')
+                ret_content = str(ret)
+                if len(ret_content) > 200:
+                    ret_content = ret_content[:200] + '...'
+                self.logger.info('sent: ' + ret_content)
 
 
 class StrategyLoader:

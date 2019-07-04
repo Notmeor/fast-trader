@@ -6,6 +6,9 @@ import logging.config
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.engine import Engine
+from sqlalchemy import event
+
 from fast_trader.models import StrategyLogModel, Base
 
 
@@ -80,6 +83,14 @@ Session = None
 
 
 def config_sqlalchemy():
+
+    # enable wal mode
+    @event.listens_for(Engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.close()
+
     global engine
     global Session
     uri = settings['sqlalchemy_url']

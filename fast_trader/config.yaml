@@ -93,26 +93,26 @@ logging:
             level: WARNING
             formatter: simple
             stream: ext://sys.stdout
-    
+
+        strategy_manager_info_file_handler:
+            class: logging.FileHandler
+            level: INFO
+            formatter: debug
+            filename: '{fast_trader_home}/logs/strategy_manager_{today_str}.log'
+            encoding: utf8
+
         info_file_handler:
             class: logging.FileHandler
             level: INFO
             formatter: debug
-            filename: '{fast_trader_home}/logs/info.{today_str}.log'
+            filename: '{fast_trader_home}/logs/info_{today_str}.log'
             encoding: utf8
     
         error_file_handler:
             class: logging.FileHandler
             level: ERROR
             formatter: simple
-            filename: '{fast_trader_home}/logs/error.{today_str}.log'
-            encoding: utf8
-        
-        user_log_handler:
-            class: logging.FileHandler
-            level: INFO
-            formatter: user
-            filename: '{fast_trader_home}/logs/strategy.{today_str}.log'
+            filename: '{fast_trader_home}/logs/error_{today_str}.log'
             encoding: utf8
     
     loggers:
@@ -134,17 +134,17 @@ logging:
 
         strategy:
             level: INFO
-            handlers: [user_log_handler]
+            handlers: []
             propagate: no
         
         strategy_manager:
             level: INFO
-            handlers: [info_file_handler, error_file_handler]
+            handlers: [strategy_manager_info_file_handler]
             propagate: no
         
         strategy_server:
             level: INFO
-            handlers: [info_file_handler, error_file_handler, console]
+            handlers: [strategy_manager_info_file_handler, console]
             propagate: no
         
         settings:
@@ -159,5 +159,5 @@ logging:
     
     root:
         level: DEBUG
-        handlers: [user_log_handler]
+        handlers: [info_file_handler]
 
