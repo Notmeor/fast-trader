@@ -22,7 +22,7 @@ from fast_trader.id_pool import _id_pool
 from fast_trader.utils import timeit, attrdict, message2dict, Mail
 from fast_trader.settings import settings, setup_logging
 
-import dtp_api
+from fast_trader.dtp import dtp_api
 
 # setup_logging()
 
@@ -627,7 +627,6 @@ class CounterReportProducer:
         
                 mail['header'] = message2dict(header)
                 mail['body'] = message2dict(body)
-                print('counter mail:', mail)
                 self.mailbox.put(mail)
         
         counter = Counter()

@@ -29,6 +29,9 @@ from fast_trader.utils import (Mail, timeit, message2tuple, attrdict,
 
 from fast_trader.ledger import LedgerWriter
 
+from fast_trader.dtp import dtp_api
+from fast_trader.dtp_quote import quote_struct
+
 
 # 委托状态添加 `SUBMITTED` : 报单本地已发送
 dtp_type.ORDER_STATUS_SUBMITTED = -1
@@ -107,10 +110,6 @@ class Market_:
         self.datasources[feed_type.name] = streamer
         if self._started:
             streamer.start()
-
-
-import dtp_api
-from fast_trader.dtp_quote import quote_struct
 
 
 def recv_msg(qu):
