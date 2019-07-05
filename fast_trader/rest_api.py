@@ -24,6 +24,8 @@ default_query_headers = default_headers
 
 logger = logging.getLogger('rest_api')
 
+REQUEST_TIMEOUT = 3
+
 
 class RestSettings:
 
@@ -113,7 +115,8 @@ def request(url, headers, body, method='post'):
     logger.info(f'{method.upper()} {urlsplit(url).path}: {body}')
     data = json.dumps(body)
     meth = getattr(session, method)
-    r = meth(url, headers=headers, data=data, verify=False)
+    r = meth(url, headers=headers, data=data,
+             verify=False, timeout=REQUEST_TIMEOUT)
 
     if r.status_code not in [200, 201]:
         raise requests.HTTPError(f'{r.status_code}, {r.text}')

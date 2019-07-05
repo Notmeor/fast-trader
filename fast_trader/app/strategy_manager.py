@@ -432,22 +432,28 @@ class Manager:
 
         self.logger.info(f'Strategy manager started. Pid={os.getpid()}')
 
-        self._heartbeat_thread.start()
+        if not self._heartbeat_thread.is_alive():
+            self._heartbeat_thread.start()
 
-        while True:
-            # 监听外部指令
-            try:
-                request = self.receive()
-            except zmq.Again:
-                pass
-            else:
-                self.logger.info(f'received: {request}')
-                ret = self.handle_request(request)
-                self.send(ret)
-                ret_content = str(ret)
-                if len(ret_content) > 200:
-                    ret_content = ret_content[:200] + '...'
-                self.logger.info('sent: ' + ret_content)
+        try:
+            while True:
+                # 监听外部指令
+                try:
+                    request = self.receive()
+                except zmq.Again:
+                    pass
+                else:
+                    self.logger.info(f'received: {request}')
+
+                    ret = self.handle_request(request)
+
+                    self.send(ret)
+                    ret_content = str(ret)
+                    if len(ret_content) > 200:
+                        ret_content = ret_content[:200] + '...'
+                    self.logger.info('sent: ' + ret_content)
+        except:
+            self.logger.error('Strategy server exited.', exc_info=True)
 
 
 class StrategyLoader:
@@ -532,9 +538,9 @@ class StrategyServer:
 
     def restart(self):
         self.stop()
-        time.sleep(2)
+        while self.is_running():
+            time.sleep(0.5)
         self.start()
-        time.sleep(2)
 
     def is_running(self):
         session = Session()
