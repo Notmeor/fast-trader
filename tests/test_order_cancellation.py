@@ -23,7 +23,7 @@ class DemoStrategy(Strategy):
         响应策略启动
         """
         
-        print(f'启动响应:{(os.getpid(), threading.get_ident())}')
+        print(datetime.datetime.now(), f'启动响应:{(os.getpid(), threading.get_ident())}')
         self.subscribe(TradeFeed, ['600052', '603629'])
         self.subscribe_all(TradeFeed)
         self.last_order = self.buy('002230', 14, 100)
@@ -31,7 +31,7 @@ class DemoStrategy(Strategy):
         def f():
             print(datetime.datetime.now())
         
-        self.run_at_intervals(interval=datetime.timedelta(seconds=2), func=f)
+        #self.run_at_intervals(interval=datetime.timedelta(seconds=2), func=f)
 
     def on_market_snapshot(self, data):
         print(data)

@@ -876,6 +876,9 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
             self.on_market_index(data)
 
     def _on_start(self, message):
+        # Wait for sub processes to start
+        time.sleep(5)
+
         self.on_start()
         self.market.start()
 

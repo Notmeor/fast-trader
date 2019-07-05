@@ -587,6 +587,7 @@ class CounterReportProducer:
         self.mailbox = mailbox
     
     def produce(self):
+        print(datetime.datetime.now(), 'enter subp...')
         class Counter(dtp_api.Trader):
         
             def __init__(self):
@@ -632,11 +633,13 @@ class CounterReportProducer:
         counter = Counter()
         counter.set_mailbox(self.mailbox)
         counter.start()
+        print(datetime.datetime.now(), 'start counter report in subp...')
         counter.process_counter_report()
     
     def start(self):
         self.proc = multiprocessing.Process(target=self.produce)
         self.proc.start()
+        print(datetime.datetime.now(), 'start counter report...')
 
 
 class Order:
