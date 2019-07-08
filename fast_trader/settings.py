@@ -76,8 +76,6 @@ def ensure_directories():
     _mkdir(strategy_dir)
 
 
-ensure_directories()
-
 engine = None
 Session = None
 
@@ -97,9 +95,6 @@ def config_sqlalchemy():
     engine = create_engine(uri)
     Session = sessionmaker(bind=engine)
     Base.metadata.create_all(bind=engine)
-
-
-config_sqlalchemy()
 
 
 class SqlLogHandler(logging.Handler):
@@ -130,4 +125,3 @@ def setup_logging():
     except:
         logging.basicConfig(level=logging.INFO)
 
-setup_logging()
