@@ -152,6 +152,7 @@ class QuoteFeed(dtp_api.QuoteFeed):
         mail = Mail(
             api_id=source_id,
             api_type='rsp',
+            handler_id='quote_feed',
             content=msg)
         
         for cb in self._callbacks.values():
@@ -192,10 +193,16 @@ class Market:
         self._started = False
         
         self.quote_feed = QuoteFeed()
+        self._quote_feed_thread = threading.Thread(
+            target=self.quote_feed.start)
 
     def start(self):
-        self.quote_feed.add_callback(self.on_quote_message)
-        self.quote_feed.start()
+        if not self._started:
+            self.dispatcher.bind('quote_feed', self.on_quote_message)
+        
+        self.quote_feed.add_callback(self.dispatcher.put)
+
+        self._quote_feed_thread.start()
         
         self._started = True
 
@@ -509,13 +516,15 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         raise NotImplementedError
 
     def start(self):
-
+        print('strategy starting...')
         if self.trader.logined:
 
             self.set_ledger_writer()
 
+            print('market starting...')
             # 启动行情订阅
             self.market.start()
+            print('market started...')
 
             self._send_on_start_event()
 
@@ -1249,12 +1258,14 @@ class StrategyFactory:
                     password = settings['credentials'][account_no]
                 return password
 
+            print('trader logining...')
             trader.login(
                 account_no=account_no,
                 password=_get_password(account_no),
                 sync=True
             )
             self.traders[account_no] = trader
+            print('trader logined...')
         else:
             trader = self.traders[account_no]
 

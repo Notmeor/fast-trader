@@ -1,3 +1,6 @@
+
+import os
+import threading
 import time, datetime
 from collections import defaultdict
 
@@ -20,17 +23,21 @@ class DemoStrategy(Strategy):
         """
         响应策略启动
         """
-        self.subscribe(TickFeed, ['600056', '600036'])
+        self.subscribe(TradeFeed, ['600890', '600052', '603629'])
         self.last_order = self.buy('002230', 14, 100)
 
     def on_market_snapshot(self, data):
         print(data)
+    
+    def on_market_trade(self, data):
+        print(f'\r{data.szCode, data.nPrice, os.getpid(), threading.get_ident()}',
+              end='')
 
     def on_order(self, order):
         """
         响应报单回报
         """
-        print('\n-----报单回报-----')
+        print('\n-----报单回报-----', os.getpid(), threading.get_ident())
         print(order)
 
     def on_trade(self, trade):
@@ -47,7 +54,7 @@ class DemoStrategy(Strategy):
         """
         响应撤单回报
         """
-        print('\n-----撤单回报-----')
+        print('\n-----撤单回报-----', os.getpid(), threading.get_ident())
         print(data)
 
 

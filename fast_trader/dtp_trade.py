@@ -435,7 +435,7 @@ class DTP(dtp_api.Trader):
         except:
             err_msg = f'err bytes: {body_bytes}, type={type(body_bytes)}, api_id={header.api_id}'
             print(err_msg)
-            self.logger.error(err_msg)
+            #self.logger.error(err_msg)
 
         mail = Mail(
             api_id=header.api_id,
@@ -446,7 +446,8 @@ class DTP(dtp_api.Trader):
         mail['header'] = message2dict(header)
         mail['body'] = message2dict(body)
 
-        self.logger.info(mail)
+        #self.logger.info(mail)
+        #print(f'\rrsp: {mail}', end='')
 
         self.dispatcher.put(mail)
 
