@@ -6,6 +6,7 @@ import datetime
 
 import threading
 import logging
+import zmq
 
 import queue
 from queue import Queue
@@ -21,7 +22,7 @@ from fast_trader.dtp import ext_type_pb2 as dtp_type
 from fast_trader.id_pool import _id_pool
 from fast_trader.utils import timeit, attrdict, message2dict, Mail
 from fast_trader.settings import settings, setup_logging
-
+from fast_trader import zmq_context
 import dtp_api
 
 # setup_logging()
@@ -349,6 +350,7 @@ class Dispatcher:
             # ignore all incoming/outgoing messages
             return
 
+        #import pdb;pdb.set_trace()
         handler_id = mail['handler_id']
 
         if mail.get('sync'):
@@ -417,39 +419,21 @@ class DTP(dtp_api.Trader):
         self.logger = logging.getLogger('dtp')
 
         self._counter_report_thread = threading.Thread(
-            target=self.process_counter_report)
+            target=self._recv)
+    
+    def _recv(self):
+        ctx = zmq_context.manager.context
+        sock = ctx.socket(zmq.SUB)
+        sock.connect('tcp://127.0.0.1:9501')
+        sock.subscribe('')
+        
+        while True:
+            mail = attrdict(sock.recv_json())
+            self.dispatcher.put(mail)
 
     def start_counter_report(self):
         self.start()
         self._counter_report_thread.start()
-
-    def on_message_bytes(self, header_bytes, body_bytes):
-
-        header = dtp_struct.ReportHeader()
-        header.ParseFromString(header_bytes)
-
-        rsp_type = DTPType.get_proto_type(header.api_id)
-        body = rsp_type()
-        try:
-            body.ParseFromString(body_bytes)
-        except:
-            err_msg = f'err bytes: {body_bytes}, type={type(body_bytes)}, api_id={header.api_id}'
-            print(err_msg)
-            #self.logger.error(err_msg)
-
-        mail = Mail(
-            api_id=header.api_id,
-            api_type='rsp',
-            handler_id=f'{body.account_no}_{header.api_id}_rsp',
-        )
-
-        mail['header'] = message2dict(header)
-        mail['body'] = message2dict(body)
-
-        #self.logger.info(mail)
-        #print(f'\rrsp: {mail}', end='')
-
-        self.dispatcher.put(mail)
 
     def get_accounts(self):
         j = self.rest_api.get_accounts()
@@ -608,9 +592,6 @@ class Trader:
 
         self.__api_bound = False
 
-        # order_exchange_id -> order_original_id
-        self._order_id_mapping = {}
-
         self.logger = logging.getLogger('trader')
         self.logger.debug('初始化 process_id={}'.format(os.getpid()))
 
@@ -713,10 +694,17 @@ class Trader:
     def _on_response(self, mail):
 
         api_id = mail['api_id']
+        
+        if api_id == 11002002:
+            print('?:', mail)
+            import pdb;pdb.set_trace()
 
         # TODO: might be opt out
-        if 'header' in mail:
-            mail.body['message'] = mail.header.message
+        if 'header' in mail['content']:
+            mail['content']['body']['message'] =\
+                mail['content']['header']['message']
+        
+        #import pdb;pdb.set_trace()
 
         if api_id == dtp_api_id.LOGIN_ACCOUNT_RESPONSE:
             self.on_login(mail)
@@ -724,8 +712,10 @@ class Trader:
             self.on_logout(mail)
         else:
             for ea in self._strategies:
-                if ea.started and ea._check_owner(mail):
-                    getattr(ea, dtp_api_id.RSP_API_NAMES[api_id])(mail)
+                if ea.started and ea._check_owner(mail['content']):
+                    getattr(
+                        ea, 
+                        dtp_api_id.RSP_API_NAMES[api_id])(mail['content'])
 
     @property
     def account_no(self):

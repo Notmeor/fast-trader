@@ -6,6 +6,7 @@ import datetime
 import threading
 import logging
 import collections
+import zmq
 import pandas as pd
 
 
@@ -27,6 +28,8 @@ from fast_trader.utils import (Mail, timeit, message2tuple, attrdict,
                                message2dict, as_wind_code, get_current_ts)
 
 from fast_trader.ledger import LedgerWriter
+from fast_trader import zmq_context
+
 
 
 # 委托状态添加 `SUBMITTED` : 报单本地已发送
@@ -109,7 +112,6 @@ class Market_:
 
 
 import dtp_api
-from fast_trader.dtp_quote import quote_struct
 
 
 def recv_msg(qu):
@@ -134,29 +136,23 @@ class QuoteFeed(dtp_api.QuoteFeed):
     
     def __init__(self):
         dtp_api.QuoteFeed.__init__(self)
-        self._callbacks = collections.OrderedDict()        
+        self._callbacks = collections.OrderedDict()    
+        self._quote_feed_thread = threading.Thread(target=self._recv)
     
-    def on_message_bytes(self, source_id, body_bytes):
-        data = quote_struct.MarketData()
-        data.ParseFromString(body_bytes)
-        _type = data.Type.Name(data.type).lower()
-        message = getattr(data, _type)
+    def _recv(self):
+        ctx = zmq_context.manager.context
+        sock = ctx.socket(zmq.SUB)
+        sock.connect('tcp://127.0.0.1:9500')
+        sock.subscribe('')
         
-        # format
-        feed_type = FEED_TYPE_NAME_MAPPING[source_id]
-        message = feed_type.format(message)
-        
-        self.on_message(source_id, message)
+        while True:
+            mail = attrdict(sock.recv_json())
+            for cb in self._callbacks.values():
+                cb(mail)
     
-    def on_message(self, source_id, msg):
-        mail = Mail(
-            api_id=source_id,
-            api_type='rsp',
-            handler_id='quote_feed',
-            content=msg)
-        
-        for cb in self._callbacks.values():
-            cb(mail)
+    def start(self):
+        super().start()
+        self._quote_feed_thread.start()
 
     @property
     def callbacks(self):
@@ -180,8 +176,6 @@ class QuoteFeed(dtp_api.QuoteFeed):
             name = cb_or_name
         self._callbacks.pop(name)
         
-        
-
 
 class Market:
 
@@ -193,8 +187,6 @@ class Market:
         self._started = False
         
         self.quote_feed = QuoteFeed()
-        self._quote_feed_thread = threading.Thread(
-            target=self.quote_feed.start)
 
     def start(self):
         if not self._started:
@@ -202,7 +194,7 @@ class Market:
         
         self.quote_feed.add_callback(self.dispatcher.put)
 
-        self._quote_feed_thread.start()
+        self.quote_feed.start()
         
         self._started = True
 
@@ -562,8 +554,8 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         handler_id = f'{self.account_no}_{api_id}_{api_type}'
         mail = Mail(api_type=api_type,
                     api_id=api_id,
-                    order_original_id=order_id,
-                    handler_id=handler_id)
+                    handler_id=handler_id,
+                    content={'order_original_id': order_id})
         self.trader.dispatcher.put(mail)
 
     def add_cash(self, value):
@@ -881,6 +873,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         """
         成交回报
         """
+
         trade = TradeResponse.from_msg(msg.body)
 
         self.logger.info(as_trade_msg(trade))
@@ -1001,6 +994,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         """
         撤单提交响应
         """
+        print('msg', type(msg), msg)
         self.logger.info(
             f'{msg.body.message}, 委托编号={msg.body.order_exchange_id}')
 
@@ -1244,6 +1238,7 @@ class StrategyFactory:
         strategy.persistent = persistent
 
         if account_no not in self.traders:
+            print('trader initing...')
             trader = Trader(
                 dispatcher=self.dispatcher,
                 trade_api=self.dtp,

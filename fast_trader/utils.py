@@ -46,8 +46,16 @@ class AnnotationCheckMixin:
 
 
 class attrdict(dict):
+    
+    # TODO: profile
 
     __slots__ = ()
+    
+    def __init__(self, *args, **kw):
+        dict.__init__(self, *args, **kw)
+        for k in self:
+            if isinstance(self[k], dict):
+                self[k] = attrdict(self[k])
 
     def __getattr__(self, key):
         try:
