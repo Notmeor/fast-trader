@@ -21,7 +21,9 @@ from fast_trader.id_pool import _id_pool
 from fast_trader.settings import settings, setup_logging
 from fast_trader.utils import attrdict
 from fast_trader import zmq_context
-import dtp_api
+
+#import dtp_api
+from fast_trader.dtp import dtp_api
 
 # setup_logging()
 

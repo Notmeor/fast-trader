@@ -27,7 +27,8 @@ from fast_trader.utils import (Mail, timeit, attrdict,
 from fast_trader.ledger import LedgerWriter
 from fast_trader import zmq_context
 
-import dtp_api
+#import dtp_api
+from fast_trader.dtp import dtp_api
 
 
 
