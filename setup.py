@@ -15,5 +15,6 @@ setup(
         'pyzmq>=18.0.0',
         'sqlalchemy>=1.1.15',
         'inflection>=0.3.1',
-        'PyYAML>=3.12']
+        'PyYAML>=3.12',
+        'pandas>=0.21.0']
 )
