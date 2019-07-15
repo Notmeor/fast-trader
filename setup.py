@@ -12,7 +12,7 @@ setup(
     include_package_data=True,
     package_data={'': ['config.yaml']},
     install_requires=[
-        'zmq>=18.0.0',
+        'pyzmq>=18.0.0',
         'sqlalchemy>=1.1.15',
         'inflection>=0.3.1']
 )
