@@ -14,5 +14,6 @@ setup(
     install_requires=[
         'pyzmq>=18.0.0',
         'sqlalchemy>=1.1.15',
-        'inflection>=0.3.1']
+        'inflection>=0.3.1',
+        'PyYAML>=3.12']
 )
