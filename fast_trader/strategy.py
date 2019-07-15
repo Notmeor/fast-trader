@@ -7,12 +7,9 @@ import threading
 import logging
 import collections
 import zmq
-import pandas as pd
+import sqlite3
 
-
-from fast_trader.dtp_quote import (Transaction, Snapshot,
-                                   MarketOrder, Index, OrderQueue,
-                                   FEED_TYPE_NAME_MAPPING)
+from fast_trader.dtp_quote import FEED_TYPE_NAME_MAPPING
 
 from fast_trader.dtp_trade import DTP, Trader, Dispatcher, dtp_type
 from fast_trader.dtp_trade import (OrderResponse, TradeResponse,
@@ -24,11 +21,13 @@ from fast_trader.dtp_trade import (OrderResponse, TradeResponse,
 from fast_trader.models import StrategyStatus
 
 from fast_trader.settings import settings, Session
-from fast_trader.utils import (Mail, timeit, message2tuple, attrdict,
-                               message2dict, as_wind_code, get_current_ts)
+from fast_trader.utils import (Mail, timeit, attrdict,
+                               as_wind_code, get_current_ts)
 
 from fast_trader.ledger import LedgerWriter
 from fast_trader import zmq_context
+
+import dtp_api
 
 
 
@@ -51,87 +50,6 @@ class Subscription:
         return False
 
 
-class Market_:
-
-    def __init__(self, dispatcher):
-
-        self.dispatcher = dispatcher
-        self.datasources = {}
-        self._strategies = []
-        self._started = False
-
-    def start(self):
-        for ds in self.datasources.values():
-            ds.start()
-        self._started = True
-
-    @property
-    def started(self):
-        return self._started
-
-    def add_strategy(self, strategy):
-        self._strategies.append(strategy)
-
-    def remove_strategy(self, strategy):
-        self._strategies.remove(strategy)
-
-    def subscribe(self, feed_type, codes):
-
-        if feed_type.name not in self.datasources:
-            self._start_streamer(feed_type)
-
-        streamer = self.datasources[feed_type.name]
-        if codes is None:
-            streamer.subsribe_all()
-        else:
-            streamer.subscribe(codes)
-
-    def subsribe_all(self, feed_type):
-        self.subscribe(feed_type, codes=None)
-
-    def on_quote_message(self, message):
-        # TODO: 期货类FuturesFeed, OptionsFeed 字段名称不一致
-        code = message['content']['szCode']
-        feed_name = message['api_id']
-        feed_type = FEED_TYPE_NAME_MAPPING[feed_name]
-        for ea in self._strategies:
-            if ea.started and ea.has_subscribed(feed_type, code):
-                ea.on_quote_message(message)
-
-    def _start_streamer(self, feed_type):
-        streamer = feed_type()
-
-        # 注册dispatcher
-        streamer.add_listener(self.dispatcher)
-        self.dispatcher.bind(f'{streamer.name}_rsp',
-                             self.on_quote_message)
-
-        self.datasources[feed_type.name] = streamer
-        if self._started:
-            streamer.start()
-
-
-import dtp_api
-
-
-def recv_msg(qu):
-    self = QuoteFeed()
-    self.subscribe_all('trade_feed')
-    def put(m):
-        #print(m.content.szCode, qu.qsize())
-        qu.put(m)
-    self.add_callback(put)
-    self.start()
-        
-    
-def start_(self):
-    import multiprocessing
-    qu = multiprocessing.Queue()
-
-    proc = multiprocessing.Process(target=recv_msg, args=(qu,))
-    proc.start()
-
-
 class QuoteFeed(dtp_api.QuoteFeed):
     
     def __init__(self):
@@ -142,11 +60,15 @@ class QuoteFeed(dtp_api.QuoteFeed):
     def _recv(self):
         ctx = zmq_context.manager.context
         sock = ctx.socket(zmq.SUB)
-        sock.connect('tcp://127.0.0.1:9500')
+        port = self._get_bound_port()
+        sock.connect(f'tcp://127.0.0.1:{port}')
         sock.subscribe('')
         
         while True:
             mail = attrdict(sock.recv_json())
+            # format
+            feed_type = FEED_TYPE_NAME_MAPPING[mail['api_id']]
+            mail['content'] = feed_type.standardize(mail['content'])
             for cb in self._callbacks.values():
                 cb(mail)
     
@@ -189,8 +111,10 @@ class Market:
         self.quote_feed = QuoteFeed()
 
     def start(self):
-        if not self._started:
-            self.dispatcher.bind('quote_feed', self.on_quote_message)
+        if self._started:
+            return
+        
+        self.dispatcher.bind('quote_feed', self.on_quote_message)
         
         self.quote_feed.add_callback(self.dispatcher.put)
 
@@ -232,6 +156,7 @@ class _limitedattrdict(attrdict):
     fields = {}
 
     def __init__(self, **kw):
+        
         _fields = self.fields.copy()
         for k in kw:
             if k in self.fields:
@@ -405,11 +330,15 @@ class StrategyWatchMixin:
         while self._started:
             ts = get_current_ts()
 
-            (self._session
-                .query(StrategyStatus)
-                .filter_by(strategy_id=self.strategy_id,
-                           account_no=self.account_no)
-                .update({'last_heartbeat': ts}))
+            try:
+                (self._session
+                    .query(StrategyStatus)
+                    .filter_by(strategy_id=self.strategy_id,
+                            account_no=self.account_no)
+                    .update({'last_heartbeat': ts}))
+            except sqlite3.OperationalError:
+                pass
+
 
             self._session.commit()
             time.sleep(0.5)
@@ -453,9 +382,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         # 不会加载历史状态
         self.persistent = persistent
 
-        self.logger = logging.getLogger(
-            f'strategy.<no={account_no};id={strategy_id};'
-            f'name={self.strategy_name}>')
+        self._config_logger()
 
         if self.strategy_id < 0 or not isinstance(self.strategy_id, int):
             raise RuntimeError(
@@ -475,6 +402,27 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
 
         # order_exchange_id -> order_original_id
         self._order_id_mapping = {}
+
+    def _config_logger(self):
+        # self.logger = logging.getLogger(
+        #     f'strategy.<no={account_no};id={strategy_id};'
+        #     f'name={self.strategy_name}>')
+        td = datetime.date.today().strftime('%Y%m%d')
+        path = os.path.join(
+            os.getenv('FAST_TRADER_HOME'), 
+            f'logs/{self.account_no}_strategy{self.strategy_id}_{td}.log')
+        handler = logging.FileHandler(path, encoding='utf8')
+
+        try:
+            formatter = logging.Formatter(
+                settings['logging']['formatters']['user']['format'])
+        except:
+            formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+        handler.setFormatter(formatter)
+        self.logger = logging.getLogger(f'strategy.<{self.strategy_name}>')
+        self.logger.addHandler(handler)
 
     def set_trader(self, trader):
         self.trader = trader
@@ -508,15 +456,13 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         raise NotImplementedError
 
     def start(self):
-        print('strategy starting...')
+
         if self.trader.logined:
 
             self.set_ledger_writer()
 
-            print('market starting...')
             # 启动行情订阅
             self.market.start()
-            print('market started...')
 
             self._send_on_start_event()
 
@@ -782,16 +728,10 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         获取所有历史交易记录
         """
         acc = self._ledger_writer.accountant
-        df = pd.DataFrame(list(map(lambda x: x.__dict__, acc._records)))
-
-        if df.empty:
-            return df
-
-        trades = df\
-            .query("subject == 'transaction' and category == 'security'")\
-            .loc[:, ['code', 'quantity', 'price', 'localtime']]\
-            .reset_index(drop=True)
-        return trades
+        records = [rec for rec in acc._records
+                   if (rec.subject == 'transaction' and
+                       rec.category == 'security')]
+        return records
 
     def on_quote_message(self, message):
 
@@ -994,7 +934,6 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         """
         撤单提交响应
         """
-        print('msg', type(msg), msg)
         self.logger.info(
             f'{msg.body.message}, 委托编号={msg.body.order_exchange_id}')
 
@@ -1238,7 +1177,7 @@ class StrategyFactory:
         strategy.persistent = persistent
 
         if account_no not in self.traders:
-            print('trader initing...')
+
             trader = Trader(
                 dispatcher=self.dispatcher,
                 trade_api=self.dtp,
@@ -1253,14 +1192,13 @@ class StrategyFactory:
                     password = settings['credentials'][account_no]
                 return password
 
-            print('trader logining...')
             trader.login(
                 account_no=account_no,
                 password=_get_password(account_no),
                 sync=True
             )
             self.traders[account_no] = trader
-            print('trader logined...')
+
         else:
             trader = self.traders[account_no]
 

@@ -5,11 +5,6 @@ import sys
 import time
 import datetime
 import functools
-import math
-
-from google.protobuf.message import Message
-from google.protobuf.pyext._message import RepeatedCompositeContainer
-from google.protobuf.pyext._message import RepeatedScalarContainer
 
 import uuid
 import socket
@@ -90,13 +85,6 @@ class Mail(attrdict):
 
         self.update(kw)
 
-#    @property
-#    def handler_id(self):
-#        if 'handler_id' in self:
-#            return self['handler_id']
-#        handler_id = f'{self["api_id"]}_{self["api_type"]}'
-#        return handler_id
-
 
 def get_mac_address():
     mac = uuid.getnode()
@@ -159,48 +147,6 @@ def timeit(func):
             func.__name__, time.time() - t0_))
         return ret
     return wrapper
-
-
-def message2dict(msg, including_default_value_fields=True):
-    """
-    Convert protobuf message to dict
-    """
-
-    dct = attrdict()
-
-    if isinstance(msg, Message):
-
-        for field in msg.DESCRIPTOR.fields:
-            name = field.name
-            dct[name] = message2dict(getattr(msg, name))
-
-        return dct
-
-    elif isinstance(msg, RepeatedCompositeContainer):
-        return list(map(message2dict, msg))
-
-    elif isinstance(msg, RepeatedScalarContainer):
-        return list(msg)
-
-    else:
-        return msg
-
-
-def message2tuple(msg, kind):
-    """
-    Convert protobuf message to namedtuple
-    Doesn't support nested messages
-    """
-
-    dct = {}
-
-    for field in msg.DESCRIPTOR.fields:
-        name = field.name
-        dct[name] = getattr(msg, name)
-
-    ret = kind(**dct)
-
-    return ret
 
 
 def int2datetime(n_date=None, n_time=None, utc=False):

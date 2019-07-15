@@ -66,6 +66,16 @@ class SqliteStore:
         # self._conn.commit()
         self._conns.clear()
 
+    def enable_wal_mode(self, name=None):
+        if name is None:
+            name = self.table_name
+        
+        with self._conn:
+            try:
+                self._conn.execute("pragma journal_mode=wal")
+            except:
+                warnings.warn('Enabling wal mode failed')
+
     def assure_table(self, name=None):
         if name is None:
             name = self.table_name
@@ -178,7 +188,7 @@ class SqliteStore:
             con=query_str,
             table=self.table_name,
             by=by)
-        print(statement)
+
         with self._conn:
             ret = self._conn.execute(statement).fetchall()
 

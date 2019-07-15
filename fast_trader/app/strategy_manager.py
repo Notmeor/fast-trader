@@ -24,9 +24,7 @@ from fast_trader.utils import timeit, get_current_ts, attrdict, as_wind_code
 from fast_trader.dtp_trade import (OrderResponse, TradeResponse,
                                    CancellationResponse,
                                    QueryOrderResponse, QueryTradeResponse,
-                                   QueryPositionResponse)
-
-from fast_trader import rest_api
+                                   QueryPositionResponse, RestApi)
 
 
 SERVER_TIMEOUT_SECS = 3
@@ -39,6 +37,8 @@ class StrategyNotFound(Exception):
 class Manager:
 
     def __init__(self):
+        
+        self.rest_api = RestApi()
 
         self.write_pid_file()
         self._ctx = zmq.Context()
@@ -61,18 +61,22 @@ class Manager:
         self._heartbeat_thread = threading.Thread(target=self.send_heartbeat)
 
         self.logger = logging.getLogger('strategy_manager')
-        self.logger.addHandler(SqlLogHandler())
+        #self.logger.addHandler(SqlLogHandler())
 
     @staticmethod
     def write_pid_file(pid=None):
         path = os.path.join(os.getenv('FAST_TRADER_HOME'), 'server.pid')
         with open(path, 'w') as f:
             f.write(str(pid or os.getpid()))
+    
+    def get_server_pid(self):
+        return os.getpid()
 
     def _load_strategy_settings(self):
         if settings['use_rest_api'] is True:
-            self._strategy_settings = rest_api.user_meta.copy()
-            self._strategy_settings.pop('token')
+            # FIXME: settings
+            self._strategy_settings = {}
+            #self._strategy_settings.pop('token')
         else:
             self._strategy_settings = None
 
@@ -130,7 +134,7 @@ class Manager:
         if self._factory is None:
             self._factory = StrategyFactory(
                 factory_settings=self._strategy_settings)
-            self._factory.dtp.logger.addHandler(SqlLogHandler())
+            #self._factory.dtp.logger.addHandler(SqlLogHandler())
         return self._factory
 
     def update_settings(self, strategy_settings):
@@ -138,23 +142,23 @@ class Manager:
         return {'ret_code': 0, 'data': None}
 
     def get_accounts(self):
-        return rest_api.get_accounts()
+        return self.rest_api.get_accounts()
 
     def get_capital(self, account_no):
-        cap = rest_api.query_capital(account_no=account_no)
+        cap = self.rest_api.get_capital(account_no=account_no)
         return cap
 
     def get_history_capital_records(self, account_no):
-        cap = rest_api.query_capital(account_no=account_no)
+        cap = self.rest_api.get_capital(account_no=account_no)
         self._capital_records[account_no].append(cap)
         return self._capital_records[account_no]
 
     def get_capital_of_all_accounts(self):
-        caps = rest_api.query_capitals()
+        caps = self.rest_api.get_capitals()
         return caps
 
     def get_history_capital_records_of_all_accounts(self):
-        caps = rest_api.query_capitals()
+        caps = self.rest_api.get_capitals()
         self._capital_records_all.append(caps)
         return self._capital_records_all
 
@@ -275,26 +279,17 @@ class Manager:
         return all_objs
 
     def get_positions(self, account_no):
-        handle = functools.partial(
-            rest_api.restapi_query_positions,
-            trader=attrdict(account_no=account_no))
-        positions = self._get_all_pages(handle)
+        positions = self.rest_api.get_positions(account_no=account_no)
         ret = [QueryPositionResponse.from_msg(pos) for pos in positions]
         return ret
 
     def get_orders(self, account_no):
-        handle = functools.partial(
-            rest_api.restapi_query_orders,
-            trader=attrdict(account_no=account_no))
-        orders = self._get_all_pages(handle)
+        orders = self.rest_api.get_orders(account_no=account_no)
         ret = [QueryOrderResponse.from_msg(order) for order in orders]
         return ret
 
     def get_trades(self, account_no):
-        handle = functools.partial(
-            rest_api.restapi_query_fills,
-            trader=attrdict(account_no=account_no))
-        trades = self._get_all_pages(handle)
+        trades = self.rest_api.get_trades(account_no=account_no)
         ret = [QueryTradeResponse.from_msg(trade) for trade in trades]
         return ret
 
@@ -354,7 +349,10 @@ class Manager:
         try:
             api_name = request['api_name']
 
-            if api_name == 'get_accounts':
+            if api_name == 'get_server_pid':
+                return self.get_server_pid()
+
+            elif api_name == 'get_accounts':
                 return self.get_accounts(**request['kw'])
 
             elif api_name == 'get_capital':
@@ -404,7 +402,7 @@ class Manager:
                 return self.get_traded_amount(**request['kw'])
 
             else:
-                return RuntimeError('未知接口: {api_name}')
+                raise RuntimeError(f'未知接口: {api_name}')
         except Exception as e:
             self.logger.error(f'Request failed: request={request}',
                               exc_info=True)
@@ -432,19 +430,28 @@ class Manager:
 
         self.logger.info(f'Strategy manager started. Pid={os.getpid()}')
 
-        self._heartbeat_thread.start()
+        if not self._heartbeat_thread.is_alive():
+            self._heartbeat_thread.start()
 
-        while True:
-            # 监听外部指令
-            try:
-                request = self.receive()
-            except zmq.Again:
-                pass
-            else:
-                self.logger.info(f'received: {request}')
-                ret = self.handle_request(request)
-                self.send(ret)
-                self.logger.info(f'sent: {ret}')
+        try:
+            while True:
+                # 监听外部指令
+                try:
+                    request = self.receive()
+                except zmq.Again:
+                    pass
+                else:
+                    self.logger.info(f'received: {request}')
+
+                    ret = self.handle_request(request)
+
+                    self.send(ret)
+                    ret_content = str(ret)
+                    if len(ret_content) > 200:
+                        ret_content = ret_content[:200] + '...'
+                    self.logger.info('sent: ' + ret_content)
+        except:
+            self.logger.error('Strategy server exited.', exc_info=True)
 
 
 class StrategyLoader:
@@ -529,9 +536,9 @@ class StrategyServer:
 
     def restart(self):
         self.stop()
-        time.sleep(2)
+        while self.is_running():
+            time.sleep(0.5)
         self.start()
-        time.sleep(2)
 
     def is_running(self):
         session = Session()

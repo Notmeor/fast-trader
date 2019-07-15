@@ -16,7 +16,7 @@ class DemoStrategy(Strategy):
     测试策略撤单
     """
 
-    strategy_id = 40
+    strategy_id = 50
     strategy_name = '测试策略撤单'
 
     def on_start(self):
@@ -68,4 +68,11 @@ if __name__ == '__main__':
         account_no='011000106328',
     )
 
+    strategy_1 = factory.generate_strategy(
+        DemoStrategy,
+        strategy_id=DemoStrategy.strategy_id + 1,
+        account_no='011000106328',
+    )
+    
     strategy.start()
+    strategy_1.start()

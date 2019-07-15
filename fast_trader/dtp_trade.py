@@ -14,14 +14,12 @@ from collections import OrderedDict
 import uuid
 import json
 
-from fast_trader.dtp import dtp_api_id
-
-from fast_trader.dtp import ext_api_pb2 as dtp_struct
-from fast_trader.dtp import ext_type_pb2 as dtp_type
+from fast_trader.dtp import constants
+from fast_trader.dtp.constants import dtp_type
 
 from fast_trader.id_pool import _id_pool
-from fast_trader.utils import timeit, attrdict, message2dict, Mail
 from fast_trader.settings import settings, setup_logging
+from fast_trader.utils import attrdict
 from fast_trader import zmq_context
 import dtp_api
 
@@ -43,10 +41,10 @@ class OrderResponse:
 
     @staticmethod
     def from_msg(msg):
-        ret = msg  # .copy()
-        ret['freeze_amount'] = str2float(msg.freeze_amount)
-        ret['price'] = str2float(msg.price)
-        return ret
+        msg = attrdict(msg)
+        msg['freeze_amount'] = str2float(msg.freeze_amount)
+        msg['price'] = str2float(msg.price)
+        return msg
 
 
 class TradeResponse:
@@ -56,13 +54,13 @@ class TradeResponse:
 
     @staticmethod
     def from_msg(msg):
-        ret = msg
-        ret['fill_price'] = str2float(msg.fill_price)
-        ret['fill_amount'] = str2float(msg.fill_amount)
-        ret['clear_amount'] = str2float(msg.clear_amount)
-        ret['total_fill_amount'] = str2float(msg.total_fill_amount)
-        ret['price'] = str2float(msg.price)
-        return ret
+        msg = attrdict(msg)
+        msg['fill_price'] = str2float(msg.fill_price)
+        msg['fill_amount'] = str2float(msg.fill_amount)
+        msg['clear_amount'] = str2float(msg.clear_amount)
+        msg['total_fill_amount'] = str2float(msg.total_fill_amount)
+        msg['price'] = str2float(msg.price)
+        return msg
 
 
 class CancellationResponse:
@@ -72,9 +70,9 @@ class CancellationResponse:
 
     @staticmethod
     def from_msg(msg):
-        ret = msg
-        ret['freeze_amount'] = str2float(msg.freeze_amount)
-        return ret
+        msg = attrdict(msg)
+        msg['freeze_amount'] = str2float(msg.freeze_amount)
+        return msg
 
 
 class QueryOrderResponse:
@@ -84,13 +82,13 @@ class QueryOrderResponse:
 
     @staticmethod
     def from_msg(msg):
-        ret = msg
-        ret['average_fill_price'] = str2float(msg.average_fill_price)
-        ret['clear_amount'] = str2float(msg.clear_amount)
-        ret['freeze_amount'] = str2float(msg.freeze_amount)
-        ret['price'] = str2float(msg.price)
-        ret['total_fill_amount'] = str2float(msg.total_fill_amount)
-        return ret
+        msg = attrdict(rename_order(msg))
+        msg['average_fill_price'] = str2float(msg.average_fill_price)
+        msg['clear_amount'] = str2float(msg.clear_amount)
+        msg['freeze_amount'] = str2float(msg.freeze_amount)
+        msg['price'] = str2float(msg.price)
+        msg['total_fill_amount'] = str2float(msg.total_fill_amount)
+        return msg
 
 
 class QueryTradeResponse:
@@ -100,10 +98,10 @@ class QueryTradeResponse:
 
     @staticmethod
     def from_msg(msg):
-        ret = msg  # .copy()
-        ret['fill_price'] = str2float(msg.fill_price)
-        ret['fill_amount'] = str2float(msg.fill_amount)
-        return ret
+        msg = attrdict(rename_trade(msg))
+        msg['fill_price'] = str2float(msg.fill_price)
+        msg['fill_amount'] = str2float(msg.fill_amount)
+        return msg
 
 
 class QueryPositionResponse:
@@ -113,6 +111,7 @@ class QueryPositionResponse:
 
     @staticmethod
     def from_msg(msg):
+        msg = attrdict(rename_position(msg))
         msg['cost'] = str2float(msg.cost)
         msg['market_value'] = str2float(msg.market_value)
         return msg
@@ -371,49 +370,71 @@ class Dispatcher:
             return self._handlers[handler_id](mail)
 
 
-class DTPType:
+class RestApi():
+    
+    def __init__(self):
+        self._rest_api = None
+    
+    @property
+    def rest_api(self):
+        if self._rest_api is None:
+            self._rest_api = dtp_api.RestApi()
+        return self._rest_api
 
-    api_map = {
-        'CANCEL_REPORT': 'CancellationReport',
-        'CANCEL_ORDER': 'CancelOrder',
-        'CANCEL_RESPONSE': 'CancelResponse',
-        'FILL_REPORT': 'FillReport',
-        'LOGIN_ACCOUNT_REQUEST': 'LoginAccountRequest',
-        'LOGIN_ACCOUNT_RESPONSE': 'LoginAccountResponse',
-        'LOGOUT_ACCOUNT_REQUEST': 'LogoutAccountRequest',
-        'LOGOUT_ACCOUNT_RESPONSE': 'LogoutAccountResponse',
-        'PLACE_REPORT': 'PlacedReport',
-        'PLACE_BATCH_ORDER': 'PlaceBatchOrder',
-        'PLACE_BATCH_RESPONSE': 'PlaceBatchResponse',
-        'PLACE_ORDER': 'PlaceOrder',
-        'QUERY_CAPITAL_REQUEST': 'QueryCapitalRequest',
-        'QUERY_CAPITAL_RESPONSE': 'QueryCapitalResponse',
-        'QUERY_FILLS_REQUEST': 'QueryFillsRequest',
-        'QUERY_FILLS_RESPONSE': 'QueryFillsResponse',
-        'QUERY_ORDERS_REQUEST': 'QueryOrdersRequest',
-        'QUERY_ORDERS_RESPONSE': 'QueryOrdersResponse',
-        'QUERY_POSITION_REQUEST': 'QueryPositionRequest',
-        'QUERY_POSITION_RESPONSE': 'QueryPositionResponse',
-        'QUERY_RATION_REQUEST': 'QueryRationRequest',
-        'QUERY_RATION_RESPONSE': 'QueryRationResponse'
-    }
+    def get_accounts(self):
+        j = self.rest_api.get_accounts()
+        try:
+            ret = json.loads(j)
+        except:
+            raise Exception(j)
+        return ret
 
-    proto_structs = {getattr(dtp_api_id, k): getattr(dtp_struct, v)
-                     for k, v in api_map.items()}
+    def get_capital(self, account_no):
+        j = self.rest_api.get_capital(account_no)
+        ret = json.loads(j)
+        return ret
+    
+    def get_capitals(self):
+        j = self.rest_api.get_capitals()
+        ret = json.loads(j)
+        return ret
 
-    @classmethod
-    def get_proto_type(cls, api_id):
-        return cls.proto_structs[api_id]
+    def get_orders(self, account_no):
+        j = self.rest_api.get_orders(account_no)
+        ret = json.loads(j)
+        ret = sum(ret, [])
+        return ret
 
+    def get_trades(self, account_no):
+        j = self.rest_api.get_trades(account_no)
+        ret = json.loads(j)
+        ret = sum(ret, [])
+        return ret
 
-class DTP(dtp_api.Trader):
+    def get_positions(self, account_no):
+        j = self.rest_api.get_positions(account_no)
+        ret = json.loads(j)
+        ret = sum(ret, [])
+        return ret
+
+    def place_order(self, order_req):
+        self.rest_api.place_order(order_req)
+
+    def place_batch_order(self, batch_order_req, account_no):
+        self.rest_api.place_batch_order(batch_order_req, account_no)
+
+    def cancel_order(self, order_cancelation_req):
+        self.rest_api.cancel_order(order_cancelation_req)
+    
+    
+class DTP(dtp_api.Trader, RestApi):
 
     def __init__(self, dispatcher):
-
-        self.rest_api = dtp_api.RestApi()
+        RestApi.__init__(self)
         self.accounts = [d['cashAccountNo'] for d in self.get_accounts()]
 
         dtp_api.Trader.__init__(self, self.accounts)
+        
         self.dispatcher = dispatcher
 
         self.logger = logging.getLogger('dtp')
@@ -424,7 +445,8 @@ class DTP(dtp_api.Trader):
     def _recv(self):
         ctx = zmq_context.manager.context
         sock = ctx.socket(zmq.SUB)
-        sock.connect('tcp://127.0.0.1:9501')
+        port = self._get_bound_port()
+        sock.connect(f'tcp://127.0.0.1:{port}')
         sock.subscribe('')
         
         while True:
@@ -435,125 +457,6 @@ class DTP(dtp_api.Trader):
         self.start()
         self._counter_report_thread.start()
 
-    def get_accounts(self):
-        j = self.rest_api.get_accounts()
-        ret = json.loads(j)
-        return ret
-
-    def get_capital(self, account_no):
-        j = self.rest_api.get_capital(account_no)
-        ret = json.loads(j)
-        return ret
-
-    def get_orders(self, account_no):
-        j = self.rest_api.get_orders(account_no)
-        ret = json.loads(j)
-        ret = sum(ret, [])
-        return ret
-
-    def get_trades(self, account_no):
-        j = self.rest_api.get_trades(account_no)
-        ret = json.loads(j)
-        ret = sum(ret, [])
-        return ret
-
-    def get_positions(self, account_no):
-        j = self.rest_api.get_positions(account_no)
-        ret = json.loads(j)
-        ret = sum(ret, [])
-        return ret
-
-    def place_order(self, order_req):
-        self.rest_api.place_order(order_req)
-
-    def place_batch_order(self, batch_order_req, account_no):
-        self.rest_api.place_batch_order(batch_order_req, account_no)
-
-    def cancel_order(self, order_cancelation_req):
-        self.rest_api.cancel_order(order_cancelation_req)
-
-
-class DTP_(dtp_api.Trader):
-    
-    def __init__(self, dispatcher):
-
-        self.rest_api = dtp_api.RestApi()
-        self.accounts = [d['cashAccountNo'] for d in self.get_accounts()]
-
-        dtp_api.Trader.__init__(self, self.accounts)
-        self.dispatcher = dispatcher
-
-        self.logger = logging.getLogger('dtp')
-
-        self._counter_report_thread = threading.Thread(
-            target=self.process_counter_report)
-        
-        print(f'init thread: {threading.get_ident()}')
-
-    def start_counter_report(self):
-        self.start()
-        self._counter_report_thread.start()
-
-    def on_message_bytes(self, header_bytes, body_bytes):
-
-        header = dtp_struct.ReportHeader()
-        header.ParseFromString(header_bytes)
-
-        rsp_type = DTPType.get_proto_type(header.api_id)
-        body = rsp_type()
-        try:
-            body.ParseFromString(body_bytes)
-        except:
-            err_msg = f'err bytes: {body_bytes}, type={type(body_bytes)}, api_id={header.api_id}'
-            print(err_msg)
-            self.logger.error(err_msg)
-
-        mail = Mail(
-            api_id=header.api_id,
-            api_type='rsp',
-            handler_id=f'{body.account_no}_{header.api_id}_rsp',
-        )
-
-        mail['header'] = message2dict(header)
-        mail['body'] = message2dict(body)
-        print(f'\rmessage: {mail.header.message}, {threading.get_ident()}', end='')
-
-    def get_accounts(self):
-        j = self.rest_api.get_accounts()
-        ret = json.loads(j)
-        return ret
-
-    def get_capital(self, account_no):
-        j = self.rest_api.get_capital(account_no)
-        ret = json.loads(j)
-        return ret
-
-    def get_orders(self, account_no):
-        j = self.rest_api.get_orders(account_no)
-        ret = json.loads(j)
-        ret = sum(ret, [])
-        return ret
-
-    def get_trades(self, account_no):
-        j = self.rest_api.get_trades(account_no)
-        ret = json.loads(j)
-        ret = sum(ret, [])
-        return ret
-
-    def get_positions(self, account_no):
-        j = self.rest_api.get_positions(account_no)
-        ret = json.loads(j)
-        ret = sum(ret, [])
-        return ret
-
-    def place_order(self, order_req):
-        self.rest_api.place_order(order_req)
-
-    def place_batch_order(self, batch_order_req, account_no):
-        self.rest_api.place_batch_order(batch_order_req, account_no)
-
-    def cancel_order(self, order_cancelation_req):
-        self.rest_api.cancel_order(order_cancelation_req)
 
 class Order:
 
@@ -618,12 +521,12 @@ class Trader:
 
             dispatcher, _trade_api = self.dispatcher, self._trade_api
 
-            for api_id in dtp_api_id.RSP_API_NAMES:
+            for api_id in constants.RSP_API_NAMES:
                 dispatcher.bind(f'{self.account_no}_{api_id}_rsp',
                                 self._on_response)
 
-#            for api_id in dtp_api_id.REQ_API_NAMES:
-#                api_name = dtp_api_id.REQ_API_NAMES[api_id]
+#            for api_id in constants.REQ_API_NAMES:
+#                api_name = constants.REQ_API_NAMES[api_id]
 #                handler = getattr(_trade_api, api_name)
 #                dispatcher.bind(f'{api_id}_req', handler)
 
@@ -694,10 +597,6 @@ class Trader:
     def _on_response(self, mail):
 
         api_id = mail['api_id']
-        
-        if api_id == 11002002:
-            print('?:', mail)
-            import pdb;pdb.set_trace()
 
         # TODO: might be opt out
         if 'header' in mail['content']:
@@ -706,16 +605,16 @@ class Trader:
         
         #import pdb;pdb.set_trace()
 
-        if api_id == dtp_api_id.LOGIN_ACCOUNT_RESPONSE:
+        if api_id == constants.LOGIN_ACCOUNT_RESPONSE:
             self.on_login(mail)
-        elif api_id == dtp_api_id.LOGOUT_ACCOUNT_RESPONSE:
+        elif api_id == constants.LOGOUT_ACCOUNT_RESPONSE:
             self.on_logout(mail)
         else:
             for ea in self._strategies:
                 if ea.started and ea._check_owner(mail['content']):
                     getattr(
                         ea, 
-                        dtp_api_id.RSP_API_NAMES[api_id])(mail['content'])
+                        constants.RSP_API_NAMES[api_id])(mail['content'])
 
     @property
     def account_no(self):
@@ -795,7 +694,6 @@ class Trader:
         """
         mail = attrdict()
         orders = self._trade_api.get_orders(account_no=self.account_no)
-        orders = list(map(rename_order, orders))
         mail['body'] = orders
         return mail
 
@@ -805,7 +703,6 @@ class Trader:
         """
         mail = attrdict()
         trades = self._trade_api.get_trades(account_no=self.account_no)
-        trades = list(map(rename_trade, trades))
         mail['body'] = trades
         return mail
 
@@ -815,7 +712,6 @@ class Trader:
         """
         mail = attrdict()
         positions = self._trade_api.get_positions(account_no=self.account_no)
-        positions = list(map(rename_position, positions))
         mail['body'] = positions
         return mail
 

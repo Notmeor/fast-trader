@@ -371,7 +371,6 @@ class Accountant:
 
         with self._get_view(event) as view:
             view.security_value += increment
-            # print(f'\r{event.code}\n: {view}', end='')
 
     def on_security_transaction(self, event):
 
