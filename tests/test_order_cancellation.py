@@ -1,14 +1,10 @@
-
-import os
-os.chdir('D:/work/PB_newUAT/PB客户端_新UAT_自由委托/策略交易/')
-import threading
 import time, datetime
 from collections import defaultdict
 
 from fast_trader.dtp_trade import dtp_type
 from fast_trader.dtp_quote import TradeFeed, OrderFeed, TickFeed
 from fast_trader.strategy import Strategy, StrategyFactory, to_timeint
-from fast_trader.utils import timeit, int2datetime
+from fast_trader.utils import timeit, int2datetime, attrdict
 
 
 class DemoStrategy(Strategy):
@@ -16,29 +12,35 @@ class DemoStrategy(Strategy):
     测试策略撤单
     """
 
-    strategy_id = 40
+    strategy_id = 43
     strategy_name = '测试策略撤单'
 
     def on_start(self):
         """
         响应策略启动
         """
-        self.subscribe(TickFeed, ['002230', '600890', '600052', '603629'])
+        print('启动响应')
+        #self.subscribe(TickFeed, ['600052', '603629', '002230'])
+        #self.subscribe_all(TradeFeed)
         self.last_order = self.buy('002230', 14, 100)
+        
+        def f():
+            print(datetime.datetime.now())
+        
+        #self.run_at_intervals(interval=datetime.timedelta(seconds=60), func=f)
 
     def on_market_snapshot(self, data):
-        #print(data.szCode, data.nMatch)
-        pass
-
+        print(data.szCode, data.nMatch)
+    
     def on_market_trade(self, data):
-        print(f'\r{data.szCode, data.nPrice, os.getpid(), threading.get_ident()}',
-              end='')
+        print('-----逐笔成交-----')
+        print(data.nTime, data.szWindCode, data.nPrice)
 
     def on_order(self, order):
         """
         响应报单回报
         """
-        print('\n-----报单回报-----', os.getpid(), threading.get_ident())
+        print('\n-----报单回报-----')
         print(order)
 
     def on_trade(self, trade):
@@ -55,7 +57,7 @@ class DemoStrategy(Strategy):
         """
         响应撤单回报
         """
-        print('\n-----撤单回报-----', os.getpid(), threading.get_ident())
+        print('\n-----撤单回报-----')
         print(data)
 
 
@@ -69,3 +71,4 @@ if __name__ == '__main__':
     )
 
     strategy.start()
+    ea = strategy

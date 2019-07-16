@@ -10,7 +10,7 @@ setup(
     author_email='kevin.inova@gmail.com',
     description='',
     include_package_data=True,
-    package_data={'': ['config.yaml']},
+    package_data={'': ['config.yaml', 'dtp/*.dll', 'dtp/*.pyd']},
     install_requires=[
         'pyzmq>=18.0.0',
         'sqlalchemy>=1.1.15',
