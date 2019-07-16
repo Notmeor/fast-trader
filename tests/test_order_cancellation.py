@@ -1,6 +1,7 @@
 
 import os
-os.chdir('D:/work/PB_newUAT/PB客户端_新UAT_自由委托/策略交易/')
+#os.chdir('D:/work/PB_newUAT/PB客户端_新UAT_自由委托/策略交易/')
+os.chdir('C:/PB客户端_新UAT_自由委托/PB客户端_新UAT_自由委托/策略交易')
 import threading
 import time, datetime
 from collections import defaultdict
@@ -65,7 +66,7 @@ if __name__ == '__main__':
     strategy = factory.generate_strategy(
         DemoStrategy,
         strategy_id=DemoStrategy.strategy_id,
-        account_no='011000106328',
+        account_no='021000012958',
     )
 
     strategy.start()
