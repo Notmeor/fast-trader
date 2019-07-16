@@ -461,6 +461,7 @@ class StrategyLoader:
         self.strategy_suffix = '.py'
         self.strategy_dir = \
             settings['strategy_directory']
+        self.logger = logging.getLogger('strategy_manager')
 
     def load(self):
         strategy_classes = []
@@ -471,18 +472,22 @@ class StrategyLoader:
             strategy_dir = self.strategy_dir
 
         for fl in os.listdir(strategy_dir):
-            if not fl.endswith(self.strategy_suffix):
-                continue
-            path = os.path.join(strategy_dir, fl)
-            spec = importlib.util.spec_from_file_location(
-                "strategy", path)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            for name in dir(mod):
-                el = getattr(mod, name)
-                if isinstance(el, type):
-                    if issubclass(el, Strategy) and el is not Strategy:
-                        strategy_classes.append(el)
+            try:
+                if not fl.endswith(self.strategy_suffix):
+                    continue
+                path = os.path.join(strategy_dir, fl)
+                spec = importlib.util.spec_from_file_location(
+                    "strategy", path)
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                for name in dir(mod):
+                    el = getattr(mod, name)
+                    if isinstance(el, type):
+                        if issubclass(el, Strategy) and el is not Strategy:
+                            strategy_classes.append(el)
+            except:
+                self.logger.error(f'策略文件读取失败:{fl}', exc_info=True)
+                
         return strategy_classes
 
 
