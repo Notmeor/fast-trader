@@ -20,6 +20,7 @@ from fast_trader.settings import settings, Session, SqlLogHandler
 from fast_trader.strategy import Strategy, StrategyFactory
 from fast_trader.models import StrategyStatus, StrategyServerModel
 from fast_trader.utils import timeit, get_current_ts, attrdict, as_wind_code
+from fast_trader import zmq_context
 
 from fast_trader.dtp_trade import (OrderResponse, TradeResponse,
                                    CancellationResponse,
@@ -41,7 +42,7 @@ class Manager:
         self.rest_api = RestApi()
 
         self.write_pid_file()
-        self._ctx = zmq.Context()
+        self._ctx = zmq_context.manager.context
         self._sock = self._ctx.socket(zmq.REP)
         host = settings['strategy_manager_host']
         port = settings['strategy_manager_port']

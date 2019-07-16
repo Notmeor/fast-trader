@@ -136,11 +136,11 @@ class Market:
     def subscribe(self, feed_type, codes):
         
         if codes is None:
-            self.quote_feed.subsribe_all(feed_type.name, codes)
+            self.quote_feed.subscribe_all(feed_type.name)
         else:
             self.quote_feed.subscribe(feed_type.name, codes)
 
-    def subsribe_all(self, feed_type):
+    def subscribe_all(self, feed_type):
         self.subscribe(feed_type, codes=None)
 
     def on_quote_message(self, message):
@@ -271,7 +271,7 @@ class StrategyMdSubMixin:
             self.market.subscribe(feed_type, codes)
 
     def subscribe_all(self, feed_type):
-        self.subscribe(self, feed_type, codes=None)
+        self.subscribe(feed_type, codes=None)
 
     def has_subscribed(self, feed_type, code):
         feed_name = feed_type.name

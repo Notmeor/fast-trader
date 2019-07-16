@@ -10,6 +10,7 @@ import zmq
 
 import queue
 from queue import Queue
+import functools
 from collections import OrderedDict
 import uuid
 import json
@@ -302,6 +303,7 @@ class Dispatcher:
 
         while self._running:
             mail = self._req_queue.get()
+            self.logger.info(mail)
             self.dispatch(mail)
 
     def process_rsp(self):
@@ -310,6 +312,7 @@ class Dispatcher:
         while self._running:
             try:
                 mail = self._rsp_queue.get(block=False)
+                self.logger.info(mail)
                 self.dispatch(mail)
             except queue.Empty:
                 pass
@@ -496,9 +499,19 @@ class Trader:
         self._strategy_dict = OrderedDict()
 
         self.__api_bound = False
-
+        
         self.logger = logging.getLogger('trader')
-        self.logger.debug('初始化 process_id={}'.format(os.getpid()))
+
+    def log_req(func):
+
+        @functools.wraps(func)
+        def wrapper(*args, **kw):
+            args_ = args[1:]
+            logger = args[0].logger
+            logger.info(
+                f'{func.__name__}<args={args_}, kwargs={kw}')
+            return func(*args, **kw)
+        return wrapper
 
     def start(self):
 
@@ -646,6 +659,7 @@ class Trader:
         """
         pass
 
+    @log_req
     def place_order(self, **order):
         """
         报单委托
@@ -662,6 +676,7 @@ class Trader:
 
         self._trade_api.place_order(order_req)
 
+    @log_req
     def place_batch_order(self, orders):
         """
         批量下单
@@ -680,6 +695,7 @@ class Trader:
 
         self._trade_api.place_batch_order(batch_order_req, self.account_no)
 
+    @log_req
     def cancel_order(self, order_exchange_id, exchange, **kw):
         """
         撤单
@@ -690,6 +706,7 @@ class Trader:
         order_cancelation_req.order_exchange_id = order_exchange_id
         return self._trade_api.cancel_order(order_cancelation_req)
 
+    @log_req
     def query_orders(self, **kw):
         """
         查询订单
@@ -699,6 +716,7 @@ class Trader:
         mail['body'] = orders
         return mail
 
+    @log_req
     def query_trades(self, **kw):
         """
         查询成交
@@ -708,6 +726,7 @@ class Trader:
         mail['body'] = trades
         return mail
 
+    @log_req
     def query_positions(self, **kw):
         """
         查询持仓
@@ -717,6 +736,7 @@ class Trader:
         mail['body'] = positions
         return mail
 
+    @log_req 
     def query_capital(self, **kw):
         """
         查询账户资金
