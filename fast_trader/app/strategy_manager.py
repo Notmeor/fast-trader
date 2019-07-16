@@ -51,6 +51,7 @@ class Manager:
 
         self._update_server_status()
 
+        self._pid = None
         self._load_strategy_settings()
         self._factory = None
         self._strategies = {}
@@ -71,7 +72,11 @@ class Manager:
             f.write(str(pid or os.getpid()))
     
     def get_server_pid(self):
-        return os.getpid()
+        if self._pid is None:
+            self._pid = os.getpid()
+            return self._pid
+        else:
+            return 0
 
     def _load_strategy_settings(self):
         if settings['use_rest_api'] is True:
