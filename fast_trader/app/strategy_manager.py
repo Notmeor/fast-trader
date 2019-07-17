@@ -508,7 +508,9 @@ class StrategyServer:
         self.proc = None
         self.pid = None
         # so as to locate electron entry point
-        os.chdir(os.getenv('PORTABLE_EXECUTABLE_DIR'))
+        electron_path = os.getenv('PORTABLE_EXECUTABLE_DIR')
+        if electron_path is not None:
+            os.chdir(electron_path)
         self.logger = logging.getLogger('strategy_server')
 
     def start(self):

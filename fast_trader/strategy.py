@@ -422,8 +422,12 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
                 '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
         handler.setFormatter(formatter)
+        handler.set_name(
+            f'{self.account_no}_strategy{self.strategy_id}_{td}_info')
         self.logger = logging.getLogger(f'strategy.<{self.strategy_name}>')
-        self.logger.addHandler(handler)
+        existing_handler_names = [h.name for h in self.logger.handlers]
+        if handler.name not in existing_handler_names:
+            self.logger.addHandler(handler)
 
     def set_trader(self, trader):
         self.trader = trader
