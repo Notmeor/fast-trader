@@ -1,5 +1,4 @@
 import time, datetime
-from collections import defaultdict
 
 from fast_trader.dtp_trade import dtp_type
 from fast_trader.dtp_quote import TradeFeed, OrderFeed, TickFeed
@@ -12,22 +11,16 @@ class DemoStrategy(Strategy):
     测试策略撤单
     """
 
-    strategy_id = 43
-    strategy_name = '测试策略撤单'
+    strategy_id = 3
+    strategy_name = '部分成交撤单demo'
 
     def on_start(self):
         """
         响应策略启动
         """
-        print('启动响应')
+
         #self.subscribe(TickFeed, ['600052', '603629', '002230'])
-        #self.subscribe_all(TradeFeed)
         self.last_order = self.buy('002230', 14, 100)
-        
-        def f():
-            print(datetime.datetime.now())
-        
-        #self.run_at_intervals(interval=datetime.timedelta(seconds=60), func=f)
 
     def on_market_snapshot(self, data):
         print(data.szCode, data.nMatch)
@@ -60,15 +53,3 @@ class DemoStrategy(Strategy):
         print('\n-----撤单回报-----')
         print(data)
 
-
-if __name__ == '__main__':
-
-    factory = StrategyFactory()
-    strategy = factory.generate_strategy(
-        DemoStrategy,
-        strategy_id=DemoStrategy.strategy_id,
-        account_no='011000106328',
-    )
-
-    strategy.start()
-    ea = strategy
