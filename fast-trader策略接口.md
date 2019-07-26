@@ -425,34 +425,36 @@ fast_trader.strategy.Strategy.cancel_order()
 ## 策略示例
 
 ```python
-from fast_trader.dtp import type_pb2 as dtp_type
-from fast_trader.dtp_quote import TickFeed
-from fast_trader.strategy import Strategy, StrategyFactory
+import time, datetime
+
+from fast_trader.dtp_trade import dtp_type
+from fast_trader.dtp_quote import TradeFeed, OrderFeed, TickFeed
+from fast_trader.strategy import Strategy, StrategyFactory, to_timeint
+from fast_trader.utils import timeit, int2datetime, attrdict
 
 
 class DemoStrategy(Strategy):
     """
-    Demo
-    
-    策略启动时以12.5元买入100股平安银行，
-    如部分成交，立即撤单
+    测试策略撤单
     """
 
-    strategy_id = 28
-    strategy_name = 'Demo Strategy'
+    strategy_id = 3
+    strategy_name = '部分成交撤单demo'
 
     def on_start(self):
         """
         响应策略启动
         """
 
-        self.last_order = self.buy('000001', 12.5, 1000)
+        #self.subscribe(TickFeed, ['600052', '603629', '002230'])
+        self.last_order = self.buy('002230', 14, 100)
 
     def on_market_snapshot(self, data):
-        """
-        响应快照行情
-        """
-        pass
+        print(data.szCode, data.nMatch)
+    
+    def on_market_trade(self, data):
+        print('-----逐笔成交-----')
+        print(data.nTime, data.szWindCode, data.nPrice)
 
     def on_order(self, order):
         """
@@ -477,21 +479,5 @@ class DemoStrategy(Strategy):
         """
         print('\n-----撤单回报-----')
         print(data)
-
-
-if __name__ == '__main__':
-    # 策略实例化
-    factory = StrategyFactory()
-    strategy = factory.generate_strategy(
-        strategy_cls=DemoStrategy,
-        strategy_id=DemoStrategy.strategy_id,
-        account_no='011000106328',
-    )
-
-    # 订阅行情
-    tk = TickFeed()
-    tk.subscribe(['000001'])
-    strategy.add_datasource(tk)
-    # 启动策略
-    strategy.start()
+    '''
 ```
