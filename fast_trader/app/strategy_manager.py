@@ -136,7 +136,8 @@ class Manager:
                 session
                 .query(StrategyServerModel)
                 .filter_by(id=1)
-                .update({'last_heartbeat': ts}))
+                .update({'last_heartbeat': ts,
+                         'pid': os.getpid()}))
 
             session.commit()
 
