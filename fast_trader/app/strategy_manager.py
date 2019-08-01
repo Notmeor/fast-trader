@@ -12,6 +12,7 @@ import subprocess
 import psutil
 import collections
 import functools
+import codecs
 
 import sqlalchemy.orm.exc as orm_exc
 import pandas as pd
@@ -580,8 +581,7 @@ class StrategyServer:
 
 
 def write_demo_strategy():
-    src_code = r'''# -*- coding: utf-8 -*-
-import time, datetime
+    src_code = r'''import time, datetime
 
 from fast_trader.dtp_trade import dtp_type
 from fast_trader.dtp_quote import TradeFeed, OrderFeed, TickFeed
@@ -609,7 +609,7 @@ class DemoStrategy(Strategy):
         print(data.szCode, data.nMatch)
     
     def on_market_trade(self, data):
-        print('-----逐笔成交-----')
+        print('\n-----逐笔成交-----')
         print(data.nTime, data.szWindCode, data.nPrice)
 
     def on_order(self, order):
@@ -639,7 +639,7 @@ class DemoStrategy(Strategy):
     file_path = os.path.join(
         os.getenv('FAST_TRADER_HOME'), 'strategies/demo_strategy.py')
     if not os.path.exists(file_path):
-        with open(file_path, 'w') as f:
+        with codecs.open(file_path, 'w', 'utf-8-sig') as f:
             f.write(src_code)
 
 
