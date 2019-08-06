@@ -28,9 +28,10 @@ risk_channel_port: 'tcp://192.168.221.36:9402'
 
 
 # 终端信息
-mac: '02:15:51:37:6C:14'
-harddisk: 'W62H0HQL'
-ip: '192.168.211.201'
+terminal_info:
+  mac: '02:15:51:37:6C:14'
+  harddisk: 'W62H0HQL'
+  ip: '192.168.211.201'
 
 
 # rest api

@@ -12,6 +12,7 @@ import subprocess
 import psutil
 import collections
 import functools
+import codecs
 
 import sqlalchemy.orm.exc as orm_exc
 import pandas as pd
@@ -41,6 +42,7 @@ class Manager:
     def __init__(self):
 
         self.write_pid_file()
+        self.write_demo_strategy()
         self._ctx = zmq.Context()
         self._sock = self._ctx.socket(zmq.REP)
         host = settings['strategy_manager_host']
@@ -68,6 +70,19 @@ class Manager:
         path = os.path.join(os.getenv('FAST_TRADER_HOME'), 'server.pid')
         with open(path, 'w') as f:
             f.write(str(pid or os.getpid()))
+
+    def write_demo_strategy(self):
+        try:
+            write_demo_strategy()
+        except:
+            self.logger.warning('Writing strategy demo failed.')
+
+    def get_server_pid(self):
+        if self._pid is None:
+            self._pid = os.getpid()
+            return self._pid
+        else:
+            return 0
 
     def _load_strategy_settings(self):
         if settings['use_rest_api'] is True:
@@ -357,6 +372,9 @@ class Manager:
             if api_name == 'get_accounts':
                 return self.get_accounts(**request['kw'])
 
+            elif api_name == 'get_server_pid':
+                return self.get_server_pid()
+
             elif api_name == 'get_capital':
                 return self.get_capital(**request['kw'])
 
@@ -485,6 +503,69 @@ class StrategyLoader:
                     if issubclass(el, Strategy) and el is not Strategy:
                         strategy_classes.append(el)
         return strategy_classes
+
+
+def write_demo_strategy():
+    src_code = r'''import time, datetime
+
+from fast_trader.dtp_trade import dtp_type
+from fast_trader.dtp_quote import TradeFeed, OrderFeed, TickFeed
+from fast_trader.strategy import Strategy, StrategyFactory, to_timeint
+from fast_trader.utils import timeit, int2datetime, attrdict
+
+
+class DemoStrategy(Strategy):
+    """
+    测试策略撤单
+    """
+
+    strategy_id = 3
+    strategy_name = '部分成交撤单demo'
+
+    def on_start(self):
+        """
+        响应策略启动
+        """
+
+        #self.subscribe(TickFeed, ['600052', '603629', '002230'])
+        self.last_order = self.buy('002230', 14, 100)
+
+    def on_market_snapshot(self, data):
+        print(data.szCode, data.nMatch)
+    
+    def on_market_trade(self, data):
+        print('\n-----逐笔成交-----')
+        print(data.nTime, data.szWindCode, data.nPrice)
+
+    def on_order(self, order):
+        """
+        响应报单回报
+        """
+        print('\n-----报单回报-----')
+        print(order)
+
+    def on_trade(self, trade):
+        """
+        响应成交回报
+        """
+        print('\n-----成交回报-----')
+        print(trade)
+
+        if self.last_order.status == dtp_type.ORDER_STATUS_PARTIAL_FILLED:
+            self.cancel_order(**self.last_order)
+
+    def on_order_cancelation(self, data):
+        """
+        响应撤单回报
+        """
+        print('\n-----撤单回报-----')
+        print(data)
+    '''
+    file_path = os.path.join(
+        os.getenv('FAST_TRADER_HOME'), 'strategies/demo_strategy.py')
+    if not os.path.exists(file_path):
+        with codecs.open(file_path, 'w', 'utf-8-sig') as f:
+            f.write(src_code)
 
 
 def main():

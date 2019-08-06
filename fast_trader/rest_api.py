@@ -39,6 +39,7 @@ class RestSettings:
         self.logger = logging.getLogger('settings')
 
     def reload(self):
+        self._user_meta.update(settings['terminal_info'])
         # load kay file
         kay_file = settings['rest_api']['kay_file'].format(user=os_user)
         self._user_meta.update(self._read_kay(kay_file))
