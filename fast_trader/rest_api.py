@@ -81,7 +81,8 @@ class RestSettings:
         with open(path) as f:
             content = f.read()
         content = dict(tuple(p.split('=')) for p in content.split('\n')[:-1])
-        content['harddisk'] = content['harddisk'].strip()
+        for k in content:
+            content[k] = content[k].strip()
         return content
 
 
