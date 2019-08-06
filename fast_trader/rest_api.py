@@ -42,7 +42,6 @@ class RestSettings:
         # load kay file
         kay_file = settings['rest_api']['kay_file'].format(user=os_user)
         self._user_meta.update(self._read_kay(kay_file))
-        self._user_meta['harddisk'] = self._user_meta['harddisk'].strip()
         self._user_meta['ip'] = get_local_ip()
 
         # construct default headers
@@ -81,7 +80,9 @@ class RestSettings:
     def _read_kay(self, path):
         with open(path) as f:
             content = f.read()
-        return dict(tuple(p.split('=')) for p in content.split('\n')[:-1])
+        content = dict(tuple(p.split('=')) for p in content.split('\n')[:-1])
+        content['harddisk'] = content['harddisk'].strip()
+        return content
 
 
 class Order(AnnotationCheckMixin):

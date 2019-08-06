@@ -13,5 +13,6 @@ setup(
     package_data={'': ['config.yaml']},
     install_requires=[
         'protobuf>=3.6.1',
-        'inflection']
+        'inflection',
+        'requests']
 )
