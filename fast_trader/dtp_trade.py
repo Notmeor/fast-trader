@@ -399,7 +399,7 @@ class RestApi():
         j = self.rest_api.get_capital(account_no)
         ret = json.loads(j)
         # 查询单个账户资金时，依然会返回list
-        if isinstance(ret, list)
+        if isinstance(ret, list):
             return ret[0] if ret else None
         return ret
     
