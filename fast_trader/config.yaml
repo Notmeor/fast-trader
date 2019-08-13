@@ -1,15 +1,29 @@
 
+# 指数行情
+index_feed_url: 'tcp://192.168.211.194:7778'
+# 快照行情
+tick_feed_url: 'tcp://192.168.211.194:7779'
+# 逐笔成交
+trade_feed_url: 'tcp://192.168.211.194:7781'
+# 逐笔报单
+order_feed_url: 'tcp://192.168.211.194:7782'
+# 交易队列
+queue_feed_url: 'tcp://192.168.211.194:7783'
+# 期权行情
+options_feed_url: 'tcp://192.168.211.194:7784'
+# ctp期货行情
+ctp_feed_url: 'tcp://192.168.221.82:9504'
+
 
 # 终端信息
-mac: '02:15:51:37:6C:14'
-harddisk: 'W62H0HQL'
-ip: '192.168.211.201'
+machine_info:
+  mac: '02:15:51:37:6C:14'
+  harddisk: 'W62H0HQL'
+  ip: '192.168.211.201'
 
 
 # rest api
 use_rest_api: True
-
-working_dir: ''
 
 sqlalchemy_url: 'sqlite:///{fast_trader_home}/fast_trader.db'
 sqlite_ledger: '{fast_trader_home}/ledger.db'

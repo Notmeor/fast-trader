@@ -20,7 +20,7 @@ def load_config(path=None):
         dirname = _dir(__file__)
         path = os.path.join(dirname, 'config.yaml')
     with open(path, 'r', encoding='UTF-8') as f:
-        conf = yaml.load(f)
+        conf = yaml.safe_load(f)
     return conf
 
 
