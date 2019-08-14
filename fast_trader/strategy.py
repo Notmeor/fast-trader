@@ -13,7 +13,7 @@ from fast_trader.dtp_quote import FEED_TYPE_NAME_MAPPING
 
 from fast_trader.dtp_trade import DTP, Trader, Dispatcher, dtp_type
 from fast_trader.dtp_trade import (OrderResponse, TradeResponse,
-                                   CancellationResponse,
+                                   CancellationResponse, QueryCapitalResponse,
                                    QueryOrderResponse, QueryTradeResponse,
                                    QueryPositionResponse, TimerTask,
                                    str2float)
@@ -687,7 +687,8 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         """
         request_id = self.generate_request_id()
         mail = self.trader.query_capital(request_id=request_id, sync=True)
-        return mail['body']
+        capital = QueryCapitalResponse.from_ms(mail['body'])
+        return capital
 
     def get_ration(self):
         """

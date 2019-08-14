@@ -37,6 +37,14 @@ def str2float(s):
     return float(s)
 
 
+#------------------------------------------------------------------------------
+# 查询响应字段转换
+# 通过rest api接口查询的数据字段与名称与原protobuf协议有差异
+# 这里统一做个转换
+# 同时所有查询响应柜台回报数据中的价格类型数据，也都转为`float`
+#------------------------------------------------------------------------------
+
+
 class OrderResponse:
     """
     报单回报
@@ -80,7 +88,7 @@ class CancellationResponse:
 
 class QueryOrderResponse:
     """
-    报单查询相应
+    报单查询响应
     """
 
     @staticmethod
@@ -96,7 +104,7 @@ class QueryOrderResponse:
 
 class QueryTradeResponse:
     """
-    成交查询相应
+    成交查询响应
     """
 
     @staticmethod
@@ -109,7 +117,7 @@ class QueryTradeResponse:
 
 class QueryPositionResponse:
     """
-    持仓查询相应
+    持仓查询响应
     """
 
     @staticmethod
@@ -119,6 +127,21 @@ class QueryPositionResponse:
         msg['market_value'] = str2float(msg.market_value)
         return msg
 
+
+class QueryCapitalResponse:
+    """
+    资金查询响应
+    """
+
+    @staticmethod
+    def from_msg(msg):
+        msg = attrdict(rename_capital(msg))
+        msg['available'] = str2float(msg.available)
+        msg['securities'] = str2float(msg.securities)
+        msg['freeze'] = str2float(msg.freeze)
+        msg['balance'] = str2float(msg.balance)
+        msg['total'] = str2float(msg.total)
+        return msg
 
 def rename_position(item):
 
@@ -187,6 +210,24 @@ def rename_order(kw):
     order = attrdict(order)
 
     return order
+
+
+def rename_capital(kw):
+
+    order = {
+        'available': kw['available'],
+        'balance': kw['balance'],
+        'freeze': kw['freeze'],
+        'securities': kw['marketValue'],
+        'total': kw['total']
+    }
+    order = attrdict(order)
+
+    return order
+
+#------------------------------------------------------------------------------
+# 查询响应字段转换
+#------------------------------------------------------------------------------
 
 
 class TimerTask:
@@ -355,7 +396,6 @@ class Dispatcher:
             # ignore all incoming/outgoing messages
             return
 
-        #import pdb;pdb.set_trace()
         handler_id = mail['handler_id']
 
         if mail.get('sync'):
@@ -747,7 +787,7 @@ class Trader:
         """
         mail = attrdict()
         mail['body'] = self._trade_api.get_capital(
-            account_no=self.account_no)[0]
+            account_no=self.account_no)
         return mail
 
     def query_ration(self, **kw):
