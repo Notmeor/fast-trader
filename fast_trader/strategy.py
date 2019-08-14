@@ -681,6 +681,20 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         trades = [trade for trade in trades if self._check_owner(trade)]
         return trades
 
+    def get_orders_local(self):
+        """
+        获取策略运行过程中接收到的所有已报委托记录，每个order_original_id对应一条
+        PlacedOrder(已报委托记录)
+        PlacedOrder会根据回报更新，汇总了报单回报与撤单回报的状态信息
+        """
+        return self._orders
+
+    def get_trades_local(self):
+        """
+        获取策略运行过程中接收到的所有成交回报
+        """
+        return self._trades
+
     def get_capital(self):
         """
         查询资金（同步）
@@ -1040,14 +1054,13 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
 
         return order
 
-    def _insert_many(self, order_side, orders):
+    def insert_many(self, orders):
 
         for order in orders:
             order_original_id = self.generate_order_id()
             if 'exchange' not in order:
                 order['exchange'] = self.get_exchange(order['code'])
-            order['order_side'] = order_side
-            order['order_type'] = dtp_type.ORDER_TYPE_LIMIT
+            order['order_type'] = order.get('order_type') or dtp_type.ORDER_TYPE_LIMIT
             order['order_original_id'] = order_original_id
             order['price'] = str(order['price'])
 
@@ -1062,13 +1075,13 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         """
         股票批量买入
         """
-        return self._insert_many(dtp_type.ORDER_SIDE_BUY, orders)
+        return self.insert_many(orders)
 
     def sell_many(self, orders):
         """
-        股票批量买入
+        股票批量卖出
         """
-        return self._insert_many(dtp_type.ORDER_SIDE_SELL, orders)
+        return self.insert_many(orders)
 
     def buy(self, code, price, quantity,
             exchange=None, order_type=dtp_type.ORDER_TYPE_LIMIT):
