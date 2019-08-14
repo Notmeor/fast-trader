@@ -396,7 +396,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
 
         self._positions = {}
         self._orders = collections.defaultdict(attrdict)
-        self._trades = collections.defaultdict(dict)
+        self._trades = collections.defaultdict(attrdict)
         self._request_id_history = []
 
         self.subscribed_datasources = []
