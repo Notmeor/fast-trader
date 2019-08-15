@@ -1,20 +1,13 @@
 # -*- coding: utf-8 -*-
-
-import os
-# os.environ['FAST_TRADER_CONFIG'] = \
-#     '/Users/eisenheim/Documents/git/fast-trader/tmp/config.yaml'
-
-import time
-import threading
 import unittest
 
-from fast_trader.dtp_trade import dtp_api, DTP_, Dispatcher, dtp_type
+from fast_trader.dtp_trade import dtp_api, DTP, Dispatcher, dtp_type
 
 
 class TestDTP(unittest.TestCase):
 
     def setUp(self):
-        self.dtp = DTP_(Dispatcher())
+        self.dtp = DTP(Dispatcher())
         self.dtp.start()
 
         self.account_no = '011000106328'
@@ -74,45 +67,8 @@ class TestDTP(unittest.TestCase):
 
         self.dtp.place_batch_order(batch_order_req, self.account_no)
 
-#    def test_counter_report(self):
-#        
-#        self.counter_report_thread = threading.Thread(
-#            target=self.dtp.process_counter_report)
-#
-#        self.counter_report_thread.start()
 
 
 if __name__ == '__main__':
     pass
-    print(f'pid={os.getpid()}, tid={threading.get_ident()}')
-    dtp = DTP_(Dispatcher())
-    
-    dtp.start()
-    dtp.process_counter_report()
-        
-#     def recv():
-#         dtp = DTP_(Dispatcher())
-#         dtp.start()
-#         dtp.process_counter_report()
-    
-#     counter_report_thread = threading.Thread(
-#         target=dtp.process_counter_report)
-    
-# #    import multiprocessing
-# #    counter_report_thread = multiprocessing.Process(
-# #        target=recv)
-
-#     print('daemon: ', counter_report_thread.daemon)
-#     counter_report_thread.start()
-#     print('thread started...')
-#     print(counter_report_thread)
-    
-#     while True:
-#         time.sleep(1)
-#         print('------not blocked!!-----')
-
-
-    # counter_report_thread.join()
-
-#
-#    unittest.main()
+    unittest.main()

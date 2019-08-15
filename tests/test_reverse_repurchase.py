@@ -1,10 +1,7 @@
-import time, datetime
-from collections import defaultdict
 
-from fast_trader.dtp import dtp_api_id
+
 from fast_trader.strategy import dtp_type
-from fast_trader.dtp_quote import TradeFeed, OrderFeed, TickFeed
-from fast_trader.strategy import Strategy, StrategyFactory, to_timeint
+from fast_trader.strategy import Strategy, StrategyFactory
 
 
 class DemoStrategy(Strategy):

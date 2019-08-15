@@ -1,11 +1,4 @@
 
-import os
-#os.environ['FAST_TRADER_CONFIG'] = \
-#    '/Users/eisenheim/Documents/git/fast-trader/tmp/config.yaml'
-
-import time
-import threading
-import unittest
 
 from fast_trader.dtp_trade import dtp_api, DTP, Dispatcher, dtp_type, Trader
 
