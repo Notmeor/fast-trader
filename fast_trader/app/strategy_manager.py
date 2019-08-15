@@ -581,17 +581,14 @@ class StrategyServer:
 
 
 def write_demo_strategy():
-    src_code = r'''import time, datetime
-
-from fast_trader.dtp_trade import dtp_type
-from fast_trader.dtp_quote import TradeFeed, OrderFeed, TickFeed
-from fast_trader.strategy import Strategy, StrategyFactory, to_timeint
-from fast_trader.utils import timeit, int2datetime, attrdict
-
+    src_code = r'''from fast_trader.dtp_quote import TickFeed
+from fast_trader.strategy import Strategy, dtp_type
 
 class DemoStrategy(Strategy):
     """
     测试策略撤单
+
+    策略启动后立即报单，有部分成交则撤单
     """
 
     strategy_id = 3
@@ -601,31 +598,29 @@ class DemoStrategy(Strategy):
         """
         响应策略启动
         """
-
-        #self.subscribe(TickFeed, ['600052', '603629', '002230'])
+        # 订阅快照行情
+        self.subscribe(TickFeed, ['600052', '002230'])
+        # 委托买入'002230'，并记下该笔委托记录
         self.last_order = self.buy('002230', 14, 100)
 
     def on_market_snapshot(self, data):
-        print(data.szCode, data.nMatch)
-    
-    def on_market_trade(self, data):
-        print('\n-----逐笔成交-----')
-        print(data.nTime, data.szWindCode, data.nPrice)
+        """
+        响应行情快照
+        """
+        self.logger.info('{} {}'.format(data.szCode, data.nMatch))
 
     def on_order(self, order):
         """
         响应报单回报
         """
-        print('\n-----报单回报-----')
-        print(order)
+        self.logger.info(order)
 
     def on_trade(self, trade):
         """
         响应成交回报
         """
-        print('\n-----成交回报-----')
-        print(trade)
-
+        self.logger.info(trade)
+        # 发生部分成交，撤单
         if self.last_order.status == dtp_type.ORDER_STATUS_PARTIAL_FILLED:
             self.cancel_order(**self.last_order)
 
@@ -633,8 +628,7 @@ class DemoStrategy(Strategy):
         """
         响应撤单回报
         """
-        print('\n-----撤单回报-----')
-        print(data)
+        self.logger.info(data)
     '''
     file_path = os.path.join(
         os.getenv('FAST_TRADER_HOME'), 'strategies/demo_strategy.py')
