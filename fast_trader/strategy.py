@@ -701,7 +701,7 @@ class Strategy(StrategyWatchMixin, StrategyMdSubMixin):
         """
         request_id = self.generate_request_id()
         mail = self.trader.query_capital(request_id=request_id, sync=True)
-        capital = QueryCapitalResponse.from_ms(mail['body'])
+        capital = QueryCapitalResponse.from_msg(mail['body'])
         return capital
 
     def get_ration(self):
