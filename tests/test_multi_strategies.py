@@ -1,6 +1,5 @@
 
 import os
-os.chdir('D:/work/PB_newUAT/PB客户端_新UAT_自由委托/策略交易/')
 import threading
 import time, datetime
 from collections import defaultdict
